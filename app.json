@@ -28,7 +28,11 @@
     },
     "plugins": [
       "expo-font",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-av",
+      "expo-calendar",
+      "expo-location",
+      "expo-notifications"
     ]
   }
 }
