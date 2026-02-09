@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { HealthEntry, HealthEntryData } from '../types/health'
-import { getHealthLogs, saveHealthLog, deleteHealthLog } from '../services/storage'
+import { getHealthLogs, saveHealthLog, deleteHealthLog, clearAllLogs as clearAllLogsStorage } from '../services/storage'
 
 export function useHealthLogs() {
   const [logs, setLogs] = useState<HealthEntry[]>([])
@@ -46,6 +46,11 @@ export function useHealthLogs() {
     return logs.filter(log => log.data.category === category)
   }, [logs])
 
+  const clearAllLogs = useCallback(async () => {
+    await clearAllLogsStorage()
+    setLogs([])
+  }, [])
+
   return {
     logs,
     isLoading,
@@ -54,5 +59,6 @@ export function useHealthLogs() {
     refreshLogs: loadLogs,
     getRecentLogs,
     getLogsByCategory,
+    clearAllLogs,
   }
 }

@@ -20,31 +20,36 @@ import Markdown from 'react-native-markdown-display'
 import { useApiKey } from '../hooks/useApiKey'
 import { useHealthLogs } from '../hooks/useHealthLogs'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
+import { useChatHistory } from '../hooks/useChatHistory'
+import { useTheme } from '../hooks/useTheme'
 import { sendChatMessageStreaming, type Message as AIMessage } from '../services/ai'
 import { buildHealthContext } from '../utils/healthContext'
 
-type Message = {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  error?: boolean
-  originalInput?: string // For retry functionality
-}
+// Suggested prompts for quick actions
+const SUGGESTED_PROMPTS = [
+  { icon: 'bed-outline' as const, label: 'Check my sleep', prompt: 'How has my sleep been lately? Any suggestions to improve it?' },
+  { icon: 'fitness-outline' as const, label: 'Exercise tips', prompt: 'Based on my activity, what exercises would you recommend?' },
+  { icon: 'medical-outline' as const, label: 'Analyze symptoms', prompt: 'Can you analyze my recent symptoms and provide some insights?' },
+  { icon: 'happy-outline' as const, label: 'Mood patterns', prompt: 'What patterns do you see in my mood data?' },
+  { icon: 'nutrition-outline' as const, label: 'Nutrition advice', prompt: 'Any nutrition tips based on my health logs?' },
+  { icon: 'heart-outline' as const, label: 'Health summary', prompt: 'Give me a summary of my overall health based on my logged data.' },
+]
 
 export function ChatScreen() {
+  const { isDark } = useTheme()
   const { apiKey, setApiKey, isLoading: isLoadingApiKey } = useApiKey()
   const { logs } = useHealthLogs()
+  const { 
+    messages, 
+    addMessage, 
+    updateMessage, 
+    clearHistory,
+    isLoading: isLoadingHistory 
+  } = useChatHistory()
   
   // Build health context for AI personalization
   const healthContext = useMemo(() => buildHealthContext(logs), [logs])
   
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: "Hi! I'm Medicus, your health assistant. How can I help you today?",
-    },
-  ])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [showApiKeySheet, setShowApiKeySheet] = useState(false)
@@ -79,26 +84,27 @@ export function ChatScreen() {
 
   // Markdown styles for assistant messages
   const markdownStyles = useMemo(() => ({
-    body: { color: '#111827', fontSize: 15, lineHeight: 22 },
+    body: { color: isDark ? '#e5e7eb' : '#111827', fontSize: 15, lineHeight: 22 },
     paragraph: { marginTop: 0, marginBottom: 8 },
-    heading1: { fontSize: 20, fontWeight: '700' as const, marginBottom: 8, color: '#111827' },
-    heading2: { fontSize: 18, fontWeight: '600' as const, marginBottom: 6, color: '#111827' },
-    heading3: { fontSize: 16, fontWeight: '600' as const, marginBottom: 4, color: '#111827' },
+    heading1: { fontSize: 20, fontWeight: '700' as const, marginBottom: 8, color: isDark ? '#f9fafb' : '#111827' },
+    heading2: { fontSize: 18, fontWeight: '600' as const, marginBottom: 6, color: isDark ? '#f9fafb' : '#111827' },
+    heading3: { fontSize: 16, fontWeight: '600' as const, marginBottom: 4, color: isDark ? '#f9fafb' : '#111827' },
     strong: { fontWeight: '600' as const },
     em: { fontStyle: 'italic' as const },
     bullet_list: { marginBottom: 8 },
     ordered_list: { marginBottom: 8 },
     list_item: { marginBottom: 4 },
     code_inline: { 
-      backgroundColor: '#e5e7eb', 
+      backgroundColor: isDark ? '#374151' : '#e5e7eb', 
       paddingHorizontal: 4, 
       paddingVertical: 2, 
       borderRadius: 4,
       fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
       fontSize: 13,
+      color: isDark ? '#e5e7eb' : '#111827',
     },
     fence: { 
-      backgroundColor: '#1f2937', 
+      backgroundColor: isDark ? '#111827' : '#1f2937', 
       padding: 12, 
       borderRadius: 8, 
       marginVertical: 8,
@@ -109,16 +115,16 @@ export function ChatScreen() {
       fontSize: 13,
     },
     blockquote: {
-      backgroundColor: '#f3f4f6',
+      backgroundColor: isDark ? '#1f2937' : '#f3f4f6',
       borderLeftWidth: 4,
-      borderLeftColor: '#9ca3af',
+      borderLeftColor: isDark ? '#4b5563' : '#9ca3af',
       paddingLeft: 12,
       paddingVertical: 4,
       marginVertical: 8,
     },
-    link: { color: '#2563eb' },
-    hr: { backgroundColor: '#d1d5db', height: 1, marginVertical: 12 },
-  }), [])
+    link: { color: '#3b82f6' },
+    hr: { backgroundColor: isDark ? '#374151' : '#d1d5db', height: 1, marginVertical: 12 },
+  }), [isDark])
 
   useEffect(() => {
     if (!isLoadingApiKey && !apiKey) {
@@ -140,20 +146,16 @@ export function ChatScreen() {
       return
     }
 
-    // If retrying, remove the old error message first
-    if (retryMessageId) {
-      setMessages((prev) => prev.filter(m => m.id !== retryMessageId))
-    }
-
-    const userMessage: Message = {
+    // If retrying, we need to handle differently
+    const userMessage = {
       id: Date.now().toString(),
-      role: 'user',
+      role: 'user' as const,
       content: messageContent,
     }
 
-    // Only add user message if not retrying (retry already has user message)
+    // Only add user message if not retrying
     if (!retryMessageId) {
-      setMessages((prev) => [...prev, userMessage])
+      addMessage(userMessage)
     }
     
     setInput('')
@@ -161,56 +163,43 @@ export function ChatScreen() {
     scrollToBottom()
     setIsLoading(true)
 
-    // Create placeholder for streaming response
+    // Create placeholder for response
     const assistantMessageId = (Date.now() + 1).toString()
     setStreamingMessageId(assistantMessageId)
     
-    const assistantMessage: Message = {
+    addMessage({
       id: assistantMessageId,
       role: 'assistant',
       content: '',
-    }
-    setMessages((prev) => [...prev, assistantMessage])
+    })
 
     const aiMessages: AIMessage[] = messages
-      .filter(m => !m.error) // Don't include error messages in context
+      .filter(m => !m.error)
       .map((m) => ({
         role: m.role,
         content: m.content,
       }))
 
+    let fullContent = ''
+    
     const response = await sendChatMessageStreaming(
       apiKey, 
       aiMessages, 
       messageContent,
       (chunk) => {
-        // Update message with new chunk
-        setMessages((prev) => 
-          prev.map(m => 
-            m.id === assistantMessageId 
-              ? { ...m, content: m.content + chunk }
-              : m
-          )
-        )
+        fullContent += chunk
+        updateMessage(assistantMessageId, { content: fullContent })
         scrollToBottom()
       },
       healthContext
     )
 
     if (response.error) {
-      // Replace streaming message with error message
-      setMessages((prev) => 
-        prev.map(m => 
-          m.id === assistantMessageId 
-            ? { 
-                ...m, 
-                content: `Sorry, I encountered an error: ${response.error}`,
-                error: true,
-                originalInput: messageContent,
-              }
-            : m
-        )
-      )
+      updateMessage(assistantMessageId, {
+        content: `Sorry, I encountered an error: ${response.error}`,
+        error: true,
+        originalInput: messageContent,
+      })
     }
 
     setStreamingMessageId(null)
@@ -223,6 +212,7 @@ export function ChatScreen() {
   }
 
   const retryMessage = async (messageId: string, originalInput: string) => {
+    updateMessage(messageId, { content: '', error: false })
     await sendMessageWithContent(originalInput, messageId)
   }
 
@@ -234,16 +224,42 @@ export function ChatScreen() {
     }
   }
 
+  const handleSuggestedPrompt = (prompt: string) => {
+    sendMessageWithContent(prompt)
+  }
+
+  // Show nothing while loading chat history
+  if (isLoadingHistory) {
+    return (
+      <SafeAreaView className={`flex-1 items-center justify-center ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
+        <ActivityIndicator size="large" color="#0066ff" />
+      </SafeAreaView>
+    )
+  }
+
+  const showSuggestedPrompts = messages.length <= 1 && !isLoading
+
   return (
-    <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-      <View className="flex-row p-4 border-b border-gray-200 items-center justify-between">
-        <Text className="text-2xl font-bold text-gray-900">Medicus</Text>
-        <TouchableOpacity
-          className="p-2 border border-gray-300 rounded-lg active:bg-gray-50"
-          onPress={() => setShowApiKeySheet(true)}
-        >
-          <Ionicons name="settings-outline" size={20} color="#666" />
-        </TouchableOpacity>
+    <SafeAreaView className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-white'}`} edges={['top']}>
+      {/* Header */}
+      <View className={`flex-row p-4 border-b items-center justify-between ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+        <Text className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Medicus</Text>
+        <View className="flex-row gap-2">
+          {messages.length > 1 && (
+            <TouchableOpacity
+              className={`p-2 rounded-lg ${isDark ? 'bg-gray-800 active:bg-gray-700' : 'border border-gray-300 active:bg-gray-50'}`}
+              onPress={clearHistory}
+            >
+              <Ionicons name="trash-outline" size={20} color={isDark ? '#9ca3af' : '#666'} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            className={`p-2 rounded-lg ${isDark ? 'bg-gray-800 active:bg-gray-700' : 'border border-gray-300 active:bg-gray-50'}`}
+            onPress={() => setShowApiKeySheet(true)}
+          >
+            <Ionicons name="settings-outline" size={20} color={isDark ? '#9ca3af' : '#666'} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -262,16 +278,16 @@ export function ChatScreen() {
                 message.role === 'user' 
                   ? 'bg-primary px-4 py-3' 
                   : message.error 
-                    ? 'bg-red-50 border border-red-200 px-4 py-2'
-                    : 'bg-gray-100 px-4 py-2'
+                    ? `${isDark ? 'bg-red-900/30 border-red-800' : 'bg-red-50 border-red-200'} border px-4 py-2`
+                    : `${isDark ? 'bg-gray-800' : 'bg-gray-100'} px-4 py-2`
               }`}
             >
               {message.role === 'user' ? (
                 <Text className="text-base text-white">{message.content}</Text>
               ) : message.id === streamingMessageId && message.content === '' ? (
                 <View className="flex-row items-center gap-2">
-                  <ActivityIndicator size="small" color="#666" />
-                  <Text className="text-gray-500 text-sm">Thinking...</Text>
+                  <ActivityIndicator size="small" color={isDark ? '#9ca3af' : '#666'} />
+                  <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Thinking...</Text>
                 </View>
               ) : (
                 <Markdown style={markdownStyles}>{message.content}</Markdown>
@@ -283,11 +299,11 @@ export function ChatScreen() {
                 {message.error && message.originalInput && (
                   <TouchableOpacity
                     onPress={() => retryMessage(message.id, message.originalInput!)}
-                    className="flex-row items-center gap-1 py-1 px-2 bg-red-100 rounded-lg"
+                    className={`flex-row items-center gap-1 py-1 px-2 rounded-lg ${isDark ? 'bg-red-900/50' : 'bg-red-100'}`}
                     disabled={isLoading}
                   >
                     <Ionicons name="refresh" size={14} color="#dc2626" />
-                    <Text className="text-xs text-red-600 font-medium">Retry</Text>
+                    <Text className="text-xs text-red-500 font-medium">Retry</Text>
                   </TouchableOpacity>
                 )}
                 
@@ -303,11 +319,11 @@ export function ChatScreen() {
                   <Ionicons 
                     name={copiedId === message.id ? 'checkmark' : 'copy-outline'} 
                     size={14} 
-                    color={message.role === 'user' ? 'rgba(255,255,255,0.7)' : '#9ca3af'} 
+                    color={message.role === 'user' ? 'rgba(255,255,255,0.7)' : isDark ? '#6b7280' : '#9ca3af'} 
                   />
                   <Text 
                     className={`text-xs ${
-                      message.role === 'user' ? 'text-white/70' : 'text-gray-400'
+                      message.role === 'user' ? 'text-white/70' : isDark ? 'text-gray-500' : 'text-gray-400'
                     }`}
                   >
                     {copiedId === message.id ? 'Copied!' : 'Copy'}
@@ -317,10 +333,36 @@ export function ChatScreen() {
             </Pressable>
           </View>
         ))}
+
+        {/* Suggested prompts - show when conversation is new */}
+        {showSuggestedPrompts && (
+          <View className="mt-4">
+            <Text className={`text-sm font-medium mb-3 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              Suggested questions
+            </Text>
+            <View className="flex-row flex-wrap gap-2">
+              {SUGGESTED_PROMPTS.map((item, index) => (
+                <TouchableOpacity
+                  key={index}
+                  onPress={() => handleSuggestedPrompt(item.prompt)}
+                  className={`flex-row items-center gap-2 px-3 py-2 rounded-full ${
+                    isDark ? 'bg-gray-800 active:bg-gray-700' : 'bg-gray-100 active:bg-gray-200'
+                  }`}
+                >
+                  <Ionicons name={item.icon} size={16} color={isDark ? '#9ca3af' : '#6b7280'} />
+                  <Text className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
         {isLoading && !streamingMessageId && (
           <View className="flex-row justify-start">
-            <View className="px-4 py-3 rounded-2xl bg-gray-100">
-              <ActivityIndicator size="small" color="#666" />
+            <View className={`px-4 py-3 rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+              <ActivityIndicator size="small" color={isDark ? '#9ca3af' : '#666'} />
             </View>
           </View>
         )}
@@ -332,17 +374,17 @@ export function ChatScreen() {
       >
         {/* Voice recording indicator */}
         {isListening && (
-          <View className="flex-row items-center justify-center py-2 bg-red-50 border-t border-red-100">
-            <View className="w-2 h-2 rounded-full bg-red-500 mr-2 animate-pulse" />
-            <Text className="text-red-600 text-sm font-medium">Listening...</Text>
+          <View className={`flex-row items-center justify-center py-2 border-t ${isDark ? 'bg-red-900/30 border-red-900' : 'bg-red-50 border-red-100'}`}>
+            <View className="w-2 h-2 rounded-full bg-red-500 mr-2" />
+            <Text className="text-red-500 text-sm font-medium">Listening...</Text>
           </View>
         )}
         
-        <View className="flex-row p-4 gap-2 border-t border-gray-200 items-center">
+        <View className={`flex-row p-4 gap-2 border-t items-center ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
           {/* Voice input button */}
           <TouchableOpacity
             className={`w-10 h-10 rounded-full items-center justify-center ${
-              isListening ? 'bg-red-500' : isVoiceAvailable ? 'bg-gray-100' : 'bg-gray-50'
+              isListening ? 'bg-red-500' : isDark ? 'bg-gray-800' : isVoiceAvailable ? 'bg-gray-100' : 'bg-gray-50'
             }`}
             onPress={isListening ? stopListening : startListening}
             disabled={isLoading}
@@ -350,13 +392,18 @@ export function ChatScreen() {
             <Ionicons 
               name={isListening ? 'stop' : 'mic'} 
               size={20} 
-              color={isListening ? '#fff' : isVoiceAvailable ? '#666' : '#ccc'} 
+              color={isListening ? '#fff' : isDark ? '#9ca3af' : isVoiceAvailable ? '#666' : '#ccc'} 
             />
           </TouchableOpacity>
           
           <TextInput
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-base"
+            className={`flex-1 border rounded-lg px-3 py-2.5 text-base ${
+              isDark 
+                ? 'border-gray-600 bg-gray-800 text-white' 
+                : 'border-gray-300 bg-white text-gray-900'
+            }`}
             placeholder="Ask about your health..."
+            placeholderTextColor={isDark ? '#6b7280' : '#9ca3af'}
             value={input}
             onChangeText={setInput}
             onSubmitEditing={sendMessage}
@@ -377,6 +424,7 @@ export function ChatScreen() {
         </View>
       </KeyboardAvoidingView>
 
+      {/* API Key Modal */}
       <Modal
         visible={showApiKeySheet}
         animationType="slide"
@@ -384,28 +432,37 @@ export function ChatScreen() {
         onRequestClose={() => setShowApiKeySheet(false)}
       >
         <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6 gap-4">
-            <View className="w-10 h-1 bg-gray-300 rounded-full self-center mb-2" />
-            <Text className="text-lg font-semibold text-gray-900">
+          <View className={`rounded-t-3xl p-6 gap-4 ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+            <View className={`w-10 h-1 rounded-full self-center mb-2 ${isDark ? 'bg-gray-600' : 'bg-gray-300'}`} />
+            <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
               Set up Groq API Key
             </Text>
-            <Text className="text-gray-500">
+            <Text className={isDark ? 'text-gray-400' : 'text-gray-500'}>
               Get your free API key at{' '}
               <Text className="text-primary">console.groq.com</Text>
             </Text>
             <TextInput
-              className="border border-gray-300 rounded-lg px-3 py-2.5 text-base"
+              className={`border rounded-lg px-3 py-2.5 text-base ${
+                isDark 
+                  ? 'border-gray-600 bg-gray-700 text-white' 
+                  : 'border-gray-300 bg-white text-gray-900'
+              }`}
               placeholder="gsk_..."
+              placeholderTextColor={isDark ? '#6b7280' : '#9ca3af'}
               value={tempApiKey}
               onChangeText={setTempApiKey}
               secureTextEntry
             />
             <View className="flex-row gap-3">
               <TouchableOpacity
-                className="flex-1 p-3 rounded-lg items-center border border-gray-300 active:bg-gray-50"
+                className={`flex-1 p-3 rounded-lg items-center ${
+                  isDark 
+                    ? 'bg-gray-700 active:bg-gray-600' 
+                    : 'border border-gray-300 active:bg-gray-50'
+                }`}
                 onPress={() => setShowApiKeySheet(false)}
               >
-                <Text className="text-gray-900 font-medium">Cancel</Text>
+                <Text className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-900'}`}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 className="flex-1 p-3 rounded-lg items-center bg-primary active:opacity-80"

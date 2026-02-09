@@ -4,23 +4,26 @@ import { ChatScreen } from '../screens/ChatScreen'
 import { LogScreen } from '../screens/LogScreen'
 import { ProgressScreen } from '../screens/ProgressScreen'
 import { ProfileScreen } from '../screens/ProfileScreen'
+import { useTheme } from '../hooks/useTheme'
 
 const Tab = createBottomTabNavigator()
 
 export function TabNavigator() {
+  const { isDark } = useTheme()
+  
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#fff',
+          backgroundColor: isDark ? '#111827' : '#fff',
           borderTopWidth: 1,
-          borderTopColor: '#eee',
+          borderTopColor: isDark ? '#374151' : '#eee',
           paddingTop: 8,
           height: 85,
         },
         tabBarActiveTintColor: '#0066ff',
-        tabBarInactiveTintColor: '#999',
+        tabBarInactiveTintColor: isDark ? '#6b7280' : '#999',
       }}
     >
       <Tab.Screen

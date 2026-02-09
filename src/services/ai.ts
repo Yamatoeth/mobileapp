@@ -134,6 +134,7 @@ export async function sendChatMessage(
 }
 
 // Streaming version of sendChatMessage
+// Falls back to non-streaming on React Native since fetch doesn't support streaming
 export async function sendChatMessageStreaming(
   apiKey: string,
   messages: Message[],
@@ -149,6 +150,7 @@ export async function sendChatMessageStreaming(
       { role: 'user', content: userMessage },
     ]
 
+    // React Native doesn't support streaming, use regular fetch
     const response = await fetch(GROQ_API_URL, {
       method: 'POST',
       headers: {
@@ -160,7 +162,7 @@ export async function sendChatMessageStreaming(
         messages: allMessages,
         temperature: 0.7,
         max_tokens: 1024,
-        stream: true,
+        // No streaming - React Native fetch doesn't support response.body.getReader()
       }),
     })
 
@@ -169,41 +171,17 @@ export async function sendChatMessageStreaming(
       throw new Error(errorData.error?.message || `API error: ${response.status}`)
     }
 
-    if (!response.body) {
-      throw new Error('No response body for streaming')
+    const data = await response.json()
+    const content = data.choices?.[0]?.message?.content
+
+    if (!content) {
+      throw new Error('No response content received')
     }
 
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let fullContent = ''
+    // Simulate streaming by sending the full content as one chunk
+    onChunk(content)
 
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      const chunk = decoder.decode(value, { stream: true })
-      const lines = chunk.split('\n').filter(line => line.trim() !== '')
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6)
-          if (data === '[DONE]') continue
-
-          try {
-            const parsed = JSON.parse(data)
-            const content = parsed.choices?.[0]?.delta?.content
-            if (content) {
-              fullContent += content
-              onChunk(content)
-            }
-          } catch {
-            // Skip malformed JSON chunks
-          }
-        }
-      }
-    }
-
-    return { content: fullContent }
+    return { content }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to get response'
     return { content: '', error: message }
