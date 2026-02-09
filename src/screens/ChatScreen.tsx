@@ -19,13 +19,16 @@ import * as Clipboard from 'expo-clipboard'
 import Markdown from 'react-native-markdown-display'
 import { useApiKey } from '../hooks/useApiKey'
 import { useHealthLogs } from '../hooks/useHealthLogs'
-import { sendChatMessage, type Message as AIMessage } from '../services/ai'
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
+import { sendChatMessageStreaming, type Message as AIMessage } from '../services/ai'
 import { buildHealthContext } from '../utils/healthContext'
 
 type Message = {
   id: string
   role: 'user' | 'assistant'
   content: string
+  error?: boolean
+  originalInput?: string // For retry functionality
 }
 
 export function ChatScreen() {
@@ -47,7 +50,26 @@ export function ChatScreen() {
   const [showApiKeySheet, setShowApiKeySheet] = useState(false)
   const [tempApiKey, setTempApiKey] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
   const scrollViewRef = useRef<RNScrollView>(null)
+
+  // Voice recognition hook (safe for Expo Go)
+  const { 
+    isListening, 
+    isAvailable: isVoiceAvailable, 
+    startListening, 
+    stopListening, 
+    transcript,
+    resetTranscript 
+  } = useSpeechRecognition()
+
+  // Update input when transcript changes
+  useEffect(() => {
+    if (transcript) {
+      setInput(prev => prev + transcript)
+      resetTranscript()
+    }
+  }, [transcript, resetTranscript])
 
   const copyToClipboard = useCallback(async (text: string, id: string) => {
     await Clipboard.setStringAsync(text)
@@ -110,51 +132,98 @@ export function ChatScreen() {
     }, 100)
   }
 
-  const sendMessage = async () => {
-    if (!input.trim()) return
+  const sendMessageWithContent = async (messageContent: string, retryMessageId?: string) => {
+    if (!messageContent.trim()) return
 
     if (!apiKey) {
       setShowApiKeySheet(true)
       return
     }
 
+    // If retrying, remove the old error message first
+    if (retryMessageId) {
+      setMessages((prev) => prev.filter(m => m.id !== retryMessageId))
+    }
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input,
+      content: messageContent,
     }
 
-    setMessages((prev) => [...prev, userMessage])
+    // Only add user message if not retrying (retry already has user message)
+    if (!retryMessageId) {
+      setMessages((prev) => [...prev, userMessage])
+    }
+    
     setInput('')
     Keyboard.dismiss()
     scrollToBottom()
     setIsLoading(true)
 
-    const aiMessages: AIMessage[] = messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }))
+    // Create placeholder for streaming response
+    const assistantMessageId = (Date.now() + 1).toString()
+    setStreamingMessageId(assistantMessageId)
+    
+    const assistantMessage: Message = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+    }
+    setMessages((prev) => [...prev, assistantMessage])
 
-    const response = await sendChatMessage(apiKey, aiMessages, input, healthContext)
+    const aiMessages: AIMessage[] = messages
+      .filter(m => !m.error) // Don't include error messages in context
+      .map((m) => ({
+        role: m.role,
+        content: m.content,
+      }))
+
+    const response = await sendChatMessageStreaming(
+      apiKey, 
+      aiMessages, 
+      messageContent,
+      (chunk) => {
+        // Update message with new chunk
+        setMessages((prev) => 
+          prev.map(m => 
+            m.id === assistantMessageId 
+              ? { ...m, content: m.content + chunk }
+              : m
+          )
+        )
+        scrollToBottom()
+      },
+      healthContext
+    )
 
     if (response.error) {
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: `Sorry, I encountered an error: ${response.error}. Please try again.`,
-      }
-      setMessages((prev) => [...prev, errorMessage])
-    } else {
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response.content,
-      }
-      setMessages((prev) => [...prev, assistantMessage])
+      // Replace streaming message with error message
+      setMessages((prev) => 
+        prev.map(m => 
+          m.id === assistantMessageId 
+            ? { 
+                ...m, 
+                content: `Sorry, I encountered an error: ${response.error}`,
+                error: true,
+                originalInput: messageContent,
+              }
+            : m
+        )
+      )
     }
 
+    setStreamingMessageId(null)
     setIsLoading(false)
     scrollToBottom()
+  }
+
+  const sendMessage = async () => {
+    await sendMessageWithContent(input)
+  }
+
+  const retryMessage = async (messageId: string, originalInput: string) => {
+    await sendMessageWithContent(originalInput, messageId)
   }
 
   const handleSaveApiKey = async () => {
@@ -190,17 +259,42 @@ export function ChatScreen() {
             <Pressable
               onLongPress={() => copyToClipboard(message.content, message.id)}
               className={`max-w-[85%] rounded-2xl ${
-                message.role === 'user' ? 'bg-primary px-4 py-3' : 'bg-gray-100 px-4 py-2'
+                message.role === 'user' 
+                  ? 'bg-primary px-4 py-3' 
+                  : message.error 
+                    ? 'bg-red-50 border border-red-200 px-4 py-2'
+                    : 'bg-gray-100 px-4 py-2'
               }`}
             >
               {message.role === 'user' ? (
                 <Text className="text-base text-white">{message.content}</Text>
+              ) : message.id === streamingMessageId && message.content === '' ? (
+                <View className="flex-row items-center gap-2">
+                  <ActivityIndicator size="small" color="#666" />
+                  <Text className="text-gray-500 text-sm">Thinking...</Text>
+                </View>
               ) : (
                 <Markdown style={markdownStyles}>{message.content}</Markdown>
               )}
               
-              {/* Copy button */}
-              <View className="flex-row justify-end mt-1">
+              {/* Action buttons row */}
+              <View className="flex-row justify-between items-center mt-1">
+                {/* Retry button for error messages */}
+                {message.error && message.originalInput && (
+                  <TouchableOpacity
+                    onPress={() => retryMessage(message.id, message.originalInput!)}
+                    className="flex-row items-center gap-1 py-1 px-2 bg-red-100 rounded-lg"
+                    disabled={isLoading}
+                  >
+                    <Ionicons name="refresh" size={14} color="#dc2626" />
+                    <Text className="text-xs text-red-600 font-medium">Retry</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {/* Spacer when no retry button */}
+                {!message.error && <View />}
+                
+                {/* Copy button */}
                 <TouchableOpacity
                   onPress={() => copyToClipboard(message.content, message.id)}
                   className="flex-row items-center gap-1 py-1"
@@ -223,7 +317,7 @@ export function ChatScreen() {
             </Pressable>
           </View>
         ))}
-        {isLoading && (
+        {isLoading && !streamingMessageId && (
           <View className="flex-row justify-start">
             <View className="px-4 py-3 rounded-2xl bg-gray-100">
               <ActivityIndicator size="small" color="#666" />
@@ -236,7 +330,30 @@ export function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={0}
       >
-        <View className="flex-row p-4 gap-2 border-t border-gray-200">
+        {/* Voice recording indicator */}
+        {isListening && (
+          <View className="flex-row items-center justify-center py-2 bg-red-50 border-t border-red-100">
+            <View className="w-2 h-2 rounded-full bg-red-500 mr-2 animate-pulse" />
+            <Text className="text-red-600 text-sm font-medium">Listening...</Text>
+          </View>
+        )}
+        
+        <View className="flex-row p-4 gap-2 border-t border-gray-200 items-center">
+          {/* Voice input button */}
+          <TouchableOpacity
+            className={`w-10 h-10 rounded-full items-center justify-center ${
+              isListening ? 'bg-red-500' : isVoiceAvailable ? 'bg-gray-100' : 'bg-gray-50'
+            }`}
+            onPress={isListening ? stopListening : startListening}
+            disabled={isLoading}
+          >
+            <Ionicons 
+              name={isListening ? 'stop' : 'mic'} 
+              size={20} 
+              color={isListening ? '#fff' : isVoiceAvailable ? '#666' : '#ccc'} 
+            />
+          </TouchableOpacity>
+          
           <TextInput
             className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-base"
             placeholder="Ask about your health..."
@@ -244,16 +361,17 @@ export function ChatScreen() {
             onChangeText={setInput}
             onSubmitEditing={sendMessage}
             editable={!isLoading}
+            multiline
           />
           <TouchableOpacity
-            className={`bg-primary px-5 rounded-lg items-center justify-center active:opacity-80 ${isLoading ? 'opacity-60' : ''}`}
+            className={`bg-primary w-10 h-10 rounded-lg items-center justify-center active:opacity-80 ${isLoading || !input.trim() ? 'opacity-60' : ''}`}
             onPress={sendMessage}
-            disabled={isLoading}
+            disabled={isLoading || !input.trim()}
           >
             {isLoading ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text className="text-white font-semibold">Send</Text>
+              <Ionicons name="send" size={18} color="#fff" />
             )}
           </TouchableOpacity>
         </View>

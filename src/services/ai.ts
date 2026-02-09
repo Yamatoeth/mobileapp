@@ -107,7 +107,7 @@ export async function sendChatMessage(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'llama-3.1-70b-versatile',
+        model: 'llama-3.3-70b-versatile',
         messages: allMessages,
         temperature: 0.7,
         max_tokens: 1024,
@@ -132,3 +132,81 @@ export async function sendChatMessage(
     return { content: '', error: message }
   }
 }
+
+// Streaming version of sendChatMessage
+export async function sendChatMessageStreaming(
+  apiKey: string,
+  messages: Message[],
+  userMessage: string,
+  onChunk: (chunk: string) => void,
+  healthContext?: HealthContext
+): Promise<ChatResponse> {
+  try {
+    const systemPrompt = buildSystemPrompt(healthContext)
+    const allMessages: Message[] = [
+      { role: 'system', content: systemPrompt },
+      ...messages.filter((m) => m.role !== 'system'),
+      { role: 'user', content: userMessage },
+    ]
+
+    const response = await fetch(GROQ_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: allMessages,
+        temperature: 0.7,
+        max_tokens: 1024,
+        stream: true,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error?.message || `API error: ${response.status}`)
+    }
+
+    if (!response.body) {
+      throw new Error('No response body for streaming')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let fullContent = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const chunk = decoder.decode(value, { stream: true })
+      const lines = chunk.split('\n').filter(line => line.trim() !== '')
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6)
+          if (data === '[DONE]') continue
+
+          try {
+            const parsed = JSON.parse(data)
+            const content = parsed.choices?.[0]?.delta?.content
+            if (content) {
+              fullContent += content
+              onChunk(content)
+            }
+          } catch {
+            // Skip malformed JSON chunks
+          }
+        }
+      }
+    }
+
+    return { content: fullContent }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to get response'
+    return { content: '', error: message }
+  }
+}
+
