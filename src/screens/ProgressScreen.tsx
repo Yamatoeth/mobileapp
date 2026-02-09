@@ -7,6 +7,64 @@ import { useTheme } from '../hooks/useTheme'
 import { useMemo, useState, useCallback } from 'react'
 import type { HealthEntry, MoodEntry, SleepEntry, ExerciseEntry } from '../types/health'
 
+// Generate mock data for the past 10 days
+function generateMockData(): HealthEntry[] {
+  const mockEntries: HealthEntry[] = []
+  const now = new Date()
+
+  for (let i = 9; i >= 0; i--) {
+    const date = new Date(now)
+    date.setDate(date.getDate() - i)
+    date.setHours(8, 0, 0, 0)
+
+    // Mood entry (morning)
+    mockEntries.push({
+      id: `mock-mood-${i}`,
+      timestamp: date.toISOString(),
+      data: {
+        category: 'mood',
+        mood: Math.floor(Math.random() * 2) + 3, // 3-5 range
+        notes: 'Feeling good today',
+      } as MoodEntry,
+    })
+
+    // Sleep entry
+    const sleepDate = new Date(date)
+    sleepDate.setHours(7, 30, 0, 0)
+    mockEntries.push({
+      id: `mock-sleep-${i}`,
+      timestamp: sleepDate.toISOString(),
+      data: {
+        category: 'sleep',
+        hours: 6 + Math.random() * 2.5, // 6-8.5 hours
+        quality: Math.floor(Math.random() * 2) + 3, // 3-5
+        notes: 'Slept well',
+      } as SleepEntry,
+    })
+
+    // Exercise entry (not every day)
+    if (i % 2 === 0 || i === 1) {
+      const exerciseDate = new Date(date)
+      exerciseDate.setHours(18, 0, 0, 0)
+      mockEntries.push({
+        id: `mock-exercise-${i}`,
+        timestamp: exerciseDate.toISOString(),
+        data: {
+          category: 'exercise',
+          activity: ['running', 'cycling', 'weights', 'yoga'][Math.floor(Math.random() * 4)],
+          durationMinutes: 20 + Math.floor(Math.random() * 40), // 20-60 minutes
+          intensity: (['light', 'moderate', 'vigorous'] as const)[Math.floor(Math.random() * 3)],
+          notes: 'Good workout',
+        } as ExerciseEntry,
+      })
+    }
+  }
+
+  return mockEntries
+}
+
+const MOCK_DATA = generateMockData()
+
 const screenWidth = Dimensions.get('window').width - 64
 
 function getLast7Days(): string[] {
@@ -61,6 +119,11 @@ export function ProgressScreen() {
   const { logs, isLoading, refreshLogs } = useHealthLogs()
   const [refreshing, setRefreshing] = useState(false)
 
+  // Combine real logs with mock data (mock data used when no real data exists)
+  const allLogs = useMemo(() => {
+    return logs.length > 0 ? logs : MOCK_DATA
+  }, [logs])
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     await refreshLogs()
@@ -87,7 +150,7 @@ export function ProgressScreen() {
     
     // Mood data for the week
     const moodData = last7Days.map((_, i) => {
-      const dayLogs = getLogsForDay(logs, 6 - i)
+      const dayLogs = getLogsForDay(allLogs, 6 - i)
       const moodLogs = dayLogs.filter(l => l.data.category === 'mood') as Array<HealthEntry & { data: MoodEntry }>
       if (moodLogs.length === 0) return 0
       const avg = moodLogs.reduce((sum, l) => sum + l.data.mood, 0) / moodLogs.length
@@ -96,7 +159,7 @@ export function ProgressScreen() {
 
     // Sleep data for the week
     const sleepData = last7Days.map((_, i) => {
-      const dayLogs = getLogsForDay(logs, 6 - i)
+      const dayLogs = getLogsForDay(allLogs, 6 - i)
       const sleepLogs = dayLogs.filter(l => l.data.category === 'sleep') as Array<HealthEntry & { data: SleepEntry }>
       if (sleepLogs.length === 0) return 0
       return sleepLogs.reduce((sum, l) => sum + l.data.hours, 0)
@@ -104,12 +167,12 @@ export function ProgressScreen() {
 
     // Exercise minutes for the week
     const exerciseData = last7Days.map((_, i) => {
-      const dayLogs = getLogsForDay(logs, 6 - i)
+      const dayLogs = getLogsForDay(allLogs, 6 - i)
       const exerciseLogs = dayLogs.filter(l => l.data.category === 'exercise') as Array<HealthEntry & { data: ExerciseEntry }>
       return exerciseLogs.reduce((sum, l) => sum + l.data.durationMinutes, 0)
     })
 
-    const streak = calculateStreak(logs)
+    const streak = calculateStreak(allLogs)
     const avgMood = moodData.filter(m => m > 0).length > 0 
       ? moodData.filter(m => m > 0).reduce((a, b) => a + b, 0) / moodData.filter(m => m > 0).length 
       : 0
@@ -127,9 +190,9 @@ export function ProgressScreen() {
       avgMood,
       avgSleep,
       totalExercise,
-      totalEntries: logs.length,
+      totalEntries: allLogs.length,
     }
-  }, [logs])
+  }, [allLogs])
 
   const hasMoodData = stats.moodData.some(m => m > 0)
   const hasSleepData = stats.sleepData.some(s => s > 0)
