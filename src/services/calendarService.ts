@@ -414,6 +414,185 @@ class CalendarService {
   }
 
   // --------------------------------------------------------------------------
+  // Focus Block Detection
+  // --------------------------------------------------------------------------
+
+  /**
+   * Detect focus time blocks - events with no attendees or keywords like "focus", "deep work"
+   */
+  async getFocusBlocks(): Promise<{
+    focusBlocks: CalendarEvent[];
+    currentFocusBlock: CalendarEvent | null;
+    isInFocusTime: boolean;
+    minutesUntilFocusEnds: number;
+  }> {
+    const events = await this.fetchTodayEvents();
+    const now = new Date();
+
+    // Focus blocks are events with:
+    // - No attendees (other than self)
+    // - Or contain focus-related keywords
+    const focusKeywords = ['focus', 'deep work', 'heads down', 'no meetings', 'blocked', 'do not disturb'];
+    
+    const focusBlocks = events.filter((event) => {
+      if (event.isAllDay) return false;
+      
+      // Check for focus keywords in title
+      const titleLower = event.title.toLowerCase();
+      const hasFocusKeyword = focusKeywords.some(keyword => titleLower.includes(keyword));
+      if (hasFocusKeyword) return true;
+      
+      // Event with no attendees (or only self) is focus time
+      const nonSelfAttendees = event.attendees.filter(a => !a.isCurrentUser);
+      return nonSelfAttendees.length === 0;
+    });
+
+    // Check if currently in a focus block
+    const currentFocusBlock = focusBlocks.find(
+      (event) => event.startDate <= now && event.endDate > now
+    ) ?? null;
+
+    const isInFocusTime = currentFocusBlock !== null;
+    const minutesUntilFocusEnds = currentFocusBlock
+      ? Math.round((currentFocusBlock.endDate.getTime() - now.getTime()) / 60000)
+      : -1;
+
+    return {
+      focusBlocks,
+      currentFocusBlock,
+      isInFocusTime,
+      minutesUntilFocusEnds,
+    };
+  }
+
+  /**
+   * Get free time blocks between events during work hours
+   */
+  async getFreeBlocks(workStartHour: number = 9, workEndHour: number = 18): Promise<{
+    freeBlocks: { start: Date; end: Date; durationMinutes: number }[];
+    totalFreeMinutes: number;
+    longestFreeBlock: number;
+  }> {
+    const events = await this.fetchTodayEvents();
+    const now = new Date();
+    
+    const workStart = new Date(now);
+    workStart.setHours(workStartHour, 0, 0, 0);
+    const workEnd = new Date(now);
+    workEnd.setHours(workEndHour, 0, 0, 0);
+
+    // Get timed events sorted by start time
+    const timedEvents = events
+      .filter(e => !e.isAllDay)
+      .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+
+    const freeBlocks: { start: Date; end: Date; durationMinutes: number }[] = [];
+    let currentTime = now > workStart ? now : workStart;
+
+    for (const event of timedEvents) {
+      // Skip events that end before current time
+      if (event.endDate <= currentTime) continue;
+      
+      // Skip events that start after work hours
+      if (event.startDate >= workEnd) break;
+
+      // If there's a gap before this event, it's free time
+      if (event.startDate > currentTime) {
+        const blockEnd = event.startDate < workEnd ? event.startDate : workEnd;
+        const durationMinutes = Math.round((blockEnd.getTime() - currentTime.getTime()) / 60000);
+        
+        if (durationMinutes >= 15) { // Only count blocks >= 15 minutes
+          freeBlocks.push({
+            start: new Date(currentTime),
+            end: blockEnd,
+            durationMinutes,
+          });
+        }
+      }
+
+      // Move current time to end of this event
+      currentTime = event.endDate > currentTime ? event.endDate : currentTime;
+    }
+
+    // Check for free time after all events until work end
+    if (currentTime < workEnd) {
+      const durationMinutes = Math.round((workEnd.getTime() - currentTime.getTime()) / 60000);
+      if (durationMinutes >= 15) {
+        freeBlocks.push({
+          start: new Date(currentTime),
+          end: workEnd,
+          durationMinutes,
+        });
+      }
+    }
+
+    const totalFreeMinutes = freeBlocks.reduce((sum, block) => sum + block.durationMinutes, 0);
+    const longestFreeBlock = freeBlocks.length > 0
+      ? Math.max(...freeBlocks.map(b => b.durationMinutes))
+      : 0;
+
+    return {
+      freeBlocks,
+      totalFreeMinutes,
+      longestFreeBlock,
+    };
+  }
+
+  /**
+   * Get comprehensive calendar context for AI/state machine
+   */
+  async getFullContext(): Promise<{
+    currentTime: string;
+    isInMeeting: boolean;
+    meetingTitle: string | null;
+    meetingAttendees: number;
+    minutesUntilMeetingEnds: number;
+    isInFocusTime: boolean;
+    focusBlockTitle: string | null;
+    minutesUntilFocusEnds: number;
+    nextEvent: string | null;
+    minutesToNextEvent: number;
+    todayEventCount: number;
+    totalFreeMinutes: number;
+    remainingMeetings: number;
+  }> {
+    const [activeInfo, focusInfo, freeBlockInfo, schedule] = await Promise.all([
+      this.getActiveEvent(),
+      this.getFocusBlocks(),
+      this.getFreeBlocks(),
+      this.getTodaySchedule(),
+    ]);
+
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    // Count remaining meetings (events with attendees after now)
+    const remainingMeetings = schedule.events.filter(
+      e => !e.isAllDay && e.startDate > now && e.attendees.length > 0
+    ).length;
+
+    return {
+      currentTime: timeString,
+      isInMeeting: activeInfo.isActive && activeInfo.hasAttendees,
+      meetingTitle: activeInfo.event?.title ?? null,
+      meetingAttendees: activeInfo.attendeeCount,
+      minutesUntilMeetingEnds: activeInfo.minutesUntilEnd,
+      isInFocusTime: focusInfo.isInFocusTime,
+      focusBlockTitle: focusInfo.currentFocusBlock?.title ?? null,
+      minutesUntilFocusEnds: focusInfo.minutesUntilFocusEnds,
+      nextEvent: schedule.nextEvent?.title ?? null,
+      minutesToNextEvent: schedule.minutesUntilNextEvent,
+      todayEventCount: schedule.events.length,
+      totalFreeMinutes: freeBlockInfo.totalFreeMinutes,
+      remainingMeetings,
+    };
+  }
+
+  // --------------------------------------------------------------------------
   // Private Helpers
   // --------------------------------------------------------------------------
 

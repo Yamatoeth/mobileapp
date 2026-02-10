@@ -27,3 +27,13 @@ export {
   type UseStateMachineOptions,
   type UseStateMachineReturn,
 } from './useStateMachine';
+
+// Calendar
+export {
+  useCalendar,
+  type CalendarPermissionStatus,
+  type FocusBlockInfo,
+  type FreeBlockInfo,
+  type UseCalendarOptions,
+  type UseCalendarReturn,
+} from './useCalendar';
