@@ -23,7 +23,7 @@ import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { useChatHistory } from '../hooks/useChatHistory'
 import { useTheme } from '../hooks/useTheme'
 import { sendChatMessageStreaming, type Message as AIMessage } from '../services/ai'
-import { buildHealthContext } from '../utils/healthContext'
+import { getJarvisContext } from '../services/contextService'
 
 // Suggested prompts for quick actions
 const SUGGESTED_PROMPTS = [
@@ -47,8 +47,7 @@ export function ChatScreen() {
     isLoading: isLoadingHistory 
   } = useChatHistory()
   
-  // Build health context for AI personalization
-  const healthContext = useMemo(() => buildHealthContext(logs), [logs])
+
   
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -182,6 +181,9 @@ export function ChatScreen() {
 
     let fullContent = ''
     
+
+    // Get full context (biometrics, calendar, location)
+    const jarvisContext = await getJarvisContext();
     const response = await sendChatMessageStreaming(
       apiKey, 
       aiMessages, 
@@ -191,7 +193,7 @@ export function ChatScreen() {
         updateMessage(assistantMessageId, { content: fullContent })
         scrollToBottom()
       },
-      healthContext
+      jarvisContext
     )
 
     if (response.error) {

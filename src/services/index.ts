@@ -112,3 +112,6 @@ export {
   type SavedLocation,
   type LocationChangeEvent,
 } from './locationService';
+
+// Context Aggregation
+export { default as contextService, getJarvisContext } from './contextService';
