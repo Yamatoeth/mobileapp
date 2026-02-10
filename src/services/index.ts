@@ -70,3 +70,14 @@ export {
   type SynthesizeOptions,
   type SynthesizeResult,
 } from './textToSpeech';
+
+// Voice Pipeline (STT → LLM → TTS)
+export {
+  voicePipelineService,
+  VoicePipelineService,
+  ConversationHistory,
+  type PipelineState,
+  type PipelineResponse,
+  type PipelineCallbacks,
+  type PipelineOptions,
+} from './voicePipeline';
