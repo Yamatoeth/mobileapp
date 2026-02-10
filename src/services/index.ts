@@ -81,3 +81,23 @@ export {
   type PipelineCallbacks,
   type PipelineOptions,
 } from './voicePipeline';
+
+// State Machine
+export {
+  stateMachineService,
+  THRESHOLDS,
+  VALID_TRANSITIONS,
+  type StateTransition,
+  type TransitionLog,
+  type StateDetectionInput,
+  type StateDetectionResult,
+} from './stateMachine';
+
+// Calendar
+export {
+  calendarService,
+  type CalendarEvent,
+  type Attendee,
+  type ActiveEventInfo,
+  type TodaySchedule,
+} from './calendarService';

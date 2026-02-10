@@ -116,6 +116,9 @@ function buildSystemPrompt(context?: JarvisContext): string {
 - Life State: ${b.lifeState}
 - Last Updated: ${b.timestamp.toLocaleTimeString()}
 `;
+
+      // Add state-aware response guidance
+      prompt += getStateGuidance(b.lifeState, b.bpm, b.hrvMs, b.stressScore);
     }
 
     if (context.calendar) {
@@ -134,6 +137,63 @@ function buildSystemPrompt(context?: JarvisContext): string {
   }
 
   return prompt;
+}
+
+/**
+ * Get state-specific response guidance for the LLM
+ */
+function getStateGuidance(lifeState: string, bpm: number, hrvMs: number, stressScore: number): string {
+  const guidelines: Record<string, string> = {
+    sleeping: `
+### State-Aware Guidance: Sleeping
+User appears to be resting. If they're speaking to you:
+- They may have woken briefly; keep responses very brief and calming
+- Avoid stimulating topics or urgent matters
+- Consider suggesting they return to sleep if appropriate`,
+
+    exercising: `
+### State-Aware Guidance: Exercising
+User is working out (elevated BPM: ${bpm}). Response guidelines:
+- Keep messages short and energetic
+- ${bpm > 150 ? 'Their heart rate is quite elevated—ensure they\'re not overexerting' : 'Heart rate looks appropriate for exercise'}
+- Celebrate effort and progress
+- Don't suggest they stop unless concerning signals present`,
+
+    working: `
+### State-Aware Guidance: Working
+User is in work/focus mode. Response guidelines:
+- Be efficient and action-oriented
+- Minimize small talk; respect their focus
+- ${stressScore > 60 ? 'Stress is elevated—consider gentle productivity suggestions' : 'Stress levels acceptable for work'}
+- Offer to handle administrative tasks proactively`,
+
+    meeting: `
+### State-Aware Guidance: In Meeting
+User is currently in a meeting with others. Response guidelines:
+- Be extremely brief—they're multitasking
+- Only surface urgent or time-sensitive information
+- ${stressScore > 70 ? 'This meeting seems to be causing stress—note for follow-up' : 'Meeting stress levels normal'}
+- Offer meeting-relevant quick facts if asked`,
+
+    leisure: `
+### State-Aware Guidance: Leisure
+User is in relaxation/free time mode. Response guidelines:
+- Conversational tone is acceptable
+- No need to rush; can engage more casually
+- ${hrvMs > 50 ? 'Good recovery indicators—they\'re properly relaxing' : 'HRV could be better—subtle wellness suggestions welcome'}
+- Celebrate that they're taking time to recharge`,
+
+    stressed: `
+### State-Aware Guidance: Stressed
+User is showing stress signals (HRV: ${hrvMs}ms, BPM: ${bpm}, Stress: ${stressScore}/100). Response guidelines:
+- Acknowledge the stress matter-of-factly without amplifying it
+- Offer ONE specific, actionable intervention (breathing, walk, water)
+- Speak calmly and with confidence—your stability can help regulate them
+- Consider context: Is this stress productive (deadline) or harmful (chronic)?
+- Don't dismiss or minimize, but also don't catastrophize`,
+  };
+
+  return guidelines[lifeState] || '';
 }
 
 // ============================================

@@ -20,3 +20,10 @@ export {
   type UseVoiceAssistantResult,
   type UseVoiceAssistantOptions,
 } from './useVoiceAssistant';
+
+// State Machine
+export {
+  useStateMachine,
+  type UseStateMachineOptions,
+  type UseStateMachineReturn,
+} from './useStateMachine';
