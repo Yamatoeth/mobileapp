@@ -39,3 +39,16 @@ export {
 // Storage & AI
 export * from './storage';
 export * from './ai';
+
+// OpenAI / J.A.R.V.I.S.
+export {
+  openAIService,
+  OpenAIService,
+  JARVIS_SYSTEM_PROMPT,
+  type Message as OpenAIMessage,
+  type BiometricContext,
+  type CalendarContext,
+  type JarvisContext,
+  type GenerateResponseOptions,
+  type GenerateResponseResult,
+} from './openaiService';
