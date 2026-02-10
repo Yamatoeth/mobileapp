@@ -37,3 +37,11 @@ export {
   type UseCalendarOptions,
   type UseCalendarReturn,
 } from './useCalendar';
+
+// Location
+export {
+  useLocation,
+  type LocationPermissionStatus,
+  type UseLocationOptions,
+  type UseLocationReturn,
+} from './useLocation';

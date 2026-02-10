@@ -101,3 +101,14 @@ export {
   type ActiveEventInfo,
   type TodaySchedule,
 } from './calendarService';
+
+// Location
+export {
+  locationService,
+  type LocationType,
+  type Coordinates,
+  type LocationInfo,
+  type AddressInfo,
+  type SavedLocation,
+  type LocationChangeEvent,
+} from './locationService';
