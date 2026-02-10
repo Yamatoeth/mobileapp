@@ -52,3 +52,21 @@ export {
   type GenerateResponseOptions,
   type GenerateResponseResult,
 } from './openaiService';
+
+// Text-to-Speech
+export {
+  textToSpeechService,
+  audioPlaybackService,
+  voiceOutputService,
+  TextToSpeechService,
+  ElevenLabsService,
+  OpenAITTSService,
+  AudioPlaybackService,
+  VoiceOutputService,
+  ELEVENLABS_VOICES,
+  OPENAI_VOICES,
+  type TTSProvider,
+  type TTSConfig,
+  type SynthesizeOptions,
+  type SynthesizeResult,
+} from './textToSpeech';
