@@ -1,3 +1,25 @@
+// HRV reading history item
+export interface HRVHistoryItem {
+  value: number;
+  timestamp: number; // Unix ms
+}
+
+// Movement tracking
+export interface MovementInfo {
+  lastMovementTimestamp: number; // Unix ms
+  isMoving: boolean;
+}
+
+// Notification trigger types
+export type NotificationTriggerType = 'stress' | 'sedentary' | 'dehydration';
+
+// Notification trigger payload
+export interface NotificationTriggerPayload {
+  trigger: NotificationTriggerType;
+  hrvHistory?: HRVHistoryItem[];
+  lastMovement?: number;
+  events?: any[];
+}
 export type HealthCategory = 
   | 'symptoms'
   | 'vitals'

@@ -12,25 +12,25 @@ This timeline assumes **full-time solo development** (40+ hours/week) with aggre
 ### Week 1: Project Setup & Infrastructure
 
 **Days 1-2: Development Environment**
-- [ ] Install Expo CLI, React Native tools
-- [ ] Set up Python 3.11+ virtual environment
-- [ ] Configure VSCode with ESLint, Prettier, Pylint
-- [ ] Initialize Git monorepo structure (mobile/, backend/, shared/)
-- [ ] Set up GitHub repo with branch protection rules
+- [x] Install Expo CLI, React Native tools
+- [x] Set up Python 3.11+ virtual environment
+- [x] Configure VSCode with ESLint, Prettier, Pylint
+- [x] Initialize Git monorepo structure (mobile/, backend/, shared/)
+- [x] Set up GitHub repo with branch protection rules
 
 **Days 3-5: Backend Skeleton**
-- [ ] Create FastAPI project with SQLAlchemy + Alembic
+- [x] Create FastAPI project with SQLAlchemy + Alembic
 - [ ] Set up PostgreSQL (local Docker instance)
 - [ ] Configure Redis (local Docker instance)
 - [ ] Create Pinecone account and initialize index
-- [ ] Write health check endpoint (`GET /health`)
+- [x] Write health check endpoint (`GET /health`)
 
 **Days 6-7: Frontend Skeleton**
-- [ ] Initialize Expo project (TypeScript template)
-- [ ] Configure navigation (React Navigation)
-- [ ] Create placeholder screens (Home, Settings)
-- [ ] Set up Zustand stores (biometric, conversation, settings)
-- [ ] Test iOS simulator deployment
+- [x] Initialize Expo project (TypeScript template)
+- [x] Configure navigation (React Navigation)
+- [x] Create placeholder screens (Home, Settings)
+- [x] Set up Zustand stores (biometric, conversation, settings)
+- [x] Test iOS simulator deployment
 
 **Validation:**
 - [ ] Backend starts without errors, `/health` returns 200
@@ -42,23 +42,23 @@ This timeline assumes **full-time solo development** (40+ hours/week) with aggre
 ### Week 2: HealthKit Integration
 
 **Days 1-3: iOS Permissions & HealthKit Setup**
-- [ ] Install `react-native-health` library
-- [ ] Request HealthKit permissions (HRV, BPM, Sleep)
-- [ ] Build permission onboarding flow (explain why data is needed)
-- [ ] Test permission denial handling (graceful degradation)
+- [x] Install `react-native-health` library
+- [x] Request HealthKit permissions (HRV, BPM, Sleep)
+- [x] Build permission onboarding flow (explain why data is needed)
+- [x] Test permission denial handling (graceful degradation)
 
 **Days 4-5: HealthKit Service Layer**
-- [ ] Implement `HealthKitService.getLatestHRV()`
-- [ ] Implement `HealthKitService.getLatestBPM()`
-- [ ] Add error handling (no data, permission revoked)
-- [ ] Add retry logic with exponential backoff
-- [ ] Write unit tests for HealthKitService
+- [x] Implement `HealthKitService.getLatestHRV()`
+- [x] Implement `HealthKitService.getLatestBPM()`
+- [x] Add error handling (no data, permission revoked)
+- [x] Add retry logic with exponential backoff
+- [x] Write unit tests for HealthKitService
 
 **Days 6-7: Biometric Display UI**
-- [ ] Create `BiometricCard` component
-- [ ] Add real-time HRV/BPM updates (poll every 5 seconds)
-- [ ] Build simple line chart (last 1 hour of data)
-- [ ] Add loading states and error messages
+- [x] Create `BiometricCard` component
+- [x] Add real-time HRV/BPM updates (poll every 5 seconds)
+- [x] Build simple line chart (last 1 hour of data)
+- [x] Add loading states and error messages
 
 **Validation:**
 - [ ] App displays live HRV and BPM from Apple Watch
@@ -70,23 +70,23 @@ This timeline assumes **full-time solo development** (40+ hours/week) with aggre
 ### Week 3: Voice Pipeline (Part 1: STT)
 
 **Days 1-2: Audio Recording**
-- [ ] Install `expo-av` for audio recording
-- [ ] Implement microphone permission request
-- [ ] Build "Hold to Talk" button (start/stop recording)
-- [ ] Save audio to temporary file (WAV format, 16kHz)
+- [x] Install `expo-av` for audio recording
+- [x] Implement microphone permission request
+- [x] Build "Hold to Talk" button (start/stop recording)
+- [x] Save audio to temporary file (WAV format, 16kHz)
 
 **Days 3-5: Speech-to-Text Integration**
-- [ ] Create Deepgram account (or use OpenAI Whisper API)
-- [ ] Implement `DeepgramService.transcribe(audioFile)`
-- [ ] Add streaming transcription (real-time as user speaks)
-- [ ] Test transcription accuracy with different accents
-- [ ] Add error handling (network failure, timeout)
+- [x] Create Deepgram account (or use OpenAI Whisper API)
+- [x] Implement `DeepgramService.transcribe(audioFile)`
+- [x] Add streaming transcription (real-time as user speaks)
+- [x] Test transcription accuracy with different accents
+- [x] Add error handling (network failure, timeout)
 
 **Days 6-7: Frontend Integration**
-- [ ] Connect recording button to STT service
-- [ ] Display transcription in real-time (speech bubble)
-- [ ] Add visual feedback (waveform animation while recording)
-- [ ] Test on physical iPhone (simulator audio is limited)
+- [x] Connect recording button to STT service
+- [x] Display transcription in real-time (speech bubble)
+- [x] Add visual feedback (waveform animation while recording)
+- [x] Test on physical iPhone (simulator audio is limited)
 
 **Validation:**
 - [ ] User can record voice and see transcription within 1 second
@@ -98,22 +98,22 @@ This timeline assumes **full-time solo development** (40+ hours/week) with aggre
 ### Week 4: Voice Pipeline (Part 2: LLM + TTS)
 
 **Days 1-2: OpenAI Integration**
-- [ ] Set up OpenAI API account and key
-- [ ] Implement `OpenAIService.generateResponse(prompt)`
-- [ ] Test streaming responses (get first token ASAP)
-- [ ] Add prompt template for J.A.R.V.I.S. personality
+- [x] Set up OpenAI API account and key
+- [x] Implement `OpenAIService.generateResponse(prompt)`
+- [x] Test streaming responses (get first token ASAP)
+- [x] Add prompt template for J.A.R.V.I.S. personality
 
 **Days 3-4: Text-to-Speech Integration**
-- [ ] Set up ElevenLabs account (or use OpenAI TTS)
-- [ ] Implement `ElevenLabsService.synthesize(text)`
-- [ ] Test voice quality and latency
-- [ ] Add audio playback in frontend (`expo-av`)
+- [x] Set up ElevenLabs account (or use OpenAI TTS)
+- [x] Implement `ElevenLabsService.synthesize(text)`
+- [x] Test voice quality and latency
+- [x] Add audio playback in frontend (`expo-av`)
 
 **Days 5-7: End-to-End Voice Flow**
-- [ ] Connect STT → LLM → TTS pipeline
-- [ ] Implement WebSocket for streaming (optional for Phase 1)
-- [ ] Add conversation history (last 5 exchanges in LLM context)
-- [ ] Test full round-trip latency (goal: <3 seconds)
+- [x] Connect STT → LLM → TTS pipeline
+- [x] Implement WebSocket for streaming (optional for Phase 1)
+- [x] Add conversation history (last 5 exchanges in LLM context)
+- [x] Test full round-trip latency (goal: <3 seconds)
 
 **Validation:**
 - [ ] User can ask "What's my heart rate?" and get spoken answer
@@ -125,24 +125,24 @@ This timeline assumes **full-time solo development** (40+ hours/week) with aggre
 ### Week 5: State Machine
 
 **Days 1-3: State Machine Implementation**
-- [ ] Define 6 life states (Sleeping, Exercising, Working, Meeting, Leisure, Stressed)
-- [ ] Implement state transition logic in Python
-- [ ] Add validation rules (prevent invalid transitions)
-- [ ] Log all transitions for debugging
-- [ ] Write pytest tests for all transitions
+- [x] Define 6 life states (Sleeping, Exercising, Working, Meeting, Leisure, Stressed)
+- [x] Implement state transition logic in Python
+- [x] Add validation rules (prevent invalid transitions)
+- [x] Log all transitions for debugging
+- [x] Write pytest tests for all transitions
 
 **Days 4-5: State Detection Logic**
-- [ ] Implement `detect_state_from_biometrics(hrv, bpm, time)`
-- [ ] Add calendar integration (iOS Calendar API)
-- [ ] Detect meetings (calendar event with attendees)
-- [ ] Detect exercise (BPM >120 + GPS movement)
+- [x] Implement `detect_state_from_biometrics(hrv, bpm, time)`
+- [x] Add calendar integration (iOS Calendar API)
+- [x] Detect meetings (calendar event with attendees)
+- [x] Detect exercise (BPM >120 + GPS movement)
 
 **Days 6-7: State-Aware Responses**
-- [ ] Update LLM prompt to include current state
-- [ ] Test different responses based on state:
+- [x] Update LLM prompt to include current state
+- [x] Test different responses based on state:
   - High BPM during EXERCISING: "Great workout!"
   - High BPM during MEETING: "This meeting is stressing you."
-- [ ] Add state indicator in UI (icon or color)
+- [x] Add state indicator in UI (icon or color)
 
 **Validation:**
 - [ ] State machine correctly identifies all 6 states
@@ -154,10 +154,10 @@ This timeline assumes **full-time solo development** (40+ hours/week) with aggre
 ### Week 6: Calendar & Location Context
 
 **Days 1-2: Calendar Integration**
-- [ ] Request iOS Calendar permissions
-- [ ] Fetch today's events using `expo-calendar`
-- [ ] Parse event titles and attendees
-- [ ] Detect "focus time" blocks (no attendees)
+- [x] Request iOS Calendar permissions
+- [x] Fetch today's events using `expo-calendar`
+- [x] Parse event titles and attendees
+- [x] Detect "focus time" blocks (no attendees)
 
 **Days 3-4: Location Awareness**
 - [ ] Request iOS Location permissions
@@ -247,22 +247,22 @@ This timeline assumes **full-time solo development** (40+ hours/week) with aggre
 ### Week 9: Notification System Foundation
 
 **Days 1-3: iOS Notifications**
-- [ ] Request push notification permissions
-- [ ] Implement local notification service
-- [ ] Test notification display while app is backgrounded
-- [ ] Add notification actions (dismiss, snooze, open app)
+- [x] Request push notification permissions
+- [x] Implement local notification service
+- [x] Test notification display while app is backgrounded
+- [x] Add notification actions (dismiss, snooze, open app)
 
 **Days 4-5: Notification Triggers**
-- [ ] Detect prolonged stress (HRV <30 for >15 minutes)
-- [ ] Detect sedentary behavior (no movement for >90 minutes)
-- [ ] Detect dehydration risk (no breaks during 3+ hour focus block)
-- [ ] Add trigger logging to backend
+- [x] Detect prolonged stress (HRV <30 for >15 minutes)
+- [x] Detect sedentary behavior (no movement for >90 minutes)
+- [x] Detect dehydration risk (no breaks during 3+ hour focus block)
+- [x] Add trigger logging to backend
 
 **Days 6-7: Smart Notification Timing**
-- [ ] Never notify during MEETING state
-- [ ] Batch notifications (max 1 per 30 minutes)
-- [ ] Respect "Do Not Disturb" mode
-- [ ] Test notification frequency (avoid spam)
+- [x] Never notify during MEETING state
+- [x] Batch notifications (max 1 per 30 minutes)
+- [x] Respect "Do Not Disturb" mode
+- [x] Test notification frequency (avoid spam)
 
 **Validation:**
 - [ ] Notifications arrive within 1 minute of trigger

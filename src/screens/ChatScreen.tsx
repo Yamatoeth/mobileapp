@@ -184,6 +184,109 @@ export function ChatScreen() {
 
     // Get full context (biometrics, calendar, location)
     const jarvisContext = await getJarvisContext();
+
+    // Map JarvisContext to HealthContext (add missing properties as needed)
+    // Adjust this block to use the correct property from HealthEntry, or add a fallback if symptoms is not present
+    const recentSymptoms = Array.isArray(logs)
+      ? logs
+          .filter((entry: any) => entry.symptoms && Array.isArray(entry.symptoms) && entry.symptoms.length > 0)
+          .flatMap((entry: any) => entry.symptoms)
+      : [];
+
+    // Calculate averages from logs array
+    const avgSleep =
+      Array.isArray(logs) && logs.length > 0
+        ? logs
+            .map((entry: any) => entry.sleep ?? 0)
+            .reduce((sum: number, val: number) => sum + val, 0) / logs.length
+        : 0;
+
+    const avgMood =
+      Array.isArray(logs) && logs.length > 0
+        ? logs
+            .map((entry: any) => entry.mood ?? 0)
+            .reduce((sum: number, val: number) => sum + val, 0) / logs.length
+        : 0;
+
+    const recentExercise =
+      Array.isArray(logs)
+        ? logs
+            .filter((entry: any) => entry.exercise)
+            .map((entry: any) => entry.exercise)
+        : [];
+
+    const avgSteps =
+      Array.isArray(logs) && logs.length > 0
+        ? logs
+            .map((entry: any) => entry.steps ?? 0)
+            .reduce((sum: number, val: number) => sum + val, 0) / logs.length
+        : 0;
+
+    const nutritionSummary =
+      Array.isArray(logs) && logs.length > 0
+        ? logs
+            .map((entry: any) => entry.nutritionSummary ?? '')
+            .filter((summary: string) => summary)
+            .join('; ')
+        : '';
+
+    // Calculate recentVitals, totalEntries, and streak for HealthContext
+    // Use the most recent vitals entry (or undefined if none)
+    const recentVitals =
+      Array.isArray(logs)
+        ? (() => {
+            const lastEntryWithVitals = [...logs]
+              .reverse()
+              .find((entry: any) => entry.vitals && typeof entry.vitals === 'object');
+            if (lastEntryWithVitals && lastEntryWithVitals.data.category === 'vitals') {
+              const { heartRate, bloodPressureDiastolic, temperature, weight } = lastEntryWithVitals.data;
+              return {
+                heartRate: typeof heartRate === 'number' ? heartRate : undefined,
+                bloodPressure: typeof bloodPressureDiastolic === 'string' ? bloodPressureDiastolic : undefined,
+                temperature: typeof temperature === 'number' ? temperature : undefined,
+                weight: typeof weight === 'number' ? weight : undefined,
+              };
+            }
+            return {};
+          })()
+        : {};
+
+    const totalEntries = Array.isArray(logs) ? logs.length : 0;
+
+    // Example streak calculation: number of consecutive days with entries
+    let streak = 0;
+    if (Array.isArray(logs) && logs.length > 0) {
+      // Replace 'date' with the correct property, e.g., 'createdAt' or 'timestamp'.
+      // If your HealthEntry type uses 'createdAt' for the date, use that property instead.
+      // Example below assumes 'createdAt' is the correct property. Change as needed.
+            const sortedLogs = [...logs].sort((a: any, b: any) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime());
+            let currentDate = new Date(sortedLogs[0]?.timestamp ?? 0);
+            streak = 1;
+            for (let i = 1; i < sortedLogs.length; i++) {
+              const nextDate = new Date(sortedLogs[i]?.timestamp ?? 0);
+              const diff = (currentDate.getTime() - nextDate.getTime()) / (1000 * 60 * 60 * 24);
+              if (diff === 1) {
+                streak++;
+                currentDate = nextDate;
+              } else {
+                break;
+              }
+            }
+    }
+
+    const healthContext = {
+      ...jarvisContext,
+      recentSymptoms,
+      avgSleep,
+      avgMood,
+      recentExercise,
+      avgSteps,
+      nutritionSummary,
+      recentVitals, // now an object, not an array
+      totalEntries,
+      streak,
+    };
+
     const response = await sendChatMessageStreaming(
       apiKey, 
       aiMessages, 
@@ -193,7 +296,7 @@ export function ChatScreen() {
         updateMessage(assistantMessageId, { content: fullContent })
         scrollToBottom()
       },
-      jarvisContext
+      healthContext
     )
 
     if (response.error) {

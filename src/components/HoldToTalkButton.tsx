@@ -3,6 +3,7 @@
  * Features waveform animation and visual feedback
  */
 import { View, Text, Pressable, Animated, StyleSheet } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -144,6 +145,9 @@ export function HoldToTalkButton({
   const handlePressIn = useCallback(async () => {
     if (disabled || isRecording) return;
 
+
+    // Haptic feedback on press in
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsPressing(true);
 
     // Scale animation
@@ -194,6 +198,8 @@ export function HoldToTalkButton({
     }
 
     setIsPressing(false);
+    // Haptic feedback on release
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsRecording(false);
     setAudioLevels([0, 0, 0, 0, 0]);
 

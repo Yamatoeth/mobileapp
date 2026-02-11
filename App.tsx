@@ -8,10 +8,30 @@ import { TabNavigator } from './src/navigation/TabNavigator'
 import { ThemeProvider, useTheme } from './src/hooks/useTheme'
 import { OnboardingScreen } from './src/screens/OnboardingScreen'
 import { useOnboarding } from './src/hooks/useOnboarding'
+import { useEffect } from 'react'
+import { addNotificationActionListener } from './src/services/notificationService'
+import { useNotificationTriggers } from './src/hooks/useNotificationTriggers'
 
 function AppContent() {
   const { isDark, theme } = useTheme()
   const { hasSeenOnboarding, isLoading, completeOnboarding } = useOnboarding()
+  useNotificationTriggers()
+  useEffect(() => {
+    const subscription = addNotificationActionListener((response: { actionIdentifier: string }) => {
+      // Example: handle notification actions
+      const action = response.actionIdentifier
+      if (action === 'dismiss') {
+        // Dismiss logic
+      } else if (action === 'snooze') {
+        // Snooze logic (reschedule notification)
+      } else if (action === 'open_app') {
+        // Open app logic (navigate if needed)
+      }
+    })
+    return () => {
+      // No cleanup needed as addNotificationActionListener returns void
+    }
+  }, [])
 
   if (isLoading) {
     return null

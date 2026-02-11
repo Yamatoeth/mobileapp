@@ -38,16 +38,25 @@ const slides: OnboardingSlide[] = [
     description: 'Your health data stays on your device. We never share your information with third parties.',
     color: '#f59e0b',
   },
+  {
+    icon: 'notifications',
+    title: 'Stay Informed',
+    description: 'Enable notifications to get gentle reminders, health insights, and timely alerts. You control what you receive.',
+    color: '#ef4444',
+  },
 ]
 
 type Props = {
   onComplete: () => void
 }
 
+import { useNotificationPermission } from '../hooks/useNotificationPermission'
+
 export function OnboardingScreen({ onComplete }: Props) {
   const { isDark } = useTheme()
   const [currentIndex, setCurrentIndex] = useState(0)
   const translateX = useRef(new Animated.Value(0)).current
+  const notificationGranted = useNotificationPermission()
 
   const goToSlide = (index: number) => {
     Animated.timing(translateX, {
@@ -59,6 +68,12 @@ export function OnboardingScreen({ onComplete }: Props) {
   }
 
   const nextSlide = () => {
+    // If on notification slide, request permission
+    if (currentIndex === slides.length - 2) {
+      // notification permission is requested automatically by hook
+      goToSlide(currentIndex + 1)
+      return
+    }
     if (currentIndex < slides.length - 1) {
       goToSlide(currentIndex + 1)
     } else {
@@ -128,11 +143,17 @@ export function OnboardingScreen({ onComplete }: Props) {
         <TouchableOpacity
           className="bg-primary py-4 rounded-xl items-center active:opacity-80"
           onPress={nextSlide}
+          disabled={currentIndex === slides.length - 2 && notificationGranted === false}
         >
           <Text className="text-white font-semibold text-base">
             {currentIndex === slides.length - 1 ? 'Get Started' : 'Next'}
           </Text>
         </TouchableOpacity>
+        {currentIndex === slides.length - 2 && notificationGranted === false && (
+          <Text className="text-center text-xs text-red-500 mt-2">
+            Please allow notifications to continue.
+          </Text>
+        )}
       </View>
     </SafeAreaView>
   )

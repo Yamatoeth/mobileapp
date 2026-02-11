@@ -15,6 +15,11 @@ import { useBiometricStore } from '../store/biometricStore';
 // Polling interval in milliseconds
 const POLL_INTERVAL_MS = 5000; // 5 seconds
 
+export interface HRVHistoryItem {
+  value: number;
+  timestamp: number;
+}
+
 export interface UseHealthKitResult {
   // Status
   isAvailable: boolean;
@@ -25,6 +30,7 @@ export interface UseHealthKitResult {
   // Data
   latestHRV: HRVReading | null;
   latestBPM: HeartRateReading | null;
+  hrvHistory: HRVHistoryItem[];
   lastUpdated: Date | null;
 
   // Actions
@@ -43,6 +49,7 @@ export function useHealthKit(): UseHealthKitResult {
   // Data state
   const [latestHRV, setLatestHRV] = useState<HRVReading | null>(null);
   const [latestBPM, setLatestBPM] = useState<HeartRateReading | null>(null);
+  const [hrvHistory, setHrvHistory] = useState<HRVHistoryItem[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // Polling ref
@@ -188,6 +195,7 @@ export function useHealthKit(): UseHealthKitResult {
     // Data
     latestHRV,
     latestBPM,
+    hrvHistory,
     lastUpdated,
 
     // Actions

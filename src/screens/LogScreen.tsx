@@ -2,6 +2,7 @@ import { View, Text, ScrollView, TouchableOpacity, Modal, RefreshControl } from 
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useState, useCallback } from 'react'
+import { useLocalNotification } from '../hooks/useLocalNotification'
 import { useHealthLogs } from '../hooks/useHealthLogs'
 import { useTheme } from '../hooks/useTheme'
 import { LogForm } from '../components/LogForm'
@@ -58,6 +59,7 @@ export function LogScreen() {
   const { logs, addLog, removeLog, isLoading, refreshLogs } = useHealthLogs()
   const [selectedCategory, setSelectedCategory] = useState<CategoryConfig | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const { schedule } = useLocalNotification()
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -85,6 +87,13 @@ export function LogScreen() {
       <View className={`p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
         <Text className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Health Log</Text>
         <Text className={`mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Track your daily health data</Text>
+        {/* Notification test button */}
+        <TouchableOpacity
+          className="mt-2 bg-red-500 py-2 px-4 rounded-xl self-start"
+          onPress={() => schedule('Test Notification', 'This is a test notification.', { test: true }, { seconds: 5 })}
+        >
+          <Text className="text-white font-semibold">Send Test Notification</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView 
