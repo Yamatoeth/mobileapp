@@ -187,7 +187,7 @@ This timeline assumes **full-time solo development** (40+ hours/week) with aggre
 ### Week 7: Basic Memory System
 
 **Days 1-2: Conversation Storage**
-- [ ] Create `conversations` table in PostgreSQL
+- [x] Create `conversations` table in PostgreSQL
 - [ ] Store each user query + LLM response
 - [ ] Add timestamps and biometric snapshot
 
