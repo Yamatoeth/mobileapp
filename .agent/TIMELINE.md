@@ -18,10 +18,10 @@ This timeline assumes **full-time solo development** (40+ hours/week) with aggre
 - [x] Initialize Git monorepo structure (mobile/, backend/, shared/)
 - [x] Set up GitHub repo with branch protection rules
 
-**Days 3-5: Backend Skeleton**
+-**Days 3-5: Backend Skeleton**
 - [x] Create FastAPI project with SQLAlchemy + Alembic
-- [ ] Set up PostgreSQL (local Docker instance)
-- [ ] Configure Redis (local Docker instance)
+- [x] Set up PostgreSQL (local Docker instance)
+- [x] Configure Redis (local Docker instance)
 - [ ] Create Pinecone account and initialize index
 - [x] Write health check endpoint (`GET /health`)
 
@@ -160,15 +160,15 @@ This timeline assumes **full-time solo development** (40+ hours/week) with aggre
 - [x] Detect "focus time" blocks (no attendees)
 
 **Days 3-4: Location Awareness**
-- [ ] Request iOS Location permissions
-- [ ] Implement `LocationService.getCurrentLocation()`
-- [ ] Detect location changes (home, office, gym)
-- [ ] Add location to context payload sent to backend
+- [x] Request iOS Location permissions
+- [x] Implement `LocationService.getCurrentLocation()`
+- [x] Detect location changes (home, office, gym)
+- [x] Add location to context payload sent to backend
 
 **Days 5-7: Context Enrichment**
-- [ ] Combine biometrics + calendar + location into context object
-- [ ] Send context to backend with every voice query
-- [ ] Update LLM prompt to include context:
+- [x] Combine biometrics + calendar + location into context object
+- [x] Send context to backend with every voice query
+- [x] Update LLM prompt to include context:
   ```
   Current time: 14:30
   Location: Office
