@@ -9,6 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.db.redis_client import redis_client
 from app.db.pinecone_client import pinecone_client
+from fastapi import APIRouter
+
+# import routers
+from app.api.conversations import router as conversations_router
 
 settings = get_settings()
 
@@ -31,6 +35,9 @@ app = FastAPI(
     version=settings.app_version,
     lifespan=lifespan,
 )
+
+# Register API routers
+app.include_router(conversations_router, prefix="/api/v1", tags=["conversations"])
 
 # CORS middleware for mobile app
 app.add_middleware(
