@@ -26,15 +26,7 @@ export {
 } from './speechToText';
 
 // Health
-export {
-  healthKitService,
-  HealthKitService,
-  type BiometricReading,
-  type HRVReading,
-  type HeartRateReading,
-  type SleepSample,
-  type HealthKitStatus,
-} from './healthKit';
+// HealthKit removed in Phase 1 pivot — health service omitted
 
 // Storage & AI
 export * from './storage';
@@ -46,9 +38,6 @@ export {
   OpenAIService,
   JARVIS_SYSTEM_PROMPT,
   type Message as OpenAIMessage,
-  type BiometricContext,
-  type CalendarContext,
-  type JarvisContext,
   type GenerateResponseOptions,
   type GenerateResponseResult,
 } from './openaiService';
@@ -83,24 +72,9 @@ export {
 } from './voicePipeline';
 
 // State Machine
-export {
-  stateMachineService,
-  THRESHOLDS,
-  VALID_TRANSITIONS,
-  type StateTransition,
-  type TransitionLog,
-  type StateDetectionInput,
-  type StateDetectionResult,
-} from './stateMachine';
+// State machine removed — stateMachine service omitted
 
-// Calendar
-export {
-  calendarService,
-  type CalendarEvent,
-  type Attendee,
-  type ActiveEventInfo,
-  type TodaySchedule,
-} from './calendarService';
+// Calendar service removed in Phase 1 pivot — frontend calendar hooks/types are feature-flagged
 
 // Location
 export {
@@ -113,5 +87,8 @@ export {
   type LocationChangeEvent,
 } from './locationService';
 
-// Context Aggregation
-export { default as contextService, getJarvisContext } from './contextService';
+// Context Aggregation (server-backed)
+export { default as contextService, getServerContext } from './contextService';
+
+// WebSocket client for voice streaming
+export { default as WSClient } from './wsClient';

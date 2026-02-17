@@ -3,14 +3,15 @@
  * Integrates STT → LLM → TTS pipeline with biometric context
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useBiometricStore } from '../store/biometricStore';
+import { useSettingsStore } from '../store/settingsStore';
 import {
   voicePipelineService,
   PipelineState,
   PipelineResponse,
   PipelineOptions,
 } from '../services/voicePipeline';
-import { JarvisContext, BiometricContext } from '../services/openaiService';
+import type { JarvisContext } from '../services/openaiService';
+import { getServerContext } from '../services/contextService';
 
 // ============================================
 // Types
@@ -78,8 +79,8 @@ export function useVoiceAssistant(
   const [lastLatency, setLastLatency] = useState<number | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Biometric store
-  const { hrvMs, bpm, stressScore, currentState } = useBiometricStore();
+  // User id from settings (used to request server context)
+  const userId = useSettingsStore((s) => s.userId);
 
   // Refs for callbacks to avoid stale closures
   const onTranscriptRef = useRef(onTranscript);
@@ -94,31 +95,22 @@ export function useVoiceAssistant(
     onErrorRef.current = onError;
   }, [onTranscript, onResponse, onComplete, onError]);
 
-  // Build biometric context
-  const buildBiometricContext = useCallback((): BiometricContext => {
-    return {
-      hrvMs,
-      bpm,
-      stressScore: Math.round(stressScore * 100),
-      lifeState: currentState,
-      timestamp: new Date(),
-    };
-  }, [hrvMs, bpm, stressScore, currentState]);
+  // Fetch server-side context (Layer 2-4). Returns null when disabled or unavailable.
+  const fetchServerContext = useCallback(
+    async (query?: string): Promise<JarvisContext | undefined> => {
+      if (!includeContext) return undefined;
+      if (!userId) return undefined;
 
-  // Build full context
-  const buildContext = useCallback((): JarvisContext | undefined => {
-    if (!includeContext) return undefined;
-
-    return {
-      biometrics: buildBiometricContext(),
-      calendar: {
-        currentTime: new Date().toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-      },
-    };
-  }, [includeContext, buildBiometricContext]);
+      try {
+        const ctx = await getServerContext(userId, query ?? '');
+        return ctx as unknown as JarvisContext;
+      } catch (e) {
+        console.warn('[useVoiceAssistant] getServerContext failed', e);
+        return undefined;
+      }
+    },
+    [includeContext, userId]
+  );
 
   // Initialize
   const initialize = useCallback(async (): Promise<boolean> => {
@@ -188,14 +180,15 @@ export function useVoiceAssistant(
 
   // Stop listening and process
   const stopListening = useCallback(async (): Promise<PipelineResponse | null> => {
+    const ctx = await fetchServerContext();
     const pipelineOptions: PipelineOptions = {
-      context: buildContext(),
+      context: ctx,
       streamLLM,
       playAudio,
     };
 
     return await voicePipelineService.stopListening(pipelineOptions);
-  }, [buildContext, streamLLM, playAudio]);
+  }, [fetchServerContext, streamLLM, playAudio]);
 
   // Cancel
   const cancel = useCallback(async (): Promise<void> => {
@@ -211,15 +204,16 @@ export function useVoiceAssistant(
       setResponse('');
       setStreamingResponse('');
 
+      const ctx = await fetchServerContext(text);
       const pipelineOptions: PipelineOptions = {
-        context: buildContext(),
+        context: ctx,
         streamLLM,
         playAudio,
       };
 
       return await voicePipelineService.processText(text, pipelineOptions);
     },
-    [buildContext, streamLLM, playAudio]
+    [fetchServerContext, streamLLM, playAudio]
   );
 
   // Clear history

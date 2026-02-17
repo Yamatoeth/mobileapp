@@ -1,88 +1,73 @@
 /**
- * Context Aggregation Service
+ * Context Aggregation Service (server-backed)
  *
- * Combines biometrics, calendar, and location into a unified JarvisContext
- * for use in the voice pipeline and LLM prompt.
+ * The frontend no longer assembles biometric or calendar context locally.
+ * Instead, `getServerContext` requests layers 2-4 from the backend Context Builder:
+ *  - layer2_identity: Knowledge Base summary (Postgres)
+ *  - layer3_recent: Working memory (Redis)
+ *  - layer4_relevant: Episodic memory search (Pinecone)
  */
 
-import { healthKitService } from './healthKit';
-import { calendarService } from './calendarService';
-import { locationService } from './locationService';
-import type { JarvisContext, BiometricContext, CalendarContext } from './openaiService';
+import { getWorkingMemory, searchMemory } from './apiClient';
+
+export type ServerContext = {
+  layer2_identity?: Record<string, unknown> | null;
+  layer3_recent?: Record<string, unknown> | null;
+  layer4_relevant?: Array<Record<string, unknown>>;
+};
 
 /**
- * Fetches the latest biometrics (HRV, BPM, stress, state)
+ * Fetch a server-assembled context for use in the voice pipeline.
+ *
+ * Args:
+ *  - userId: string
+ *  - query: optional string used to search episodic memory (Layer 4)
  */
-async function getBiometricContext(): Promise<BiometricContext | undefined> {
-  try {
-    // Example: Fetch latest HRV, BPM, and state from HealthKitService
-    const [hrv, bpm] = await Promise.all([
-      healthKitService.getLatestHRV?.(),
-      healthKitService.getLatestBPM?.(),
-    ]);
-    // TODO: Replace with real state/stress logic
-    const stressScore = hrv && hrv.value ? Math.max(0, 100 - hrv.value) : 50;
-    const lifeState = 'working'; // TODO: Replace with real state detection
-    if (hrv && bpm) {
-      return {
-        hrvMs: hrv.value,
-        bpm: bpm.value,
-        stressScore,
-        lifeState,
-        timestamp: new Date(hrv.endDate || Date.now()),
-      };
-    }
-  } catch (e) {
-    console.warn('[contextService] Failed to get biometrics:', e);
+export async function getServerContext(
+  userId: string,
+  query?: string
+): Promise<ServerContext> {
+  const base = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
+
+  // Parallel fetches: working memory (Redis) + knowledge summary (Postgres)
+  const workingPromise = getWorkingMemory(userId).catch((e) => {
+    console.warn('[contextService] getWorkingMemory failed', e)
+    return null
+  })
+
+  const kbPromise = fetch(`${base}/api/v1/knowledge/summary?user_id=${encodeURIComponent(
+    userId
+  )}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  })
+    .then((r) => r.ok ? r.json().catch(() => null) : null)
+    .catch((e) => {
+      console.warn('[contextService] knowledge summary fetch failed', e)
+      return null
+    })
+
+  const [layer3_recent, layer2_identity] = await Promise.all([
+    workingPromise,
+    kbPromise,
+  ])
+
+  // Episodic memory: only search when query provided
+  let layer4_relevant: Array<Record<string, unknown>> = []
+  if (query && query.length > 0) {
+    layer4_relevant = await searchMemory(userId, query, 5).catch((e) => {
+      console.warn('[contextService] searchMemory failed', e)
+      return []
+    })
   }
-  return undefined;
-}
 
-/**
- * Fetches the latest calendar context (current time, next event, location)
- */
-async function getCalendarContext(locationType?: string): Promise<CalendarContext> {
-  const full = await calendarService.getFullContext();
   return {
-    currentTime: full.currentTime,
-    nextEvent: full.nextEvent
-      ? {
-          title: full.nextEvent,
-          time: full.minutesToNextEvent > 0 ? `${full.minutesToNextEvent} min` : 'now',
-          attendees: full.meetingAttendees,
-        }
-      : undefined,
-    location: locationType,
-  };
-}
-
-/**
- * Fetches the latest location context (type, name, address)
- */
-async function getLocationType(): Promise<string> {
-  try {
-    const loc = await locationService.getCurrentLocation();
-    return loc?.locationType || 'unknown';
-  } catch (e) {
-    return 'unknown';
+    layer2_identity: layer2_identity || null,
+    layer3_recent: layer3_recent || null,
+    layer4_relevant,
   }
-}
-
-/**
- * Aggregates all context for the LLM
- */
-export async function getJarvisContext(): Promise<JarvisContext> {
-  const [biometrics, locationType] = await Promise.all([
-    getBiometricContext(),
-    getLocationType(),
-  ]);
-  const calendar = await getCalendarContext(locationType);
-  return {
-    biometrics,
-    calendar,
-  };
 }
 
 export default {
-  getJarvisContext,
-};
+  getServerContext,
+}

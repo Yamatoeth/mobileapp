@@ -16,15 +16,7 @@ export async function logTrigger(payload: Record<string, unknown>): Promise<void
  * Handles communication with the FastAPI backend
  */
 
-import type {
-  User,
-  BiometricReading,
-  Conversation,
-  Message,
-  Intervention,
-  TrustLevel,
-  LifeState,
-} from '../../shared/types'
+import type { User, Conversation, Message } from '../../shared/types'
 
 // Default to localhost for development
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
@@ -64,15 +56,8 @@ type ApiResponse<T> = {
 }
 
 /**
- * Biometric submission payload
+ * Message submission payload
  */
-type BiometricPayload = {
-  userId: string
-  heartRate?: number
-  hrv?: number
-  lifeState?: LifeState
-  contextualFactors?: Record<string, unknown>
-}
 
 /**
  * Message submission payload
@@ -195,53 +180,9 @@ export async function getOrCreateUser(userId: string): Promise<User> {
 /**
  * Update user trust level
  */
-export async function updateTrustLevel(
-  userId: string,
-  trustLevel: TrustLevel
-): Promise<User> {
-  return request<User>(`/api/v1/users/${userId}/trust`, {
-    method: 'PATCH',
-    body: JSON.stringify({ trust_level: trustLevel }),
-  })
-}
+// `trust` concept removed in Phase 1 pivot; updateTrustLevel omitted
 
-// ============================================
-// Biometric Data
-// ============================================
-
-/**
- * Submit biometric reading
- */
-export async function submitBiometrics(
-  payload: BiometricPayload
-): Promise<BiometricReading> {
-  return request<BiometricReading>('/api/v1/biometrics', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-}
-
-/**
- * Get recent biometric readings for a user
- */
-export async function getBiometrics(
-  userId: string,
-  limit: number = 100
-): Promise<BiometricReading[]> {
-  return request<BiometricReading[]>(
-    `/api/v1/biometrics/${userId}?limit=${limit}`
-  )
-}
-
-/**
- * Get current life state for a user
- */
-export async function getLifeState(userId: string): Promise<{
-  lifeState: LifeState
-  since: string
-}> {
-  return request(`/api/v1/biometrics/${userId}/life-state`)
-}
+// Biometric endpoints removed in pivot
 
 // ============================================
 // Conversations
@@ -294,36 +235,7 @@ export async function getMessages(conversationId: string): Promise<Message[]> {
   )
 }
 
-// ============================================
-// Interventions
-// ============================================
-
-/**
- * Get pending interventions for a user
- */
-export async function getPendingInterventions(
-  userId: string
-): Promise<Intervention[]> {
-  return request<Intervention[]>(
-    `/api/v1/interventions?user_id=${userId}&status=pending`
-  )
-}
-
-/**
- * Accept or dismiss an intervention
- */
-export async function respondToIntervention(
-  interventionId: string,
-  accepted: boolean
-): Promise<Intervention> {
-  return request<Intervention>(`/api/v1/interventions/${interventionId}`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      status: accepted ? 'accepted' : 'dismissed',
-      responded_at: new Date().toISOString(),
-    }),
-  })
-}
+// Intervention endpoints removed in pivot
 
 // ============================================
 // Memory & Context
@@ -394,7 +306,6 @@ export async function processQuery(
   context?: Record<string, unknown>
 ): Promise<{
   response: string
-  interventions?: Intervention[]
   memoryUpdated: boolean
 }> {
   return request('/api/v1/ai/process', {
@@ -410,20 +321,14 @@ export default {
   getStatus,
   // Users
   getOrCreateUser,
-  updateTrustLevel,
-  // Biometrics
-  submitBiometrics,
-  getBiometrics,
-  getLifeState,
+  // (trust/biometrics removed)
   // Conversations
   createConversation,
   getConversation,
   getConversations,
   sendMessage,
   getMessages,
-  // Interventions
-  getPendingInterventions,
-  respondToIntervention,
+  // (interventions removed)
   // Memory
   searchMemory,
   getWorkingMemory,

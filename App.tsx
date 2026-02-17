@@ -10,12 +10,11 @@ import { OnboardingScreen } from './src/screens/OnboardingScreen'
 import { useOnboarding } from './src/hooks/useOnboarding'
 import { useEffect } from 'react'
 import { addNotificationActionListener } from './src/services/notificationService'
-import { useNotificationTriggers } from './src/hooks/useNotificationTriggers'
 
 function AppContent() {
   const { isDark, theme } = useTheme()
   const { hasSeenOnboarding, isLoading, completeOnboarding } = useOnboarding()
-  useNotificationTriggers()
+  // notification triggers hook removed in pivot
   useEffect(() => {
     const subscription = addNotificationActionListener((response: { actionIdentifier: string }) => {
       // Example: handle notification actions

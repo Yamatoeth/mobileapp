@@ -14,7 +14,9 @@ pinecone>=8.0.0
 
 # LLM & Voice
 openai>=1.10.0
-google-generativeai>=0.3.2
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+celery[redis]>=5.3.6
 deepgram-sdk>=3.0.0
 elevenlabs>=0.2.27
 

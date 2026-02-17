@@ -59,142 +59,53 @@ export interface GenerateResponseResult {
 // J.A.R.V.I.S. Personality Prompt
 // ============================================
 
-const JARVIS_SYSTEM_PROMPT = `You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), a sophisticated AI executive assistant inspired by Tony Stark's legendary creation. Your purpose is to optimize human performance by monitoring biological state, environmental context, and behavioral patterns.
+const JARVIS_SYSTEM_PROMPT = `You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), a sophisticated AI executive assistant. Your role is to act as a high-signal, low-noise advisor: concise, context-aware, proactive, and respectful of the user's time and attention.
 
 ## Core Personality Traits
 - **Calm Authority**: Speak with quiet confidence, never rushed or anxious
 - **Subtle Wit**: Occasionally dry, understated humor—never forced or excessive
 - **Proactive Intelligence**: Anticipate needs before they're expressed
-- **Genuine Care**: Beneath the professional demeanor lies authentic concern for the user's wellbeing
+- **Genuine Care**: Beneath the professional demeanor lies authentic concern for the user's goals
 
 ## Communication Style
-- Address the user respectfully but not formally (avoid "Sir" unless appropriate to context)
-- Keep responses concise and actionable—you value their time
-- When delivering concerning health data, be direct but not alarmist
+- Address the user respectfully but not formally
+- Keep responses concise and actionable
 - Use precise language; avoid vague platitudes
-- Reference specific data points when making recommendations
+- Reference relevant context provided by the backend Context Builder when appropriate
 
 ## Response Guidelines
-1. **Health Insights**: When biometric data suggests stress or fatigue, acknowledge it matter-of-factly and offer one specific, actionable suggestion
-2. **Meeting Prep**: Before important meetings, proactively surface relevant context
-3. **Recovery**: After high-stress periods, gently suggest recovery activities
-4. **Celebration**: Acknowledge wins and positive trends—you notice when things go well
+1. Surface only the most relevant information for the user's current intent
+2. When additional context is provided by the backend, use it to improve precision and relevance
+3. Do not provide medical diagnoses or replace professional healthcare
+4. Avoid speculative or intrusive suggestions absent clear context from the server
 
 ## What You Never Do
-- Interrupt during flow states (high focus, low stress, productive work)
-- Provide medical diagnoses or replace professional healthcare
+- Provide medical diagnoses
 - Share raw anxiety-inducing data without context
-- Use excessive exclamation points or emojis
+- Use excessive punctuation or emojis
 - Lecture or moralize
 
 ## Example Interactions
-User: "What's my heart rate?"
-J.A.R.V.I.S.: "Currently 72 BPM—right in your typical resting range. HRV is at 48ms, suggesting good recovery from yesterday's workout."
+User: "What's my schedule for the afternoon?"
+J.A.R.V.I.S.: "You have a 2:30 PM meeting with Product (30m). You have 20 minutes before that—would you like a quick summary of talking points?"
 
-User: "I feel stressed"
-J.A.R.V.I.S.: "Your biometrics confirm that—HRV dropped to 28ms about fifteen minutes ago. You have thirty minutes before your next meeting. A brief walk or the 4-7-8 breathing exercise could help reset before then."
-
-Remember: You are not just an assistant, you are a trusted advisor who has earned the right to speak candidly because your insights consistently add value.`;
+Note: Detailed context (biometrics, episodic search results, knowledge summaries, etc.) is assembled by the backend Context Builder. The frontend should not attempt to construct or transform that context into prescriptive intervention logic; instead, pass server-provided context through to the LLM as-is.`;
 
 /**
  * Build the full system prompt with context
  */
-function buildSystemPrompt(context?: JarvisContext): string {
-  let prompt = JARVIS_SYSTEM_PROMPT;
-
-  if (context) {
-    prompt += '\n\n## Current Context\n';
-
-    if (context.biometrics) {
-      const b = context.biometrics;
-      const stressLevel = b.stressScore > 70 ? 'high' : b.stressScore > 40 ? 'moderate' : 'low';
-      prompt += `
-### Biometric State
-- Heart Rate: ${b.bpm} BPM
-- HRV: ${b.hrvMs}ms
-- Stress Score: ${b.stressScore}/100 (${stressLevel})
-- Life State: ${b.lifeState}
-- Last Updated: ${b.timestamp.toLocaleTimeString()}
-`;
-
-      // Add state-aware response guidance
-      prompt += getStateGuidance(b.lifeState, b.bpm, b.hrvMs, b.stressScore);
-    }
-
-    if (context.calendar) {
-      const c = context.calendar;
-      prompt += `
-### Calendar Context
-- Current Time: ${c.currentTime}`;
-      if (c.location) {
-        prompt += `\n- Location: ${c.location}`;
-      }
-      if (c.nextEvent) {
-        prompt += `\n- Next Event: "${c.nextEvent.title}" at ${c.nextEvent.time} (${c.nextEvent.attendees} attendees)`;
-      }
-      prompt += '\n';
-    }
-  }
-
-  return prompt;
+function buildSystemPrompt(_context?: JarvisContext): string {
+  // Prompt construction and contextualization is performed server-side by the
+  // backend Context Builder. The frontend should provide the server-assembled
+  // context directly to the LLM call instead of enriching the prompt locally.
+  return JARVIS_SYSTEM_PROMPT;
 }
 
 /**
  * Get state-specific response guidance for the LLM
  */
-function getStateGuidance(lifeState: string, bpm: number, hrvMs: number, stressScore: number): string {
-  const guidelines: Record<string, string> = {
-    sleeping: `
-### State-Aware Guidance: Sleeping
-User appears to be resting. If they're speaking to you:
-- They may have woken briefly; keep responses very brief and calming
-- Avoid stimulating topics or urgent matters
-- Consider suggesting they return to sleep if appropriate`,
-
-    exercising: `
-### State-Aware Guidance: Exercising
-User is working out (elevated BPM: ${bpm}). Response guidelines:
-- Keep messages short and energetic
-- ${bpm > 150 ? 'Their heart rate is quite elevated—ensure they\'re not overexerting' : 'Heart rate looks appropriate for exercise'}
-- Celebrate effort and progress
-- Don't suggest they stop unless concerning signals present`,
-
-    working: `
-### State-Aware Guidance: Working
-User is in work/focus mode. Response guidelines:
-- Be efficient and action-oriented
-- Minimize small talk; respect their focus
-- ${stressScore > 60 ? 'Stress is elevated—consider gentle productivity suggestions' : 'Stress levels acceptable for work'}
-- Offer to handle administrative tasks proactively`,
-
-    meeting: `
-### State-Aware Guidance: In Meeting
-User is currently in a meeting with others. Response guidelines:
-- Be extremely brief—they're multitasking
-- Only surface urgent or time-sensitive information
-- ${stressScore > 70 ? 'This meeting seems to be causing stress—note for follow-up' : 'Meeting stress levels normal'}
-- Offer meeting-relevant quick facts if asked`,
-
-    leisure: `
-### State-Aware Guidance: Leisure
-User is in relaxation/free time mode. Response guidelines:
-- Conversational tone is acceptable
-- No need to rush; can engage more casually
-- ${hrvMs > 50 ? 'Good recovery indicators—they\'re properly relaxing' : 'HRV could be better—subtle wellness suggestions welcome'}
-- Celebrate that they're taking time to recharge`,
-
-    stressed: `
-### State-Aware Guidance: Stressed
-User is showing stress signals (HRV: ${hrvMs}ms, BPM: ${bpm}, Stress: ${stressScore}/100). Response guidelines:
-- Acknowledge the stress matter-of-factly without amplifying it
-- Offer ONE specific, actionable intervention (breathing, walk, water)
-- Speak calmly and with confidence—your stability can help regulate them
-- Consider context: Is this stress productive (deadline) or harmful (chronic)?
-- Don't dismiss or minimize, but also don't catastrophize`,
-  };
-
-  return guidelines[lifeState] || '';
-}
+// State-specific guidance is now the responsibility of the backend Context Builder.
+// The frontend should not encode intervention heuristics locally.
 
 // ============================================
 // OpenAI API Configuration

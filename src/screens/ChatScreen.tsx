@@ -23,7 +23,7 @@ import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { useChatHistory } from '../hooks/useChatHistory'
 import { useTheme } from '../hooks/useTheme'
 import { sendChatMessageStreaming, type Message as AIMessage } from '../services/ai'
-import { getJarvisContext } from '../services/contextService'
+// Backend context is fetched via `contextService.getServerContext` when needed.
 
 // Suggested prompts for quick actions
 const SUGGESTED_PROMPTS = [
@@ -182,8 +182,8 @@ export function ChatScreen() {
     let fullContent = ''
     
 
-    // Get full context (biometrics, calendar, location)
-    const jarvisContext = await getJarvisContext();
+    // Full server-assembled context is not fetched here in this simplified client.
+    const jarvisContext = undefined;
 
     // Map JarvisContext to HealthContext (add missing properties as needed)
     // Adjust this block to use the correct property from HealthEntry, or add a fallback if symptoms is not present
@@ -275,7 +275,7 @@ export function ChatScreen() {
     }
 
     const healthContext = {
-      ...jarvisContext,
+      ...(jarvisContext ?? {}),
       recentSymptoms,
       avgSleep,
       avgMood,

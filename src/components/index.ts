@@ -3,9 +3,8 @@
  * Central export for all UI components
  */
 
-// Biometric Components
-export { BiometricCard, BiometricMini } from './BiometricCard';
-export { BiometricChart, BiometricDualChart } from './BiometricChart';
+// Biometric Components removed in pivot
+
 
 // Voice Components
 export { HoldToTalkButton } from './HoldToTalkButton';
@@ -15,18 +14,9 @@ export { VoiceInput, VoiceInputCompact } from './VoiceInput';
 export { LogForm } from './LogForm';
 
 // State Indicator Components
-export { StateIndicator, StateIndicatorCompact, StateBadge } from './StateIndicator';
+export { StateIndicator, StateSelector, StateHistory } from './StateIndicator';
 
-// Calendar Components
-export {
-  CalendarPermissionCard,
-  UpcomingEvents,
-  EventCard,
-  MeetingBadge,
-  DayScheduleBar,
-  FocusBlockCard,
-  FreeBlockCard,
-} from './CalendarComponents';
+// Calendar Components removed in pivot
 
 // Location Components
 export {

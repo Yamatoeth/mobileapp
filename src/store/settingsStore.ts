@@ -5,8 +5,6 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type TrustLevel = 'consultant' | 'advisor' | 'manager' | 'executive';
-
 interface UserSettings {
   // Notification preferences
   notificationsEnabled: boolean;
@@ -32,9 +30,6 @@ interface SettingsState {
   email: string | null;
   fullName: string | null;
   
-  // Trust system
-  trustLevel: TrustLevel;
-  trustScore: number;
   
   // Settings
   settings: UserSettings;
@@ -45,17 +40,14 @@ interface SettingsState {
   
   // Onboarding
   hasCompletedOnboarding: boolean;
-  hasGrantedHealthKitPermissions: boolean;
   hasGrantedMicrophonePermissions: boolean;
   
   // Actions
   setUser: (userId: string, email: string, fullName: string) => void;
-  setTrustLevel: (level: TrustLevel) => void;
-  incrementTrustScore: (amount: number) => void;
+  // Trust system removed — no-op placeholders may be added server-side
   updateSettings: (settings: Partial<UserSettings>) => void;
   setApiKey: (key: 'openai' | 'groq', value: string) => void;
   completeOnboarding: () => void;
-  setHealthKitPermissions: (granted: boolean) => void;
   setMicrophonePermissions: (granted: boolean) => void;
   logout: () => void;
 }
@@ -76,13 +68,10 @@ const initialState = {
   userId: null,
   email: null,
   fullName: null,
-  trustLevel: 'consultant' as TrustLevel,
-  trustScore: 0,
   settings: defaultSettings,
   openAiApiKey: null,
   groqApiKey: null,
   hasCompletedOnboarding: false,
-  hasGrantedHealthKitPermissions: false,
   hasGrantedMicrophonePermissions: false,
 };
 
@@ -95,26 +84,7 @@ export const useSettingsStore = create<SettingsState>()(
         set({ userId, email, fullName });
       },
 
-      setTrustLevel: (level) => {
-        set({ trustLevel: level });
-      },
-
-      incrementTrustScore: (amount) => {
-        const { trustScore, trustLevel } = get();
-        const newScore = Math.min(100, Math.max(0, trustScore + amount));
-        
-        // Auto-upgrade trust level based on score
-        let newLevel = trustLevel;
-        if (newScore >= 90 && trustLevel !== 'executive') {
-          newLevel = 'executive';
-        } else if (newScore >= 75 && trustLevel === 'consultant') {
-          newLevel = 'manager';
-        } else if (newScore >= 50 && trustLevel === 'consultant') {
-          newLevel = 'advisor';
-        }
-        
-        set({ trustScore: newScore, trustLevel: newLevel });
-      },
+      // Trust system removed — no local trust scoring or auto-upgrades
 
       updateSettings: (updates) => {
         set((state) => ({
@@ -134,9 +104,7 @@ export const useSettingsStore = create<SettingsState>()(
         set({ hasCompletedOnboarding: true });
       },
 
-      setHealthKitPermissions: (granted) => {
-        set({ hasGrantedHealthKitPermissions: granted });
-      },
+      // HealthKit permissions removed from front-end settings
 
       setMicrophonePermissions: (granted) => {
         set({ hasGrantedMicrophonePermissions: granted });
@@ -154,11 +122,8 @@ export const useSettingsStore = create<SettingsState>()(
         userId: state.userId,
         email: state.email,
         fullName: state.fullName,
-        trustLevel: state.trustLevel,
-        trustScore: state.trustScore,
         settings: state.settings,
         hasCompletedOnboarding: state.hasCompletedOnboarding,
-        hasGrantedHealthKitPermissions: state.hasGrantedHealthKitPermissions,
         hasGrantedMicrophonePermissions: state.hasGrantedMicrophonePermissions,
         // Note: API keys should be stored in SecureStore, not AsyncStorage
       }),

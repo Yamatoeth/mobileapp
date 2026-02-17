@@ -2,7 +2,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
 import { ChatScreen } from '../screens/ChatScreen'
 import { LogScreen } from '../screens/LogScreen'
-import { ProgressScreen } from '../screens/ProgressScreen'
+// Progress screen removed in pivot
 import { ProfileScreen } from '../screens/ProfileScreen'
 import { useTheme } from '../hooks/useTheme'
 
@@ -44,15 +44,7 @@ export function TabNavigator() {
           ),
         }}
       />
-      <Tab.Screen
-        name="Progress"
-        component={ProgressScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="stats-chart-outline" size={size} color={color} />
-          ),
-        }}
-      />
+      {/* Progress tab removed in pivot */}
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
