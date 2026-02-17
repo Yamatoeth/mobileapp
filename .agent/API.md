@@ -6,852 +6,492 @@
 
 ## Authentication
 
-All authenticated endpoints require a JWT token in the Authorization header:
+All authenticated endpoints require a JWT token:
 ```
 Authorization: Bearer <jwt_token>
 ```
 
-### Obtain Token
+### Login
 ```http
 POST /auth/login
 Content-Type: application/json
 
-{
-  "email": "user@example.com",
-  "password": "secure_password"
-}
+{ "email": "user@example.com", "password": "secure_password" }
 ```
 
-**Response:**
+**Response (200):**
 ```json
 {
-  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGc...",
+  "access_token": "eyJ0eXAiOiJKV1Qi...",
   "token_type": "bearer",
   "expires_in": 604800,
-  "user": {
-    "id": "usr_123abc",
-    "email": "user@example.com",
-    "created_at": "2025-01-15T10:00:00Z"
-  }
+  "user": { "id": "usr_123abc", "email": "user@example.com", "onboarding_complete": false }
 }
 ```
 
 ---
 
-## REST Endpoints
+## 1. User Management
 
-### 1. User Management
-
-#### Create User
+### Create User
 ```http
 POST /users
 Content-Type: application/json
 
-{
-  "email": "user@example.com",
-  "password": "secure_password",
-  "full_name": "John Doe"
-}
+{ "email": "user@example.com", "password": "secure_password", "full_name": "John Doe" }
 ```
 
-**Response (201 Created):**
+**Response (201):**
 ```json
-{
-  "id": "usr_123abc",
-  "email": "user@example.com",
-  "full_name": "John Doe",
-  "created_at": "2025-01-15T10:00:00Z",
-  "trust_level": "consultant"
-}
+{ "id": "usr_123abc", "email": "user@example.com", "full_name": "John Doe", "onboarding_complete": false, "created_at": "2026-02-17T10:00:00Z" }
 ```
 
-#### Get User Profile
+### Get Profile
 ```http
 GET /users/me
 Authorization: Bearer <token>
 ```
 
-**Response (200 OK):**
+**Response (200):**
 ```json
 {
   "id": "usr_123abc",
   "email": "user@example.com",
   "full_name": "John Doe",
-  "trust_level": "advisor",
-  "trust_score": 72,
+  "onboarding_complete": true,
+  "knowledge_base_last_updated": "2026-02-17T09:00:00Z",
   "settings": {
-    "notifications_enabled": true,
-    "voice_interruptions_enabled": false
+    "wake_word_enabled": false,
+    "morning_briefing_enabled": true,
+    "morning_briefing_time": "08:00",
+    "max_proactive_notifications": 3,
+    "voice_id": "jarvis_default"
   },
-  "created_at": "2025-01-15T10:00:00Z"
+  "created_at": "2026-01-15T10:00:00Z"
 }
 ```
 
-#### Update User Settings
+### Update Settings
 ```http
 PATCH /users/me/settings
 Authorization: Bearer <token>
 Content-Type: application/json
 
-{
-  "notifications_enabled": false,
-  "voice_interruptions_enabled": true
-}
-```
-
-**Response (200 OK):**
-```json
-{
-  "notifications_enabled": false,
-  "voice_interruptions_enabled": true,
-  "updated_at": "2025-02-09T14:30:00Z"
-}
+{ "morning_briefing_enabled": true, "morning_briefing_time": "07:30", "max_proactive_notifications": 2 }
 ```
 
 ---
 
-### 2. Biometric Data
+## 2. Voice Interaction
 
-#### Submit Biometric Data
-```http
-POST /biometrics
-Authorization: Bearer <token>
-Content-Type: application/json
+### WebSocket: Voice Stream
+Connect to: `ws://localhost:8000/ws/voice`
 
-{
-  "hrv_ms": 45.2,
-  "bpm": 72,
-  "timestamp": "2025-02-09T14:30:00Z",
-  "source": "apple_watch"
-}
+This is the primary interaction channel. All voice communication flows through here.
+
+**Client → Server: Audio Chunk**
+```json
+{ "type": "audio_chunk", "data": "<base64-encoded-audio>", "chunk_index": 1, "is_final": false }
 ```
 
-**Response (201 Created):**
+**Server → Client: Transcription (streaming)**
+```json
+{ "type": "transcription_partial", "text": "What should I focus on", "confidence": 0.87 }
+```
+
+```json
+{ "type": "transcription_final", "text": "What should I focus on today?", "confidence": 0.95, "duration_seconds": 2.1 }
+```
+
+**Server → Client: LLM Response (streaming)**
+```json
+{ "type": "llm_response_chunk", "text": "Based on your projects, ", "is_final": false }
+```
+
+```json
+{ "type": "llm_response_chunk", "text": "you should prioritise the client proposal.", "is_final": true }
+```
+
+**Server → Client: Audio Response (streaming)**
+```json
+{ "type": "audio_response", "audio_chunk": "<base64-encoded-audio>", "chunk_index": 1, "is_final": false }
+```
+
+**Server → Client: Context Used (after response)**
 ```json
 {
-  "id": "bio_456def",
-  "hrv_ms": 45.2,
-  "bpm": 72,
-  "timestamp": "2025-02-09T14:30:00Z",
-  "stress_score": 0.3,
-  "state": "working",
-  "intervention_needed": false,
-  "created_at": "2025-02-09T14:30:01Z"
+  "type": "context_used",
+  "knowledge_domains_injected": ["goals", "projects"],
+  "memories_retrieved": 3,
+  "working_memory_entries": 12,
+  "context_build_ms": 187
 }
 ```
 
-#### Get Biometric History
-```http
-GET /biometrics?start_date=2025-02-08T00:00:00Z&end_date=2025-02-09T23:59:59Z
-Authorization: Bearer <token>
-```
-
-**Response (200 OK):**
-```json
-{
-  "data": [
-    {
-      "timestamp": "2025-02-09T14:30:00Z",
-      "hrv_ms": 45.2,
-      "bpm": 72,
-      "stress_score": 0.3,
-      "state": "working"
-    },
-    {
-      "timestamp": "2025-02-09T14:25:00Z",
-      "hrv_ms": 43.8,
-      "bpm": 75,
-      "stress_score": 0.35,
-      "state": "working"
-    }
-  ],
-  "total": 288,
-  "start_date": "2025-02-08T00:00:00Z",
-  "end_date": "2025-02-09T23:59:59Z"
-}
-```
-
-#### Get Current State
-```http
-GET /biometrics/current
-Authorization: Bearer <token>
-```
-
-**Response (200 OK):**
-```json
-{
-  "state": "working",
-  "hrv_ms": 45.2,
-  "bpm": 72,
-  "stress_score": 0.3,
-  "last_updated": "2025-02-09T14:30:00Z",
-  "context": {
-    "location": "office",
-    "next_event": "Q4 Planning Meeting",
-    "next_event_time": "2025-02-09T15:00:00Z"
-  }
-}
-```
-
----
-
-### 3. Voice Interaction
-
-#### Transcribe Audio
-```http
-POST /voice/transcribe
-Authorization: Bearer <token>
-Content-Type: multipart/form-data
-
-audio: <binary audio file (WAV, 16kHz)>
-```
-
-**Response (200 OK):**
-```json
-{
-  "text": "How stressed am I right now?",
-  "confidence": 0.95,
-  "duration_seconds": 2.3,
-  "processed_in_ms": 487
-}
-```
-
-#### Generate Response
+### Generate Text Response (REST fallback)
 ```http
 POST /voice/generate
 Authorization: Bearer <token>
 Content-Type: application/json
 
-{
-  "query": "How stressed am I right now?",
-  "include_context": true
-}
+{ "query": "What should I focus on today?", "include_context": true }
 ```
 
-**Response (200 OK):**
+**Response (200):**
 ```json
 {
-  "text": "Based on your current HRV of 45ms and heart rate of 72bpm, you're in a calm state. Your next meeting is in 30 minutes, so this is a good time to prepare.",
+  "text": "Based on your projects, you should prioritise the client proposal. You mentioned it was due Friday and you have not touched it since Monday.",
   "audio_url": "https://cdn.jarvis.app/audio/resp_789ghi.mp3",
-  "processing_time_ms": 1234,
+  "processing_time_ms": 1340,
   "context_used": {
-    "hrv_ms": 45.2,
-    "bpm": 72,
-    "state": "working",
-    "next_event": "Q4 Planning Meeting"
+    "knowledge_domains": ["projects", "goals"],
+    "memories_retrieved": 2,
+    "working_memory_entries": 8
   }
 }
 ```
 
 ---
 
-### 4. Memory & Context
+## 3. Knowledge Base
 
-#### Search Memory
+The Knowledge Base is the heart of JARVIS. Six domain endpoints follow the same pattern.
+
+### Get Full Knowledge Base
 ```http
-POST /memory/search
+GET /knowledge
+Authorization: Bearer <token>
+```
+
+**Response (200):**
+```json
+{
+  "identity": { "last_updated": "2026-02-10T10:00:00Z", "field_count": 8, "completeness": 0.85 },
+  "goals": { "last_updated": "2026-02-15T14:00:00Z", "field_count": 12, "completeness": 0.90 },
+  "projects": { "last_updated": "2026-02-17T09:00:00Z", "field_count": 6, "completeness": 0.75 },
+  "finances": { "last_updated": "2026-02-01T10:00:00Z", "field_count": 10, "completeness": 0.60 },
+  "relationships": { "last_updated": "2026-02-12T10:00:00Z", "field_count": 15, "completeness": 0.80 },
+  "patterns": { "last_updated": "2026-02-16T10:00:00Z", "field_count": 7, "completeness": 0.70 }
+}
+```
+
+### Get Domain
+```http
+GET /knowledge/{domain}
+Authorization: Bearer <token>
+```
+
+**Path params:** `domain` = `identity` | `goals` | `projects` | `finances` | `relationships` | `patterns`
+
+**Response (200):**
+```json
+{
+  "domain": "goals",
+  "fields": [
+    { "field": "financial_target_1yr", "value": "Reach €5000/month revenue from freelance", "confidence": 0.92, "last_updated": "2026-02-15T14:00:00Z", "source": "conversation" },
+    { "field": "career_direction", "value": "Build own SaaS product while maintaining freelance income", "confidence": 0.88, "last_updated": "2026-02-10T10:00:00Z", "source": "onboarding" }
+  ],
+  "completeness": 0.90
+}
+```
+
+### Update Field
+```http
+PATCH /knowledge/{domain}/{field}
 Authorization: Bearer <token>
 Content-Type: application/json
 
-{
-  "query": "times I was stressed before presentations",
-  "limit": 5
-}
+{ "value": "Reach €8000/month revenue from freelance", "source": "manual" }
 ```
 
-**Response (200 OK):**
+**Response (200):**
 ```json
-{
-  "results": [
-    {
-      "id": "mem_101abc",
-      "date": "2025-02-05",
-      "summary": "High stress before product demo. HRV dropped to 28ms.",
-      "relevance_score": 0.92,
-      "context": {
-        "hrv_ms": 28.0,
-        "bpm": 95,
-        "event": "Product Demo to Investors"
-      }
-    },
-    {
-      "id": "mem_102def",
-      "date": "2025-01-28",
-      "summary": "Elevated stress before team presentation. Used breathing exercise.",
-      "relevance_score": 0.87,
-      "context": {
-        "hrv_ms": 32.0,
-        "bpm": 88,
-        "event": "Team All-Hands"
-      }
-    }
-  ],
-  "total": 5,
-  "query_processed_in_ms": 267
-}
+{ "domain": "goals", "field": "financial_target_1yr", "value": "Reach €8000/month revenue from freelance", "confidence": 1.0, "source": "manual", "updated_at": "2026-02-17T14:00:00Z" }
 ```
 
-#### Get Daily Summary
+### Get Knowledge Update History
 ```http
-GET /memory/summaries/2025-02-09
+GET /knowledge/updates?limit=20&domain=goals
 Authorization: Bearer <token>
 ```
 
-**Response (200 OK):**
+**Response (200):**
 ```json
 {
-  "date": "2025-02-09",
-  "summary": "Overall calm day with one stress spike during afternoon meeting. Completed 2 movement breaks. HRV average: 42ms.",
-  "metrics": {
-    "avg_hrv_ms": 42.0,
-    "avg_bpm": 75,
-    "avg_stress_score": 0.35,
-    "interventions_triggered": 3,
-    "interventions_accepted": 2
-  },
-  "highlights": [
-    "Longest focus session: 2.5 hours (9am-11:30am)",
-    "Stress spike: 2pm meeting (HRV dropped to 30ms)",
-    "Best HRV of day: 52ms at 10am"
+  "updates": [
+    {
+      "id": "upd_abc123",
+      "domain": "goals",
+      "field": "financial_target_1yr",
+      "old_value": "Reach €5000/month",
+      "new_value": "Reach €8000/month",
+      "source": "manual",
+      "conversation_id": null,
+      "updated_at": "2026-02-17T14:00:00Z"
+    }
   ]
 }
 ```
 
 ---
 
-### 5. Interventions
+## 4. Onboarding
 
-#### Get Intervention History
+### Start Onboarding Interview
 ```http
-GET /interventions?start_date=2025-02-08&end_date=2025-02-09
+POST /onboarding/start
 Authorization: Bearer <token>
 ```
 
-**Response (200 OK):**
+**Response (200):**
 ```json
 {
-  "data": [
+  "session_id": "onb_456def",
+  "first_question": "Let's start with who you are right now — not your job title, but how you see yourself and where you are in life.",
+  "domain": "identity",
+  "domain_index": 1,
+  "total_domains": 6
+}
+```
+
+### Continue Onboarding
+```http
+POST /onboarding/respond
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "session_id": "onb_456def", "response": "I'm a freelance developer, 28, working on building my own product on the side..." }
+```
+
+**Response (200):**
+```json
+{
+  "session_id": "onb_456def",
+  "next_question": "When you say you want to build your own product — what does success look like for that in three years?",
+  "domain": "identity",
+  "domain_index": 1,
+  "total_domains": 6,
+  "domain_complete": false
+}
+```
+
+### Complete Onboarding
+```http
+POST /onboarding/complete
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "session_id": "onb_456def" }
+```
+
+**Response (200):**
+```json
+{
+  "knowledge_base_populated": true,
+  "fields_extracted": 47,
+  "domains_complete": 6,
+  "summary": "Based on our conversation, here is what I now know about you...",
+  "review_required": true
+}
+```
+
+---
+
+## 5. Memory
+
+### Search Memory
+```http
+POST /memory/search
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "query": "times I talked about the client project", "limit": 5 }
+```
+
+**Response (200):**
+```json
+{
+  "results": [
     {
-      "id": "int_201xyz",
-      "type": "breathing_exercise",
-      "severity": "medium",
-      "trigger_reason": "HRV dropped to 28ms during meeting",
-      "message": "Your stress is rising. Take a 2-minute breathing break.",
-      "triggered_at": "2025-02-09T14:05:00Z",
-      "user_response": "accepted",
-      "outcome": "HRV increased to 35ms after exercise",
-      "confidence_score": 0.88
-    },
-    {
-      "id": "int_202abc",
-      "type": "movement_break",
-      "severity": "low",
-      "trigger_reason": "Sedentary for 105 minutes",
-      "message": "You've been sitting for 1.5 hours. Time for a quick walk.",
-      "triggered_at": "2025-02-09T11:45:00Z",
-      "user_response": "dismissed",
-      "outcome": null,
-      "confidence_score": 0.75
+      "id": "mem_101abc",
+      "date": "2026-02-14",
+      "summary": "Discussed client proposal delays. Felt stuck on pricing section. Decided to send a draft by Friday.",
+      "relevance_score": 0.94
     }
   ],
-  "total": 2,
-  "acceptance_rate": 0.5
+  "total": 3,
+  "query_processed_in_ms": 212
 }
 ```
 
-#### Provide Intervention Feedback
+### Get Conversation History
 ```http
-POST /interventions/int_201xyz/feedback
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "helpful": true,
-  "comment": "Great timing, really needed that break"
-}
-```
-
-**Response (200 OK):**
-```json
-{
-  "intervention_id": "int_201xyz",
-  "feedback_recorded": true,
-  "updated_at": "2025-02-09T14:10:00Z"
-}
-```
-
----
-
-### 6. Trust System
-
-#### Get Trust Status
-```http
-GET /trust
+GET /memory/conversations?page=1&per_page=20
 Authorization: Bearer <token>
 ```
 
-**Response (200 OK):**
+**Response (200):**
 ```json
 {
-  "current_level": "advisor",
-  "trust_score": 72,
-  "next_level": "manager",
-  "next_level_threshold": 75,
-  "progress_to_next": 0.96,
-  "permissions": {
-    "can_send_notifications": true,
-    "can_interrupt_voice": false,
-    "can_modify_calendar": false,
-    "can_draft_messages": false
-  },
-  "metrics": {
-    "intervention_acceptance_rate": 0.78,
-    "days_active": 14,
-    "feedback_sentiment": 0.85
-  }
-}
-```
-
-#### Manually Override Trust Level
-```http
-POST /trust/override
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "new_level": "manager",
-  "reason": "User manually granted permission"
-}
-```
-
-**Response (200 OK):**
-```json
-{
-  "current_level": "manager",
-  "trust_score": 72,
-  "manually_overridden": true,
-  "updated_at": "2025-02-09T14:30:00Z"
-}
-```
-
----
-
-### 7. Calendar Integration (Phase 3)
-
-#### Get Today's Events
-```http
-GET /calendar/events/today
-Authorization: Bearer <token>
-```
-
-**Response (200 OK):**
-```json
-{
-  "events": [
+  "conversations": [
     {
-      "id": "evt_301abc",
-      "title": "Q4 Planning Meeting",
-      "start_time": "2025-02-09T15:00:00Z",
-      "end_time": "2025-02-09T16:00:00Z",
-      "attendees": 5,
-      "location": "Conference Room A",
-      "priority": "high"
-    },
-    {
-      "id": "evt_302def",
-      "title": "1:1 with Sarah",
-      "start_time": "2025-02-09T17:00:00Z",
-      "end_time": "2025-02-09T17:30:00Z",
-      "attendees": 1,
-      "location": null,
-      "priority": "medium"
+      "id": "conv_789xyz",
+      "date": "2026-02-17",
+      "summary": "Asked about focus priorities. Discussed client proposal. JARVIS flagged that project X has not been mentioned in 10 days.",
+      "exchange_count": 4,
+      "duration_seconds": 183
     }
   ],
-  "total": 2
+  "pagination": { "page": 1, "per_page": 20, "total": 47 }
 }
 ```
 
-#### Reschedule Event (Requires Manager Trust)
+### Get Daily Summary
 ```http
-POST /calendar/events/evt_302def/reschedule
+GET /memory/summaries/2026-02-17
 Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "new_start_time": "2025-02-10T10:00:00Z",
-  "reason": "User stress level too high today"
-}
 ```
 
-**Response (200 OK):**
+**Response (200):**
 ```json
 {
-  "event_id": "evt_302def",
-  "old_start_time": "2025-02-09T17:00:00Z",
-  "new_start_time": "2025-02-10T10:00:00Z",
-  "rescheduled": true,
-  "notification_sent_to_attendees": true
+  "date": "2026-02-17",
+  "summary": "Three conversations. Main topics: client proposal progress, financial goal reassessment, project X status.",
+  "knowledge_updates": 3,
+  "conversation_count": 3,
+  "highlights": [
+    "Financial target updated from €5000 to €8000/month",
+    "Client proposal deadline noted: this Friday",
+    "Project X flagged as stalled — 10 days since last mention"
+  ]
 }
 ```
 
 ---
 
-## WebSocket Endpoints
+## 6. Proactive Intelligence (Phase 2)
 
-### Voice Streaming
+### Get Morning Briefing
+```http
+GET /intelligence/briefing
+Authorization: Bearer <token>
+```
 
-Connect to: `ws://localhost:8000/ws/voice`
-
-**Client → Server: Audio Chunk**
+**Response (200):**
 ```json
 {
-  "type": "audio_chunk",
-  "data": "<base64-encoded audio>",
-  "chunk_index": 1,
-  "is_final": false
+  "date": "2026-02-17",
+  "briefing_text": "Good morning. Three things today: your client proposal is due Friday and you have not worked on it since Monday. Project X is stalled — you should decide today whether to continue or park it. Your financial goal revision from last week needs a concrete action plan.",
+  "audio_url": "https://cdn.jarvis.app/audio/brief_2026-02-17.mp3",
+  "active_projects": 3,
+  "flagged_goals": 1,
+  "stalled_projects": 1
 }
 ```
 
-**Server → Client: Partial Transcription**
+### Get Patterns
+```http
+GET /intelligence/patterns
+Authorization: Bearer <token>
+```
+
+**Response (200):**
 ```json
 {
-  "type": "transcription_partial",
-  "text": "How stressed am I",
-  "confidence": 0.87
+  "patterns": [
+    { "id": "pat_001", "description": "You mention work-life balance concerns every Monday but rarely follow through on the changes you propose.", "confidence": 0.82, "first_detected": "2026-02-03", "occurrence_count": 3 },
+    { "id": "pat_002", "description": "You have not mentioned your fitness goal since onboarding (23 days ago).", "confidence": 0.95, "first_detected": "2026-02-17", "occurrence_count": 1 }
+  ]
 }
 ```
 
-**Server → Client: Final Transcription**
-```json
-{
-  "type": "transcription_final",
-  "text": "How stressed am I right now?",
-  "confidence": 0.95,
-  "duration_seconds": 2.3
-}
+---
+
+## 7. Data Management
+
+### Export All Data
+```http
+POST /data/export
+Authorization: Bearer <token>
 ```
 
-**Server → Client: LLM Response Stream**
+**Response (202):**
 ```json
-{
-  "type": "llm_response_chunk",
-  "text": "Based on your current ",
-  "is_final": false
-}
+{ "export_id": "exp_xyz789", "status": "processing", "estimated_seconds": 30 }
 ```
 
-**Server → Client: Audio Response**
-```json
-{
-  "type": "audio_response",
-  "audio_chunk": "<base64-encoded audio>",
-  "chunk_index": 1,
-  "is_final": false
-}
+```http
+GET /data/export/exp_xyz789
+Authorization: Bearer <token>
 ```
 
-### Biometric Real-Time Updates
-
-Connect to: `ws://localhost:8000/ws/biometrics`
-
-**Client → Server: Subscribe**
+**Response (200):**
 ```json
-{
-  "type": "subscribe",
-  "user_id": "usr_123abc"
-}
+{ "export_id": "exp_xyz789", "status": "complete", "download_url": "https://cdn.jarvis.app/exports/exp_xyz789.json", "expires_at": "2026-02-18T14:00:00Z" }
 ```
 
-**Server → Client: Biometric Update**
-```json
-{
-  "type": "biometric_update",
-  "hrv_ms": 45.2,
-  "bpm": 72,
-  "stress_score": 0.3,
-  "state": "working",
-  "timestamp": "2025-02-09T14:30:00Z"
-}
+### Delete All Data
+```http
+DELETE /data/all
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "confirm": "DELETE_ALL_MY_DATA", "reason": "privacy" }
 ```
 
-**Server → Client: Intervention Notification**
+**Response (200):**
 ```json
-{
-  "type": "intervention",
-  "id": "int_201xyz",
-  "severity": "medium",
-  "message": "Your HRV is dropping. Take a 2-minute break.",
-  "actions": ["accept", "dismiss", "snooze_30min"],
-  "timestamp": "2025-02-09T14:05:00Z"
-}
-```
-
-**Client → Server: Intervention Response**
-```json
-{
-  "type": "intervention_response",
-  "intervention_id": "int_201xyz",
-  "action": "accept"
-}
+{ "deleted": true, "knowledge_base_cleared": true, "conversations_cleared": true, "vectors_cleared": true, "account_status": "data_cleared" }
 ```
 
 ---
 
 ## Error Responses
 
-### Standard Error Format
+All errors follow this format:
+
 ```json
 {
   "error": {
-    "code": "INVALID_BIOMETRIC_DATA",
-    "message": "HRV value must be positive",
-    "details": {
-      "field": "hrv_ms",
-      "value": -5.2,
-      "constraint": "must be > 0"
-    }
+    "code": "KNOWLEDGE_BASE_NOT_FOUND",
+    "message": "No knowledge base found. Complete onboarding first.",
+    "details": { "onboarding_complete": false }
   }
 }
 ```
 
-### Common Error Codes
+**Common codes:**
 
-**Authentication (401)**
-```json
-{
-  "error": {
-    "code": "UNAUTHORIZED",
-    "message": "Invalid or expired token"
-  }
-}
-```
-
-**Permission Denied (403)**
-```json
-{
-  "error": {
-    "code": "INSUFFICIENT_TRUST_LEVEL",
-    "message": "Calendar modification requires Manager trust level",
-    "details": {
-      "current_level": "advisor",
-      "required_level": "manager"
-    }
-  }
-}
-```
-
-**Not Found (404)**
-```json
-{
-  "error": {
-    "code": "RESOURCE_NOT_FOUND",
-    "message": "Intervention not found",
-    "details": {
-      "intervention_id": "int_999xyz"
-    }
-  }
-}
-```
-
-**Validation Error (422)**
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid request data",
-    "details": [
-      {
-        "field": "hrv_ms",
-        "error": "field required"
-      },
-      {
-        "field": "bpm",
-        "error": "must be between 40 and 200"
-      }
-    ]
-  }
-}
-```
-
-**Rate Limit (429)**
-```json
-{
-  "error": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "message": "Too many requests",
-    "details": {
-      "limit": 100,
-      "window": "60 seconds",
-      "retry_after": 45
-    }
-  }
-}
-```
-
-**Server Error (500)**
-```json
-{
-  "error": {
-    "code": "INTERNAL_SERVER_ERROR",
-    "message": "An unexpected error occurred",
-    "request_id": "req_abc123"
-  }
-}
-```
+| HTTP | Code | Meaning |
+|------|------|---------|
+| 401 | `UNAUTHORIZED` | Invalid or expired token |
+| 403 | `ONBOARDING_REQUIRED` | Action requires completed onboarding |
+| 404 | `RESOURCE_NOT_FOUND` | Requested resource does not exist |
+| 422 | `VALIDATION_ERROR` | Invalid request data |
+| 429 | `RATE_LIMIT_EXCEEDED` | Too many requests |
+| 500 | `INTERNAL_SERVER_ERROR` | Unexpected server error |
 
 ---
 
 ## Rate Limits
 
-**Per User:**
-- REST endpoints: 100 requests/minute
-- WebSocket connections: 1 concurrent connection
-- Voice transcription: 10 requests/minute
-- Memory search: 20 requests/minute
-
-**Global:**
-- Authentication: 5 attempts/minute per IP
-- User registration: 3 accounts/hour per IP
+| Endpoint group | Limit |
+|---------------|-------|
+| REST endpoints | 100 req/min per user |
+| WebSocket voice | 1 concurrent connection per user |
+| Memory search | 20 req/min |
+| Knowledge updates | 50 req/min |
+| Auth | 5 attempts/min per IP |
 
 ---
 
-## Pagination
+## Removed from API (vs original spec)
 
-Endpoints that return lists support pagination:
+The following endpoints from the original API.md have been **removed** as they are not part of the new vision:
 
-```http
-GET /biometrics?page=2&per_page=50
-```
-
-**Response:**
-```json
-{
-  "data": [...],
-  "pagination": {
-    "page": 2,
-    "per_page": 50,
-    "total_items": 1234,
-    "total_pages": 25,
-    "has_next": true,
-    "has_prev": true
-  }
-}
-```
-
----
-
-## Filtering & Sorting
-
-**Filtering:**
-```http
-GET /interventions?type=breathing_exercise&severity=medium
-```
-
-**Sorting:**
-```http
-GET /biometrics?sort_by=timestamp&order=desc
-```
-
----
-
-## Webhooks (Phase 3)
-
-Users can register webhooks to receive events:
-
-```http
-POST /webhooks
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "url": "https://example.com/jarvis-webhook",
-  "events": ["intervention.triggered", "state.changed"],
-  "secret": "webhook_secret_key"
-}
-```
-
-**Webhook Payload:**
-```json
-{
-  "event": "intervention.triggered",
-  "timestamp": "2025-02-09T14:05:00Z",
-  "data": {
-    "intervention_id": "int_201xyz",
-    "type": "breathing_exercise",
-    "severity": "medium",
-    "user_id": "usr_123abc"
-  },
-  "signature": "sha256=..."
-}
-```
-
----
-
-## SDK Examples
-
-### Python SDK
-```python
-from jarvis_sdk import JarvisClient
-
-client = JarvisClient(api_key="your_api_key")
-
-# Submit biometric data
-client.biometrics.submit(hrv_ms=45.2, bpm=72)
-
-# Get current state
-state = client.biometrics.current()
-print(f"Current state: {state.state}")
-print(f"Stress score: {state.stress_score}")
-
-# Search memory
-results = client.memory.search("times I was stressed")
-for result in results:
-    print(f"{result.date}: {result.summary}")
-```
-
-### JavaScript/TypeScript SDK
-```typescript
-import { JarvisClient } from '@jarvis/sdk';
-
-const client = new JarvisClient({ apiKey: 'your_api_key' });
-
-// Submit biometric data
-await client.biometrics.submit({
-  hrvMs: 45.2,
-  bpm: 72,
-  timestamp: new Date(),
-});
-
-// Get current state
-const state = await client.biometrics.current();
-console.log(`Current state: ${state.state}`);
-console.log(`Stress score: ${state.stressScore}`);
-
-// WebSocket connection
-const ws = client.biometrics.subscribe((update) => {
-  console.log(`New HRV: ${update.hrvMs}`);
-});
-```
-
----
-
-## Versioning
-
-API versions are specified in the URL path:
-- `/api/v1/...` - Current stable version
-- `/api/v2/...` - Next version (when released)
-
-**Deprecation Policy:**
-- Breaking changes require new version
-- Old versions supported for 12 months after new version release
-- Deprecation warnings included in response headers
-
-**Response Header:**
-```
-X-API-Version: v1
-X-API-Deprecation-Date: 2026-02-09
-```
-
----
-
-This API is designed for **performance**, **security**, and **extensibility**. All endpoints are versioned, rate-limited, and include comprehensive error handling.
+- ❌ All `/biometrics` endpoints — no biometric monitoring in v1
+- ❌ All `/interventions` endpoints — no intervention engine in v1
+- ❌ All `/trust` endpoints — trust system removed
+- ❌ `/calendar` endpoints — Phase 3 only, not yet specified
+- ❌ `/webhooks` — Phase 3 only
+- ❌ WebSocket `/ws/biometrics` — removed

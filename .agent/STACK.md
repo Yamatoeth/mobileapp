@@ -1,161 +1,106 @@
-# J.A.R.V.I.S. Technical Stack Specification
+# J.A.R.V.I.S. Technical Stack
 
-## Stack Overview
+## Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      MOBILE (iOS First)                      │
-│  React Native 0.73+ • TypeScript 5.3+ • Expo SDK 50+       │
-└─────────────────────────────────────────────────────────────┘
-                              ▲
-                              │ WebSocket (WSS) + REST (HTTPS)
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     BACKEND (Python)                         │
-│     FastAPI 0.109+ • Python 3.11+ • Uvicorn (ASGI)         │
-└─────────────────────────────────────────────────────────────┘
-                              ▲
-                              │
-          ┌───────────────────┼───────────────────┐
-          ▼                   ▼                   ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│   DATABASES     │ │   VECTOR DB     │ │   CACHE         │
-│  PostgreSQL 16  │ │  Pinecone       │ │   Redis 7.2     │
-└─────────────────┘ └─────────────────┘ └─────────────────┘
-                              ▲
-                              │
-          ┌───────────────────┼───────────────────┐
-          ▼                   ▼                   ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│   LLM APIs      │ │   VOICE APIs    │ │   ANALYTICS     │
-│  GPT-4o/Gemini  │ │  Deepgram/EL    │ │   Sentry        │
-└─────────────────┘ └─────────────────┘ └─────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│              iOS App (React Native + Expo)               │
+│         VoiceScreen · HistoryScreen · KnowledgeScreen   │
+└─────────────────────────────────────────────────────────┘
+                         ▲ ▼ WSS + HTTPS
+┌─────────────────────────────────────────────────────────┐
+│             Backend (FastAPI + Python 3.11)              │
+│     Context Builder · Fact Extractor · Prompt Engine    │
+└─────────────────────────────────────────────────────────┘
+        ▲               ▲               ▲               ▲
+        │               │               │               │
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│  PostgreSQL  │ │   Pinecone   │ │    Redis     │ │    Celery    │
+│ Knowledge    │ │  Episodic    │ │  Working     │ │  Background  │
+│    Base      │ │   Memory     │ │   Memory     │ │    Jobs      │
+└──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+        ▲               ▲               ▲
+        │               │               │
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│   Deepgram   │ │   GPT-4o    │ │  ElevenLabs  │
+│     STT      │ │     LLM     │ │     TTS      │
+└──────────────┘ └──────────────┘ └──────────────┘
 ```
 
 ---
 
-## Frontend Stack (React Native)
+## Frontend
 
 ### Core Framework
-**React Native 0.73.2**
-- Why: Mature, single codebase for iOS/Android, strong community
-- Installation: `npx create-expo-app jarvis-mobile --template`
 
-**Expo SDK 50.0**
-- Why: Managed workflow, easy native module access, OTA updates
-- Critical: Use Expo Go for development, bare workflow for production
+**React Native 0.73+ with Expo SDK 50+**
+```bash
+npx create-expo-app jarvis --template
+```
+Why: iOS-first, single codebase, managed workflow, no native Xcode wrestling.
 
-**TypeScript 5.3.3**
-- Why: Type safety prevents 80% of runtime errors
-- Config: `strict: true`, no implicit any
+**TypeScript 5.3+ (strict mode)**
+
+`tsconfig.json`:
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true
+  }
+}
+```
 
 ### State Management
-**Zustand 4.5.0**
+
+**Zustand 4.5+**
 ```bash
 npm install zustand
 ```
-- Why: Lightweight (1.2kb), no boilerplate, React hooks-based
-- Alternatives considered: Redux (too heavy), MobX (too magic)
-
-**React Query 5.17.0** (for server state)
-```bash
-npm install @tanstack/react-query
-```
-- Why: Automatic caching, background refetching, devtools
-- Use for: All API calls, biometric data fetching
+Four stores: `voiceStore`, `conversationStore`, `knowledgeStore`, `settingsStore`. Flat state only, no nested objects.
 
 ### Navigation
-**React Navigation 6.1.9**
+
+**React Navigation 6**
 ```bash
 npm install @react-navigation/native @react-navigation/native-stack
 npm install react-native-screens react-native-safe-area-context
 ```
-- Stack Navigator for main flow
-- Tab Navigator for home screen sections
+Stack navigator with four screens: VoiceScreen (default), HistoryScreen, KnowledgeScreen, SettingsScreen. OnboardingScreen added as modal on first launch.
 
-### UI Components
-**React Native Reanimated 3.6.1**
-```bash
-npx expo install react-native-reanimated
-```
-- Why: 60fps animations for biometric charts
-- Use for: Real-time HRV/BPM line charts, voice waveforms
+### Audio
 
-**React Native SVG 14.1.0**
-```bash
-npx expo install react-native-svg
-```
-- For custom biometric visualizations
-
-**React Native Chart Kit 6.12.0**
-```bash
-npm install react-native-chart-kit
-```
-- Quick charts for MVP (replace with custom in Phase 2)
-
-### Native Modules
-
-**HealthKit Integration**
-```bash
-npm install react-native-health
-```
-- Access: HRV, BPM, sleep analysis, steps
-- Permissions: Request on first launch with explanation
-
-**Audio Recording & Playback**
+**expo-av**
 ```bash
 npx expo install expo-av
 ```
-- Record voice at 16kHz WAV
-- Playback TTS responses
+Records audio at 16kHz WAV for Deepgram. Plays back ElevenLabs TTS streaming audio.
 
-**Calendar Access**
+### Animation
+
+**React Native Reanimated 3**
 ```bash
-npx expo install expo-calendar
+npx expo install react-native-reanimated
 ```
-- Read upcoming events
-- Write focus blocks (Phase 3)
+Required for the arc-reactor pulse animation and voice waveform. 60fps on device.
 
-**Location Services**
-```bash
-npx expo install expo-location
-```
-- Background location updates (low power mode)
-- Geofencing for context detection
+### Notifications
 
-**Notifications**
+**expo-notifications** (Phase 2+)
 ```bash
 npx expo install expo-notifications
 ```
-- Local notifications for interventions
-- Push notifications (Phase 2)
+Used for JARVIS-initiated morning briefings and proactive check-ins. Not used in Phase 1.
 
-### Development Tools
+### package.json scripts
 
-**ESLint + Prettier**
-```bash
-npm install --save-dev eslint prettier eslint-config-prettier
-npm install --save-dev @typescript-eslint/parser @typescript-eslint/eslint-plugin
-```
-
-**Jest + React Native Testing Library**
-```bash
-npm install --save-dev jest @testing-library/react-native
-```
-
-**TypeScript Type Checking**
-```bash
-npm run type-check
-```
-
-### Package.json Scripts
 ```json
 {
   "scripts": {
     "start": "expo start",
     "ios": "expo run:ios",
-    "android": "expo run:android",
-    "test": "jest",
+    "test": "jest --watchAll",
     "type-check": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write \"**/*.{ts,tsx,json}\""
@@ -165,177 +110,158 @@ npm run type-check
 
 ---
 
-## Backend Stack (Python)
+## Backend
 
 ### Core Framework
-**FastAPI 0.109.0**
-```bash
-pip install fastapi[all]
-```
-- Why: Fastest Python framework, auto-docs, async support
-- Includes: Uvicorn ASGI server, Pydantic validation
 
-**Python 3.11.7**
-- Why: 25% faster than 3.10, better async performance
-- Use: pyenv for version management
+**FastAPI 0.109+ with Python 3.11+**
+```bash
+pip install fastapi[all] uvicorn[standard]
+```
+Why: async WebSocket support out of the box, automatic OpenAPI docs, Pydantic validation built in, fast enough for our latency requirements.
+
+**Uvicorn** as ASGI server:
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
 
 ### Database & ORM
-**SQLAlchemy 2.0.25** (async mode)
+
+**SQLAlchemy 2.0+ (async mode)**
 ```bash
 pip install sqlalchemy[asyncio] asyncpg
 ```
-- ORM for PostgreSQL
-- Async engine for non-blocking queries
+Async engine required — never block the voice pipeline on a DB query.
 
-**Alembic 1.13.1** (migrations)
+**Alembic 1.13+** for migrations:
 ```bash
 pip install alembic
+alembic init alembic
+alembic revision --autogenerate -m "Initial Knowledge Base schema"
+alembic upgrade head
 ```
-- Database migrations
-- Version control for schema changes
 
-**PostgreSQL 16**
-- Local: Docker container
-- Production: AWS RDS or DigitalOcean Managed DB
-- Extensions: TimescaleDB for time-series data
+**PostgreSQL 16** — local via Docker, production via Supabase or Railway managed DB.
+
+The Knowledge Base lives here. Six domain tables, a `knowledge_updates` change log, users table, and conversations table.
+
+### Working Memory
 
 **Redis 7.2**
 ```bash
-pip install redis[hiredis] aioredis
+pip install redis[hiredis]
 ```
-- Working memory cache (24h TTL)
-- Session management
-- Local: Docker container
-- Production: AWS ElastiCache or Redis Cloud
+Stores last 30 conversation summaries per user as a JSON list with 30-day TTL. All reads happen in the hot path, so this must be fast — target under 20ms.
 
-### Vector Database
+```python
+# Key pattern: working_memory:{user_id}
+# Structure: JSON list of {date, summary, exchange_count} dicts
+# TTL: 30 days
+# Max entries: 30 (sliding window, pop oldest when adding newest)
+```
+
+### Episodic Memory
+
 **Pinecone**
 ```bash
 pip install pinecone-client
 ```
-- Episodic memory (semantic search)
-- 1536 dimensions (OpenAI embedding size)
-- Free tier: 100k vectors, 1 index
+Index configuration:
+- Dimensions: 1536 (OpenAI text-embedding-3-small)
+- Metric: cosine
+- Name: `jarvis-memory`
 
-### LLM Integration
+After each conversation, generate an embedding of the summary and upsert to Pinecone with metadata: `{user_id, date, topic_tags, conversation_id}`.
 
-**OpenAI**
+On each voice call, semantic search with the current query returns top 5 relevant past conversations. These form Layer 4 of the prompt.
+
+### LLM
+
+**OpenAI GPT-4o**
 ```bash
 pip install openai
 ```
-- GPT-4o for real-time responses
-- Embedding model: text-embedding-3-small
-- Streaming API for low latency
+Always use streaming (`stream=True`). First token must arrive in under 800ms. The four-layer prompt is assembled by the Context Builder before each call.
 
-**Google Generative AI**
-```bash
-pip install google-generativeai
-```
-- Gemini 1.5 Pro (fallback)
-- 2M token context for long-term memory
+**OpenAI text-embedding-3-small** for Pinecone embeddings (background jobs only, not in hot path).
 
-### Voice Services
+### STT
 
-**Deepgram** (Speech-to-Text)
+**Deepgram**
 ```bash
 pip install deepgram-sdk
 ```
-- Streaming transcription
-- 300ms latency
-- Custom vocabulary for biometric terms
+Streaming transcription via WebSocket. Interim results sent back to the client immediately so the UI can show live transcription. Final result triggers the LLM call.
 
-**ElevenLabs** (Text-to-Speech)
+### TTS
+
+**ElevenLabs**
 ```bash
 pip install elevenlabs
 ```
-- Voice cloning (J.A.R.V.I.S. voice)
-- Streaming audio output
-- Emotional inflection control
+Streaming audio response. Begin streaming TTS as soon as the first LLM chunk arrives — do not wait for the complete LLM response. This is critical for meeting the 2-second latency budget.
 
-### Async & Concurrency
-**HTTPX** (async HTTP client)
-```bash
-pip install httpx
-```
-- Replace requests for async API calls
+### Background Jobs
 
-**asyncio** (built-in)
-- Concurrent LLM + TTS calls
-- Non-blocking I/O
-
-### Background Tasks
-**Celery 5.3.6** (for long-running jobs)
+**Celery 5.3+**
 ```bash
 pip install celery[redis]
 ```
-- Nightly data aggregation
-- Weekly report generation
-- Email notifications
+Uses Redis as broker. One critical task: `extract_facts_from_conversation` runs after every conversation ends. This task sends the transcript to GPT-4o with a structured extraction prompt and merges the results into the Knowledge Base.
 
-**APScheduler 3.10.4** (for scheduled jobs)
-```bash
-pip install apscheduler
-```
-- Simpler than Celery for periodic tasks
-- Cleanup old Redis keys
+One weekly task: `analyse_patterns` runs every Sunday night, analyses the past 30 days of conversations for behavioural patterns, and writes findings to the `knowledge_patterns` table.
 
-### Development Tools
-
-**Pytest**
-```bash
-pip install pytest pytest-asyncio pytest-cov
+```python
+# celery worker start command:
+celery -A app.tasks.celery_app worker --loglevel=info
 ```
 
-**MyPy** (type checking)
-```bash
-pip install mypy
-```
-- Config: `strict = true` in mypy.ini
+### HTTP Client
 
-**Black** (code formatting)
+**HTTPX**
 ```bash
-pip install black
+pip install httpx
 ```
-
-**Pre-commit hooks**
-```bash
-pip install pre-commit
-```
+Async HTTP client for all outbound API calls. Never use `requests` (sync, blocks event loop).
 
 ### requirements.txt
-```txt
+
+```
 # Core
 fastapi[all]==0.109.0
 uvicorn[standard]==0.27.0
 python-multipart==0.0.6
-
-# Database
-sqlalchemy[asyncio]==2.0.25
-asyncpg==0.29.0
-alembic==1.13.1
-redis[hiredis]==5.0.1
-aioredis==2.0.1
-
-# Vector DB
-pinecone-client==3.0.0
-
-# LLM & Voice
-openai==1.10.0
-google-generativeai==0.3.2
-deepgram-sdk==3.0.0
-elevenlabs==0.2.27
-
-# Utilities
 httpx==0.26.0
 python-dotenv==1.0.0
 pydantic==2.5.3
 pydantic-settings==2.1.0
 
-# Background Jobs
-celery[redis]==5.3.6
-apscheduler==3.10.4
+# Database
+sqlalchemy[asyncio]==2.0.25
+asyncpg==0.29.0
+alembic==1.13.1
 
-# Testing & Dev
+# Memory
+redis[hiredis]==5.0.1
+pinecone-client==3.0.0
+
+# AI / Voice
+openai==1.10.0
+deepgram-sdk==3.0.0
+elevenlabs==0.2.27
+
+# Background jobs
+celery[redis]==5.3.6
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Monitoring
+sentry-sdk==1.40.0
+loguru==0.7.2
+
+# Testing & dev
 pytest==7.4.4
 pytest-asyncio==0.23.3
 pytest-cov==4.1.0
@@ -345,11 +271,11 @@ black==24.1.1
 
 ---
 
-## Infrastructure & DevOps
+## Infrastructure
 
-### Local Development (Docker Compose)
+### Local Development
 
-**docker-compose.yml**
+**docker-compose.yml:**
 ```yaml
 version: '3.8'
 
@@ -378,361 +304,224 @@ volumes:
   redis_data:
 ```
 
-Start with: `docker-compose up -d`
+Start: `docker-compose up -d`
 
-### Production Deployment
+### Production
 
-**Backend Hosting: Railway / Render / Fly.io**
-- Why: Simple Python deployment, auto-scaling
-- Cost: ~$20-50/month for hobby tier
+**Backend:** Railway (recommended — zero-config Python, auto HTTPS, managed PostgreSQL and Redis add-ons)
 
-**Database:**
-- PostgreSQL: AWS RDS or Supabase (managed)
-- Redis: AWS ElastiCache or Upstash (serverless)
+**Alternative:** Fly.io (cheapest for low traffic), Render (free tier)
 
-**Monitoring:**
-```bash
-pip install sentry-sdk
-```
-- Error tracking and performance monitoring
-- Free tier: 5k events/month
+**Database:** Railway managed PostgreSQL or Supabase (free 500MB tier)
 
-**Logging:**
-```bash
-pip install loguru
-```
-- Structured logging to stdout
-- Production: Ship to Datadog or Logtail
+**Redis:** Railway managed Redis or Upstash (serverless, pay-per-request)
 
-### CI/CD (GitHub Actions)
+**Pinecone:** pinecone.io managed (free tier: 100k vectors, 1 index — sufficient for Phase 1-2)
 
-**.github/workflows/backend-test.yml**
-```yaml
-name: Backend Tests
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-      
-      redis:
-        image: redis:7.2
-    
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-      
-      - name: Run tests
-        run: |
-          pytest --cov=app tests/
-      
-      - name: Type check
-        run: |
-          mypy app/
-```
-
-**.github/workflows/frontend-test.yml**
-```yaml
-name: Frontend Tests
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      
-      - name: Install dependencies
-        run: |
-          cd mobile && npm ci
-      
-      - name: Run tests
-        run: |
-          cd mobile && npm test
-      
-      - name: Type check
-        run: |
-          cd mobile && npm run type-check
-```
-
----
-
-## External Services & APIs
-
-### Required Accounts (Free Tiers Available)
-
-**OpenAI**
-- API Key: https://platform.openai.com
-- Cost: ~$0.50/1000 requests (GPT-4o)
-- Budget: $50/month for solo dev
-
-**Deepgram**
-- API Key: https://deepgram.com
-- Cost: $0.0125/min transcription
-- Free tier: $200 credit
-
-**ElevenLabs**
-- API Key: https://elevenlabs.io
-- Cost: $0.30/1000 characters
-- Free tier: 10k characters/month
-
-**Pinecone**
-- API Key: https://pinecone.io
-- Free tier: 100k vectors, 1 index
-- Upgrade: $70/month for production
-
-**Sentry**
-- Project: https://sentry.io
-- Free tier: 5k errors/month
-- Upgrade: $26/month for unlimited
-
-### Optional Services (Phase 2+)
-
-**Twilio** (SMS notifications)
-- For users without push enabled
-
-**SendGrid** (Email)
-- Weekly reports, notifications
-
-**Google Calendar API**
-- Richer calendar integration
-
----
-
-## Development Environment Setup
-
-### Prerequisites
-```bash
-# macOS
-brew install node python@3.11 postgresql@16 redis
-
-# Install pyenv for Python version management
-brew install pyenv
-pyenv install 3.11.7
-pyenv global 3.11.7
-
-# Install nvm for Node version management
-brew install nvm
-nvm install 18
-nvm use 18
-```
-
-### Backend Setup
-```bash
-# Clone repo
-git clone <your-repo>
-cd jarvis/backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up database
-docker-compose up -d postgres redis
-alembic upgrade head
-
-# Create .env file
-cp .env.example .env
-# Add your API keys
-
-# Run backend
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### Frontend Setup
-```bash
-cd jarvis/mobile
-
-# Install dependencies
-npm install
-
-# Create .env file
-cp .env.example .env
-# Add backend URL: EXPO_PUBLIC_API_URL=http://localhost:8000
-
-# Start Expo
-npm start
-
-# Run on iOS simulator
-npm run ios
-```
+**Mobile:** Expo EAS build → TestFlight → App Store
 
 ---
 
 ## Environment Variables
 
-### Backend (.env)
+### Backend `.env`
+
 ```bash
 # Database
 DATABASE_URL=postgresql+asyncpg://jarvis:jarvis_dev@localhost:5432/jarvis_db
 REDIS_URL=redis://localhost:6379
 
-# APIs
+# AI / Voice APIs
 OPENAI_API_KEY=sk-...
 DEEPGRAM_API_KEY=...
 ELEVENLABS_API_KEY=...
+ELEVENLABS_VOICE_ID=...          # Your custom JARVIS voice ID
+
+# Vector memory
 PINECONE_API_KEY=...
-PINECONE_ENVIRONMENT=us-east-1-aws
+PINECONE_INDEX_NAME=jarvis-memory
 
 # Security
-SECRET_KEY=<generate with: openssl rand -hex 32>
+SECRET_KEY=<generate: openssl rand -hex 32>
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=10080  # 7 days
 
+# Celery
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+
 # Monitoring
 SENTRY_DSN=https://...@sentry.io/...
+
+# Environment
+ENVIRONMENT=development
+LOG_LEVEL=DEBUG
 ```
 
-### Frontend (.env)
+### Frontend `.env`
+
 ```bash
 EXPO_PUBLIC_API_URL=http://localhost:8000
 EXPO_PUBLIC_WS_URL=ws://localhost:8000/ws
 EXPO_PUBLIC_ENV=development
 ```
 
+### Production `eas.json`
+
+```json
+{
+  "build": {
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.jarvis.app",
+        "EXPO_PUBLIC_WS_URL": "wss://api.jarvis.app/ws",
+        "EXPO_PUBLIC_ENV": "production"
+      }
+    }
+  }
+}
+```
+
 ---
 
-## Performance Benchmarks & Targets
+## CI/CD
 
-### Backend Targets
-| Endpoint | p50 | p95 | p99 |
-|----------|-----|-----|-----|
-| GET /health | <10ms | <20ms | <50ms |
-| POST /biometrics | <100ms | <200ms | <500ms |
-| POST /voice/transcribe | <500ms | <1s | <2s |
-| GET /memory/search | <200ms | <400ms | <800ms |
+### GitHub Actions — Backend Tests
 
-### Frontend Targets
-| Metric | Target |
-|--------|--------|
-| App launch time | <2s |
-| Screen transition | <200ms |
-| Voice button tap to recording | <100ms |
-| HealthKit data fetch | <500ms |
-| Chart render (1000 points) | <100ms |
+`.github/workflows/backend.yml`:
+```yaml
+name: Backend
 
-### Database Query Limits
-- Simple queries (indexed): <50ms
-- Complex aggregations: <200ms
-- Full-text search: <300ms
+on: [push, pull_request]
 
-### Voice Pipeline Targets
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: jarvis_test
+        options: --health-cmd pg_isready --health-interval 10s
+      redis:
+        image: redis:7.2
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: pytest --cov=app tests/
+      - run: mypy app/
+      - run: black --check app/
+```
+
+### GitHub Actions — Frontend Tests
+
+`.github/workflows/frontend.yml`:
+```yaml
+name: Frontend
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - run: cd mobile && npm ci
+      - run: cd mobile && npm test -- --watchAll=false
+      - run: cd mobile && npm run type-check
+```
+
+---
+
+## Performance Targets
+
+### Voice Pipeline Latency Budget
+
 | Stage | Target | Max |
 |-------|--------|-----|
-| Audio recording → upload | <200ms | <500ms |
-| STT processing | <500ms | <1s |
-| LLM first token | <800ms | <1.5s |
-| TTS generation | <400ms | <800ms |
-| **Total round-trip** | **<1.9s** | **<3s** |
+| Audio → backend (WebSocket) | <200ms | 400ms |
+| Deepgram STT (streaming) | <300ms | 700ms |
+| Context Builder (all 3 memory tiers) | <300ms | 500ms |
+| GPT-4o first token | <800ms | 1500ms |
+| ElevenLabs first audio chunk | <400ms | 800ms |
+| **Total end-to-end** | **<2.0s** | **3.0s** |
+
+If total exceeds 3s consistently: degrade gracefully — return text only, log the failure.
+
+### Other Targets
+
+| Operation | Target |
+|-----------|--------|
+| Knowledge Base read (full) | <100ms |
+| Redis working memory read | <20ms |
+| Pinecone semantic search | <300ms |
+| Context Builder total | <300ms |
+| Fact extraction job | <10s (background) |
+| App launch to voice ready | <3s |
 
 ---
 
-## Security Checklist
+## External Services — Accounts Required
 
-### API Security
-- [ ] HTTPS only (TLS 1.3)
-- [ ] Rate limiting (10 req/sec per user)
-- [ ] CORS configured (whitelist domains)
-- [ ] JWT expiration enforced
-- [ ] SQL injection prevention (ORM only)
+| Service | Use | Cost (dev) | Sign up |
+|---------|-----|-----------|---------|
+| OpenAI | LLM + embeddings | ~$30/mo | platform.openai.com |
+| Deepgram | STT | $0 (free tier: $200 credit) | deepgram.com |
+| ElevenLabs | TTS + voice clone | $0 (10k chars/mo free) | elevenlabs.io |
+| Pinecone | Vector memory | $0 (100k vectors free) | pinecone.io |
+| Sentry | Error tracking | $0 (5k events/mo free) | sentry.io |
 
-### Data Security
-- [ ] Passwords hashed (bcrypt)
-- [ ] Biometric data encrypted at rest (AES-256)
-- [ ] PII not logged
-- [ ] API keys in environment variables (not code)
-- [ ] Regular dependency updates (Dependabot)
+### Voice Clone Setup (ElevenLabs)
 
-### Mobile Security
-- [ ] API keys in secure storage (expo-secure-store)
-- [ ] Certificate pinning (production)
-- [ ] Jailbreak detection
-- [ ] Obfuscated code (production builds)
+You need a custom voice for JARVIS. On ElevenLabs:
+1. Voice Lab → Add Voice → Instant Voice Cloning
+2. Upload 5–10 minutes of clean source audio (the tone you want)
+3. Name it "JARVIS"
+4. Copy the Voice ID to your `.env`
+
+Alternatively, use one of ElevenLabs' built-in professional voices.
 
 ---
 
-## Monitoring & Observability
+## Cost Estimates
 
-### Metrics to Track
+**Phase 1 (solo dev, daily use only):**
+- OpenAI: ~$20/month
+- All others: free tiers
+- **Total: ~$20/month**
 
-**Backend:**
-- Request rate (req/sec)
-- Error rate (errors/min)
-- Latency (p50, p95, p99)
-- Database connection pool usage
-- Redis memory usage
+**Phase 3 (10 users on TestFlight):**
+- OpenAI: ~$80/month
+- ElevenLabs: ~$22/month (Starter plan)
+- Hosting: ~$20/month (Railway)
+- Pinecone: ~$0 (still on free tier)
+- **Total: ~$120/month**
 
-**Frontend:**
-- Crash rate
-- Screen load time
-- API call success rate
-- Background task completion
-- Battery usage
-
-**Business:**
-- Daily active users
-- Intervention acceptance rate
-- Voice interaction count
-- Feature usage (which features are used most)
-
-### Alerting Rules
-- Error rate >5% → Slack notification
-- p95 latency >3s → PagerDuty
-- Database CPU >80% → Auto-scale
-- Crash rate >1% → Immediate investigation
+**Post App Store (100 users):**
+- OpenAI: ~$400/month
+- ElevenLabs: ~$99/month (Creator plan)
+- Pinecone: ~$70/month (Standard)
+- Infrastructure: ~$50/month
+- **Total: ~$620/month**
 
 ---
 
-## Cost Estimation (Monthly)
+## What Was Removed vs Original STACK.md
 
-**Development (First 3 months):**
-- OpenAI API: $50
-- Deepgram: $0 (free tier)
-- ElevenLabs: $0 (free tier)
-- Pinecone: $0 (free tier)
-- Hosting: $0 (local dev)
-**Total: ~$50/month**
-
-**Production (Post-launch, 100 users):**
-- OpenAI API: $200 (2k req/day)
-- Deepgram: $75 (50 min/day)
-- ElevenLabs: $22 (free tier + overflow)
-- Pinecone: $70 (production index)
-- Hosting: $50 (Railway/Render)
-- Database: $25 (managed PostgreSQL)
-- Redis: $10 (managed cache)
-- Sentry: $0 (free tier)
-**Total: ~$450/month**
-
-**Scaling (1000 users):**
-- APIs: ~$2000/month
-- Infrastructure: ~$300/month
-**Total: ~$2300/month**
-
----
-
-This stack is optimized for **speed of development** (solo, 6 months) while maintaining **production-grade quality**. Every tool has been chosen for minimal complexity and maximum reliability.
+- ❌ `react-native-health` — no HealthKit integration in v1
+- ❌ `expo-health` — removed
+- ❌ `expo-calendar` — Phase 3 only
+- ❌ `expo-location` — removed
+- ❌ TimescaleDB extension — no biometric time-series data
+- ❌ `google-generativeai` (Gemini) — GPT-4o only, no fallback needed for v1
+- ❌ `react-native-chart-kit` — no biometric charts
+- ❌ Webhook infrastructure — Phase 3 only
+- ❌ `APScheduler` — replaced by Celery for all background jobs

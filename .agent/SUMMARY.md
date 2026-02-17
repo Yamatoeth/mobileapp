@@ -1,351 +1,156 @@
-# J.A.R.V.I.S. Project - Complete Development Package
+# J.A.R.V.I.S. — Complete Development Package
 
 ## What You Have
 
-This package contains **everything you need** to build J.A.R.V.I.S. from scratch as a solo developer in 6 months.
+Eight documents. Everything needed to build JARVIS from a blank directory to an App Store submission, alone, in 12 months.
 
-### Document Overview
-
-**Core Documentation (START HERE):**
-1. **README.md** - Project overview and quick navigation
-2. **QUICKSTART.md** - Get running in 15 minutes
-3. **PROJECT.md** - Complete technical specification (must read)
-4. **TIMELINE.md** - Week-by-week development roadmap with milestones
-
-**Technical Reference:**
-5. **RULES.md** - Coding standards for TypeScript + Python
-6. **STACK.md** - Detailed tech stack and infrastructure
-7. **API.md** - Complete REST and WebSocket API specification
-
-**AI Coding Assistant:**
-8. **.agent/RULES.md** - Instructions for AI coding tools (Cursor, GitHub Copilot)
+| File | Purpose | Read when |
+|------|---------|-----------|
+| **README.md** | Project overview, architecture, what this is and is not | First |
+| **QUICKSTART.md** | Get running locally in 20 minutes | Before first commit |
+| **PROJECT.md** | Complete technical specification — the definitive reference | Before Phase 1 |
+| **TIMELINE.md** | 12-month week-by-week roadmap with checklists | Every Monday morning |
+| **RULES.md** | Coding standards for TypeScript and Python | Before writing code |
+| **STACK.md** | Tech stack, infrastructure, environment setup | When setting up tools |
+| **API.md** | REST and WebSocket API specification | When adding endpoints |
+| **SUMMARY.md** | This file | When you need to re-orient |
 
 ---
 
-## Key Improvements from Your Original Vision
+## The Pivoted Vision in One Paragraph
 
-### 1. Structured Development Phases
+The original JARVIS was a biometric monitoring app. It watched your body and reacted to physiological stress. That vision has been completely replaced.
 
-**Your original idea:**
-- Build everything at once
-- No clear milestones
-
-**Improved approach:**
-- **Phase 1 (Weeks 1-8):** Foundation - Biometric monitoring + voice assistant
-- **Phase 2 (Weeks 9-16):** Intelligence - Proactive notifications + pattern detection
-- **Phase 3 (Weeks 17-24):** Autonomy - Trust system + voice interruptions + task execution
-
-**Why:** Prevents feature creep, ensures MVP ships in 2 months.
+The new JARVIS knows you. It knows your goals, your projects, your finances, your relationships, your personality, and your patterns. It learns everything through a structured onboarding interview and then gets smarter with every conversation. You speak to it by voice. It responds in a distinct, opinionated character that references your specific situation — not generic advice. This is not a health app. It is a persistent thinking partner built to give you a second opinion on any decision, hold you accountable to your goals, and surface what matters before you ask.
 
 ---
 
-### 2. Privacy-First Architecture
+## What Changed from the Old Docs
 
-**Your original idea:**
-- Send all data to cloud for processing
+### Architecture: Completely Replaced
 
-**Improved approach:**
-- **Tier 1 (Never leaves device):** Raw biometrics, audio recordings
-- **Tier 2 (Encrypted):** Aggregated health scores, city-level location
-- **Tier 3 (Functional data):** Conversation transcripts, user goals
-- **Phase 3 goal:** On-device Whisper for full local processing
+| Old Architecture | New Architecture |
+|-----------------|-----------------|
+| HealthKit biometric sensors | Knowledge Base (6-domain PostgreSQL schema) |
+| State machine (6 life states) | Context Builder (4-layer prompt assembly) |
+| Intervention engine | Fact extraction pipeline (Celery background job) |
+| Trust level system | Onboarding completeness + conversation depth |
+| Biometric → LLM → intervention | Voice → Context → LLM → voice response |
 
-**Why:** Biometric data is HIPAA-sensitive. Privacy violations kill products.
+### Tech Stack: Mostly Preserved, Different Purpose
 
----
+Kept: FastAPI, React Native, Expo, TypeScript, GPT-4o, Deepgram, ElevenLabs, Pinecone, Redis, PostgreSQL, Zustand, Celery.
 
-### 3. State Machine for Context
+Removed: `react-native-health`, `expo-calendar`, `expo-location`, TimescaleDB, Gemini fallback, all biometric models, intervention logic, trust scoring.
 
-**Your original idea:**
-- AI interprets everything from biometrics alone
+Added new: `ContextBuilder` class (critical new component), `FactExtractor` class (runs after every conversation), `OnboardingService` (45-minute structured interview), Knowledge Base schema (6 domain tables + change log).
 
-**Improved approach:**
-- 6 discrete life states: Sleeping, Exercising, Working, Meeting, Leisure, Stressed
-- State determined by: Biometrics + Calendar + Location + Time
-- Prevents false positives (exercise vs stress detection)
+### Timeline: Rewritten Completely
 
-**Why:** Simple rules beat complex ML for MVP. Fewer bugs, faster development.
+Old: 6 months (too aggressive for biometric scope, wrong product anyway)
+New: 12 months (correct scope for knowledge-first voice assistant)
 
 ---
 
-### 4. Trust Level System
+## The Three Pillars — Memorise These
 
-**Your original idea:**
-- Give AI full authority from day 1
+Every decision in JARVIS flows from one of these three.
 
-**Improved approach:**
-- **Consultant (Week 1-2):** Only responds when asked
-- **Advisor (Week 3+):** Sends notifications
-- **Manager (Month 2+):** Can reschedule meetings
-- **Executive (Month 3+):** Voice interruptions allowed
+**Pillar 1: The Knowledge Base**
+JARVIS is only as good as what it knows about you. Build this first. Six PostgreSQL tables. Populated via a 45-minute onboarding interview. Updated automatically after every conversation.
 
-**Why:** Users need to trust the system before granting authority. Gradual escalation prevents backlash.
+**Pillar 2: The Memory System**
+Three tiers: Redis (last 30 conversations, fast), Pinecone (full history, semantic), PostgreSQL (structured facts, always fresh). All three queried concurrently on every LLM call via `asyncio.gather()`. Context build target: under 300ms.
 
----
-
-### 5. Confidence Thresholding
-
-**Your original idea:**
-- Intervene whenever AI thinks user is stressed
-
-**Improved approach:**
-- Only intervene when confidence >85%
-- Confidence = Biometric certainty × Context certainty × Historical accuracy
-- Rule-based overrides for critical health events (BPM >180 → always alert)
-
-**Why:** False positives destroy trust faster than false negatives. Be conservative.
+**Pillar 3: The Intelligence Engine**
+GPT-4o with a strict 4-layer prompt: character definition, user identity injection, recent context, relevant memories. The character layer is non-negotiable — JARVIS must be direct, honest, and specific. No hedging, no generic advice.
 
 ---
 
-### 6. Hierarchical Memory
+## The 30-Day Immediate Plan
 
-**Your original idea:**
-- Store everything in vector database
+Do not start anywhere except here.
 
-**Improved approach:**
-- **Working Memory (Redis):** Last 24h, embedded in LLM context
-- **Episodic Memory (Pinecone):** 30-day semantic search
-- **Semantic Memory (PostgreSQL):** Lifetime patterns and trends
+| Week | Build | Done when |
+|------|-------|-----------|
+| Week 1 | Voice pipeline v0 | Speak → hear GPT-4o respond via ElevenLabs. No context. Just the pipe. |
+| Week 2 | Knowledge Base schema + onboarding | Six domain tables created. You complete your own onboarding interview. |
+| Week 3 | Context injection | Every voice call uses your Knowledge Base. JARVIS references who you are. |
+| Week 4 | Memory integration | Redis working memory + Pinecone episodic memory connected. JARVIS remembers last month. |
 
-**Why:** Different retrieval needs require different storage. Faster queries, lower costs.
-
----
-
-### 7. Realistic Tech Stack
-
-**Your original idea:**
-- Build everything from scratch
-
-**Improved approach:**
-- **Frontend:** React Native (not native Swift) - 50% faster development
-- **Backend:** FastAPI (not Django) - 10x faster for async I/O
-- **LLM:** GPT-4o + Gemini fallback - Don't build your own
-- **Voice:** Deepgram + ElevenLabs - Mature APIs beat custom models
-
-**Why:** You're one person. Use battle-tested tools, not cutting-edge experiments.
+Nothing else. No Iron Man UI polish. No pattern detection. No morning briefings. Build the pipe, build the knowledge layer, connect them.
 
 ---
 
-### 8. Performance Budgets
+## The Biggest Mistakes to Avoid
 
-**Your original idea:**
-- "Make it as fast as possible"
+**Mistake 1: Starting with the UI**
+The Iron Man aesthetic is important but it comes last. A beautiful app that knows nothing about you is worthless. Build the Knowledge Base and Context Builder first. The UI takes a week. The knowledge layer takes a month.
 
-**Improved approach:**
-- Voice latency: <2s (p95) - Anything slower kills conversational feel
-- HealthKit fetch: <500ms - Battery-friendly polling
-- Memory retrieval: <300ms - Don't make users wait
-- State transition: <50ms - Real-time responsiveness
+**Mistake 2: Building Phase 3 features during Phase 1**
+Calendar integration, task tracking, financial monitoring — none of it before the core loop is solid. The TIMELINE.md explicitly marks what is in scope each month. Read it. Follow it.
 
-**Why:** Specific targets enable optimization. "Fast" is subjective.
+**Mistake 3: Not using it yourself every single day**
+JARVIS is a personal product. The feedback loop is you. If you stop using it, you lose the most important signal. From Month 1 Week 3 onwards, use JARVIS daily. Log what feels broken. Fix it.
 
----
+**Mistake 4: Treating the onboarding interview as optional**
+The onboarding is where the product starts to exist. An empty Knowledge Base means JARVIS sounds like every other generic AI. Do your own full 45-minute onboarding before any other testing.
 
-## How to Use This Package
-
-### Week 1-2: Absorb the Vision
-1. Read **PROJECT.md** cover-to-cover (understand the "why")
-2. Read **RULES.md** (understand the "how")
-3. Skim **TIMELINE.md** (understand the scope)
-4. Read **QUICKSTART.md** and get the app running locally
-
-### Week 3-8: Build Phase 1
-1. Follow **TIMELINE.md** week-by-week checklist
-2. Refer to **RULES.md** for coding patterns
-3. Use **API.md** when adding endpoints
-4. Use **.agent/RULES.md** with AI coding assistants
-
-### Week 9-16: Build Phase 2
-1. Continue **TIMELINE.md** checklist
-2. Recruit 5-10 beta testers
-3. Iterate based on feedback
-
-### Week 17-24: Build Phase 3
-1. Final feature push
-2. Polish and production prep
-3. App Store submission
+**Mistake 5: Treating the character prompt as boilerplate**
+The four-layer prompt construction is what makes JARVIS feel real. The character layer specifically — the direct, honest, non-subservient personality — must be enforced carefully. Test it constantly. If JARVIS starts hedging or giving generic answers, the prompt has degraded.
 
 ---
 
-## Critical Success Factors
+## How to Use These Docs with an AI Coding Assistant
 
-### 1. Dogfood Relentlessly
-**Use the app yourself every single day.**
-- If you don't find it useful, users won't either
-- The best product feedback is your own frustration
+When working with Cursor, GitHub Copilot, or any AI assistant on this codebase:
 
-### 2. Ship Phase 1 Before Adding Phase 3 Features
-**Resist feature creep.**
-- Phase 1 is an MVP (biometric voice assistant)
-- You can launch with just Phase 1
-- Phases 2-3 add value but aren't required for launch
+1. Point it at `.agent/RULES.md` as the primary context file
+2. Reference `API.md` when adding or modifying endpoints
+3. Reference `STACK.md` when adding dependencies or infrastructure
+4. Reference `PROJECT.md` for architecture decisions
+5. Always ask: "Is this feature in Phase 1/2/3?" before building it
 
-### 3. Optimize for Latency Early
-**Every millisecond matters in voice interaction.**
-- Profile every API call
-- Stream everything (audio, LLM responses)
-- Cache aggressively
-- If latency >3s, users abandon the feature
-
-### 4. Privacy is Non-Negotiable
-**Treat biometric data like nuclear waste.**
-- Encrypt everything
-- Minimize data sent to cloud
-- Give users full control (export, delete)
-- One privacy scandal kills the product
-
-### 5. Trust is Earned, Not Given
-**Start conservative, earn authority.**
-- Don't interrupt users until they explicitly allow it
-- Explain every intervention (transparency builds trust)
-- Learn from dismissals (adaptive thresholds)
+The `.agent/RULES.md` file contains the compressed version of all standards — the coding assistant should read it first before any code generation.
 
 ---
 
-## What Makes This Different
+## Success at Each Phase
 
-**Compared to existing AI assistants:**
-- ❌ Siri/Alexa: Reactive, no biometric awareness
-- ❌ Notion AI: Text-only, no real-time monitoring
-- ❌ Fitness apps: Track data but don't intervene
-- ✅ J.A.R.V.I.S.: Proactive, biometrically-aware, context-driven
+### Phase 1 Complete (Month 3)
+You ask JARVIS: *"What should I focus on today?"*
+It responds with something that references your specific active projects and goals. It does not say "I'd be happy to help you think about priorities." It says what you should actually focus on, citing a specific project from your Knowledge Base.
 
-**Your unique moat:**
-1. Biometric + contextual fusion (competitors can't access HealthKit data at this granularity)
-2. Proactive intervention (most AIs are reactive)
-3. Trust-based authority system (no other AI has permission levels)
-4. Privacy-first architecture (local processing in Phase 3)
+### Phase 2 Complete (Month 7)
+JARVIS initiates a conversation: *"You haven't mentioned the client proposal in 9 days. You said it was due this Friday."*
+You did not ask. It noticed.
 
----
-
-## Risks & Mitigations
-
-### Technical Risks
-
-**Risk:** HealthKit API limits cause data gaps  
-**Mitigation:** Local caching + exponential backoff. If >5min gap, notify user.
-
-**Risk:** Voice latency >2s kills UX  
-**Mitigation:** Stream everything. If spikes, degrade to text-only mode.
-
-**Risk:** LLM hallucinations during health emergencies  
-**Mitigation:** Rule-based overrides for critical thresholds (BPM >180 → call 911, bypass LLM).
-
-### Product Risks
-
-**Risk:** Users find interruptions annoying  
-**Mitigation:** Start with notifications (Phase 2), earn voice interruptions (Phase 3).
-
-**Risk:** Privacy concerns block adoption  
-**Mitigation:** Radical transparency. Show what data is sent. Local-first by Phase 3.
-
-**Risk:** "Creepy factor" from monitoring  
-**Mitigation:** Frame as "digital twin for self-improvement," not surveillance.
-
-### Business Risks
-
-**Risk:** Can't monetize a health app  
-**Mitigation:** Freemium model ($10/mo for Executive features). B2B for teams.
-
-**Risk:** Apple rejects app (uses HealthKit data)  
-**Mitigation:** Clear disclaimers ("wellness tool, not medical device"). No medical claims.
+### Phase 3 Complete (Month 12)
+JARVIS is on the App Store. You use it before every major decision. You have described it to someone else as "the only AI that actually knows me."
 
 ---
 
-## Post-6-Month Vision
+## The Single Most Important Insight
 
-**Once MVP is launched:**
-1. Expand to Android (React Native makes this easy)
-2. Add computer vision (posture analysis via camera)
-3. Integrate more wearables (Oura Ring, Whoop, CGM)
-4. Team features (collective stress monitoring for offices)
-5. Open-source core engine (monetize via hosted service)
+The original JARVIS tried to make an AI that **watches** you.  
+The new JARVIS is an AI that **knows** you.
 
-**12-month goal:** 10,000 active users, 70% weekly retention
+Watching requires sensors — HealthKit, Apple Watch, biometric pipelines. Complex, fragile, and not immediately useful.
 
-**24-month goal:** Become the default "AI Chief of Staff" for high performers
+Knowing requires memory and conversation — a structured knowledge graph, an extraction pipeline, a smart prompt. Buildable alone, right now, with existing APIs.
+
+**Build the knowledge layer. The rest follows.**
 
 ---
 
-## Final Thoughts
+## Getting Started Right Now
 
-**You now have:**
-- ✅ A clear technical specification
-- ✅ A realistic 6-month timeline
-- ✅ Comprehensive coding standards
-- ✅ Complete API documentation
-- ✅ Risk mitigation strategies
+1. Open **QUICKSTART.md** — get everything running (20 minutes)
+2. Open **PROJECT.md** — read the complete vision (30 minutes)
+3. Open **TIMELINE.md** — find Week 1 tasks (5 minutes)
+4. Do your own onboarding interview — let JARVIS get to know you (45 minutes)
+5. Build Week 1
 
-**What you need to provide:**
-- 40+ hours/week of focused development
-- Discipline to follow the timeline (don't skip ahead)
-- Willingness to dogfood daily
-- Patience to earn trust (start conservative)
+By this time tomorrow you should have a working voice pipeline. By end of Month 1, you should have JARVIS responding with context from your Knowledge Base. By end of Month 3, you should be using it daily and not wanting to stop.
 
-**The hardest part isn't the code—it's shipping Phase 1 before adding Phase 3 features.**
-
-Build the foundation, prove the value, then add autonomy.
-
----
-
-## Getting Started (Right Now)
-
-1. Open **QUICKSTART.md** and get the app running (15 minutes)
-2. Open **PROJECT.md** and read the full vision (30 minutes)
-3. Open **TIMELINE.md** and check Week 1 tasks (5 minutes)
-4. Start coding your first feature
-
-**By this time tomorrow, you should have:**
-- Backend running locally
-- Frontend displaying live HRV/BPM data
-- Voice pipeline tested (speak → transcribe → respond)
-
-**By the end of Week 1, you should have:**
-- All development tools configured
-- First commit pushed to GitHub
-- Backend skeleton deployed
-- Frontend running on iOS simulator
-
----
-
-## Support & Community
-
-**If you get stuck:**
-- Re-read the relevant documentation
-- Check QUICKSTART.md troubleshooting section
-- Open a GitHub Issue with detailed logs
-- Remember: This is ambitious but achievable
-
-**You're building something genuinely new.**
-
-Most AI assistants are chatbots with extra steps. You're building a **proactive guardian** that knows you better than you know yourself.
-
-That's hard. That's valuable. That's worth 6 months of your life.
-
----
-
-**Now go build J.A.R.V.I.S.** 🚀
-
-The world needs fewer chatbots and more AI that actually improves human performance.
-
-You have everything you need. The rest is execution.
-
----
-
-## Document Checklist
-
-**You should have these files:**
-- [x] README.md - Project overview
-- [x] QUICKSTART.md - Setup guide
-- [x] PROJECT.md - Technical specification (30+ pages)
-- [x] RULES.md - Coding standards (20+ pages)
-- [x] TIMELINE.md - 6-month roadmap (15+ pages)
-- [x] STACK.md - Tech stack details (15+ pages)
-- [x] API.md - API specification (20+ pages)
-- [x] .agent/RULES.md - AI assistant instructions
-
-**Total documentation:** ~120 pages of comprehensive guidance
-
-**This is your development bible. Reference it constantly.**
-
-Good luck. 🎯
+**Now go build J.A.R.V.I.S.**

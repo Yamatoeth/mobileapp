@@ -1,180 +1,153 @@
-# J.A.R.V.I.S. Quick Start Guide
+# J.A.R.V.I.S. Quick Start
 
-**Goal:** Get the app running locally in under 15 minutes.
+**Goal:** Backend running, iPhone app live, voice pipeline tested end-to-end. Under 20 minutes.
 
 ---
 
-## Prerequisites Checklist
+## Prerequisites
 
-Before starting, ensure you have:
+- [ ] **macOS** (required for iOS development)
+- [ ] **Xcode 15+** — install from App Store, open it once to accept license
+- [ ] **Node.js 18+** — `node --version`
+- [ ] **Python 3.11+** — `python3 --version`
+- [ ] **Docker Desktop** — running (required for local PostgreSQL + Redis)
 
-- [ ] **macOS** (Ventura 13.0+ recommended)
-- [ ] **Xcode 15+** installed from App Store
-- [ ] **Node.js 18+** (`node --version`)
-- [ ] **Python 3.11+** (`python3 --version`)
-- [ ] **Docker Desktop** installed and running
-- [ ] **Apple Watch** paired with your iPhone (for real data)
+**Install missing tools:**
 
-### Install Missing Tools
-
-**Node.js (via nvm):**
 ```bash
+# Node via nvm
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-nvm install 18
-nvm use 18
-```
+nvm install 18 && nvm use 18
 
-**Python (via pyenv):**
-```bash
+# Python via pyenv
 brew install pyenv
-pyenv install 3.11.7
-pyenv global 3.11.7
-```
+pyenv install 3.11.7 && pyenv global 3.11.7
 
-**Docker Desktop:**
-Download from https://www.docker.com/products/docker-desktop
+# Docker Desktop
+# Download from: https://www.docker.com/products/docker-desktop
+```
 
 ---
 
-## Step 1: Clone and Setup (2 minutes)
+## Step 1: Clone and Databases (2 min)
 
 ```bash
-# Clone the repository
 git clone https://github.com/yourusername/jarvis.git
 cd jarvis
 
-# Create environment files from templates
-cp backend/.env.example backend/.env
-cp mobile/.env.example mobile/.env
-
-# Start local databases (PostgreSQL + Redis)
+# Start PostgreSQL and Redis locally
 docker-compose up -d
 
-# Verify databases are running
-docker ps  # Should show postgres and redis containers
+# Confirm both containers are running
+docker ps
+# You should see: jarvis_postgres and jarvis_redis
 ```
 
 ---
 
-## Step 2: Backend Setup (5 minutes)
+## Step 2: Backend (7 min)
 
 ```bash
 cd backend
 
-# Create Python virtual environment
+# Create virtual environment
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Run database migrations
+# Copy env template and fill in API keys (see below)
+cp .env.example .env
+
+# Run database migrations (creates all tables including Knowledge Base)
 alembic upgrade head
 
-# Verify installation
-python -c "import fastapi; print(f'FastAPI version: {fastapi.__version__}')"
-```
-
-**Configure API Keys in backend/.env:**
-```bash
-# Open backend/.env and add your API keys:
-OPENAI_API_KEY=sk-proj-...       # Get from platform.openai.com
-DEEPGRAM_API_KEY=...             # Get from deepgram.com
-ELEVENLABS_API_KEY=...           # Get from elevenlabs.io
-PINECONE_API_KEY=...             # Get from pinecone.io
-
-# Generate a secure secret key
-SECRET_KEY=$(openssl rand -hex 32)
-echo "SECRET_KEY=$SECRET_KEY" >> .env
-```
-
-**Start the backend server:**
-```bash
+# Start the backend
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-**Test it works:**
-- Open http://localhost:8000/docs in your browser
-- You should see the FastAPI interactive documentation
+**Verify:** Open http://localhost:8000/docs — you should see the FastAPI interactive docs.
+
+### Required API Keys
+
+Open `backend/.env` and fill in these values:
+
+```bash
+OPENAI_API_KEY=sk-...           # platform.openai.com → API keys
+DEEPGRAM_API_KEY=...            # console.deepgram.com → API keys
+ELEVENLABS_API_KEY=...          # elevenlabs.io → Profile → API key
+ELEVENLABS_VOICE_ID=...         # elevenlabs.io → Voice Library → copy ID
+PINECONE_API_KEY=...            # app.pinecone.io → API keys
+```
+
+**Generate your secret key:**
+```bash
+openssl rand -hex 32
+# Copy the output into SECRET_KEY= in your .env
+```
+
+### ElevenLabs Voice Setup
+
+You need a voice for JARVIS before audio responses will work:
+
+1. Go to [elevenlabs.io](https://elevenlabs.io) → Voice Lab
+2. Either use an existing voice (e.g., "Adam") or clone your own
+3. Copy the Voice ID and paste it into `ELEVENLABS_VOICE_ID=` in `.env`
 
 ---
 
-## Step 3: Frontend Setup (5 minutes)
+## Step 3: Frontend (5 min)
 
-**In a new terminal:**
+**Open a new terminal:**
+
 ```bash
 cd mobile
 
-# Install dependencies (this may take 2-3 minutes)
+# Install dependencies
 npm install
 
-# Install iOS pods (required for native modules)
-cd ios && pod install && cd ..
+# Copy env template
+cp .env.example .env
+# EXPO_PUBLIC_API_URL=http://localhost:8000 (already set)
 
-# Configure environment
-# Edit mobile/.env and set:
-EXPO_PUBLIC_API_URL=http://localhost:8000
-EXPO_PUBLIC_WS_URL=ws://localhost:8000/ws
-```
-
-**Start the Expo development server:**
-```bash
+# Start Expo development server
 npm start
 ```
 
-**Launch on iOS Simulator:**
-- Press `i` in the Expo terminal to launch iOS simulator
-- Or run: `npm run ios`
+**Launch on iOS simulator:**
+- Press `i` in the Expo terminal, OR
+- Run `npm run ios`
 
-**OR Launch on Physical iPhone (recommended for HealthKit):**
-- Install **Expo Go** app from App Store on your iPhone
+**Launch on physical iPhone (recommended — better audio):**
+- Install **Expo Go** from the App Store
 - Scan the QR code shown in the terminal
-- App will load on your phone
 
 ---
 
-## Step 4: First Launch & Permissions (3 minutes)
+## Step 4: First Launch (3 min)
 
-**When the app launches:**
+**When the app opens:**
 
-1. **HealthKit Permissions**
-   - Tap "Grant Permissions"
-   - Enable: Heart Rate, Heart Rate Variability, Sleep Analysis
-   - Tap "Allow"
+1. **Microphone permission** — tap Allow when prompted
+2. **Notifications permission** — can skip for now (Phase 2 feature)
+3. **Onboarding** — you will be taken directly to the onboarding interview on first launch
 
-2. **Microphone Permission**
-   - Tap "Allow" when prompted for microphone access
-
-3. **Notification Permission** (optional for Phase 1)
-   - Can be skipped for now
-
-4. **Verify Data Flow**
-   - You should see live HRV and BPM updating every 5 seconds
-   - If no data appears:
-     - Ensure Apple Watch is paired and unlocked
-     - Open the Health app on iPhone and verify data is present
-     - Try restarting the app
+The onboarding interview is a 45-minute conversation. If you want to test the voice pipeline first before completing onboarding, you can bypass it in development mode by setting `BYPASS_ONBOARDING=true` in the mobile `.env`.
 
 ---
 
-## Step 5: Test Voice Interaction (2 minutes)
+## Step 5: Test the Voice Pipeline (3 min)
 
-**In the app:**
-
-1. Tap and hold the **microphone button** (center of screen)
-2. Say: "What's my heart rate right now?"
+1. On the main VoiceScreen, **hold** the central button
+2. Say: *"Hello JARVIS, can you hear me?"*
 3. Release the button
 4. You should see:
-   - Your speech transcribed as text
-   - J.A.R.V.I.S. responding with your current BPM
-   - Audio playback of the response
+   - Your speech transcribed in real time
+   - JARVIS processing indicator
+   - JARVIS speaking its response
 
-**If voice doesn't work:**
-- Check backend logs for errors: Look at the terminal where uvicorn is running
-- Verify API keys are correct in `backend/.env`
-- Test individual components:
-  - Transcription: POST to `/api/v1/voice/transcribe` in API docs
-  - LLM: POST to `/api/v1/voice/generate` in API docs
+**Target latency:** Under 2 seconds from when you stop speaking to when you hear JARVIS.
 
 ---
 
@@ -182,65 +155,149 @@ npm start
 
 ### Backend won't start
 
-**Error: "ModuleNotFoundError: No module named 'fastapi'"**
+**`ModuleNotFoundError`:**
 ```bash
-# Ensure virtual environment is activated
+# Make sure virtualenv is activated
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Error: "FATAL: database "jarvis_db" does not exist"**
+**`FATAL: database "jarvis_db" does not exist`:**
 ```bash
-# Recreate database
-docker-compose down -v
-docker-compose up -d
+docker-compose down -v    # Remove old containers and volumes
+docker-compose up -d      # Fresh start
+alembic upgrade head
+```
+
+**`alembic.exc.CommandError: Can't locate revision`:**
+```bash
+alembic downgrade base
 alembic upgrade head
 ```
 
 ### Frontend won't build
 
-**Error: "Unable to resolve module @react-navigation/native"**
+**`Unable to resolve module`:**
 ```bash
-# Clear npm cache and reinstall
 rm -rf node_modules package-lock.json
 npm install
-cd ios && pod install && cd ..
 ```
 
-**Error: "HealthKit authorization failed"**
-- Ensure you're running on a physical device or simulator with Health app
-- iOS Simulator: Use iPhone 14 or newer (has HealthKit support)
-- Physical device: Ensure Apple Watch is paired
+**Expo Go shows network error:**
+- Ensure backend is running: `curl http://localhost:8000/health`
+- Check that your iPhone and Mac are on the same WiFi network
+- Try using your Mac's local IP instead of localhost in `.env`
 
-### No biometric data showing
+### Voice not working
 
-**Check these in order:**
-1. Open Health app on iPhone → Browse → Heart → Verify data exists
-2. In J.A.R.V.I.S. app → Settings → Permissions → Ensure HealthKit is enabled
-3. Backend logs: Look for "[HealthKit] No data available" warnings
-4. Try manually adding a workout in Health app to generate fresh data
-
-### Voice transcription not working
-
-**Verify API keys:**
+**No transcription:**
 ```bash
-# In backend directory
+# Test Deepgram API key directly
+curl -X POST https://api.deepgram.com/v1/listen \
+  -H "Authorization: Token YOUR_DEEPGRAM_API_KEY" \
+  -H "Content-Type: audio/wav" \
+  --data-binary @test.wav
+# Should return JSON with transcript
+```
+
+**No audio response:**
+```bash
+# Check ElevenLabs API key and voice ID
+curl -X POST "https://api.elevenlabs.io/v1/text-to-speech/YOUR_VOICE_ID" \
+  -H "xi-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Test.", "model_id": "eleven_monolingual_v1"}' \
+  --output test_output.mp3
+# If test_output.mp3 plays, your setup is correct
+```
+
+**Verify all API keys are valid:**
+```bash
+# From backend directory, with virtualenv active
 python -c "
 import os
 from dotenv import load_dotenv
 load_dotenv()
 print('OpenAI:', 'sk-' in os.getenv('OPENAI_API_KEY', ''))
-print('Deepgram:', len(os.getenv('DEEPGRAM_API_KEY', '')) > 0)
+print('Deepgram:', bool(os.getenv('DEEPGRAM_API_KEY')))
+print('ElevenLabs:', bool(os.getenv('ELEVENLABS_API_KEY')))
+print('Pinecone:', bool(os.getenv('PINECONE_API_KEY')))
 "
 ```
 
-**Test Deepgram directly:**
+### Latency over 3 seconds
+
+Run the backend with latency logging enabled:
 ```bash
-curl -X POST https://api.deepgram.com/v1/listen \
-  -H "Authorization: Token YOUR_DEEPGRAM_API_KEY" \
-  -H "Content-Type: audio/wav" \
-  --data-binary @test_audio.wav
+LOG_LATENCY=true uvicorn app.main:app --reload
 ```
+Look for which stage is slow (STT / Context Builder / LLM / TTS) and address that stage first.
+
+---
+
+## Start the Celery Worker (Required for Fact Extraction)
+
+The background fact extraction job runs after every conversation. Start the worker in a separate terminal:
+
+```bash
+cd backend
+source venv/bin/activate
+celery -A app.tasks.celery_app worker --loglevel=info
+```
+
+Without this running, JARVIS will still work, but the Knowledge Base will not update automatically from conversations. Fine for initial testing, but start the worker before doing your actual onboarding interview.
+
+---
+
+## Development Daily Workflow
+
+```bash
+# Terminal 1: Backend
+cd backend && source venv/bin/activate
+uvicorn app.main:app --reload
+
+# Terminal 2: Celery worker
+cd backend && source venv/bin/activate
+celery -A app.tasks.celery_app worker --loglevel=info
+
+# Terminal 3: Frontend
+cd mobile && npm start
+
+# When done:
+docker-compose stop   # Stops PostgreSQL and Redis (data preserved)
+```
+
+---
+
+## Running Tests
+
+```bash
+# Backend tests
+cd backend && source venv/bin/activate
+pytest --cov=app tests/ -v
+
+# Type checking
+mypy app/
+
+# Frontend tests
+cd mobile
+npm test
+
+# Type checking
+npm run type-check
+```
+
+---
+
+## Success Criteria
+
+You are ready to develop when:
+- [ ] `http://localhost:8000/docs` loads the FastAPI docs
+- [ ] `http://localhost:8000/health` returns `{"status": "ok"}`
+- [ ] Mobile app opens on simulator/device
+- [ ] Hold button → speak → hear JARVIS respond (end-to-end voice works)
+- [ ] Backend tests pass: `pytest`
+- [ ] Frontend tests pass: `npm test`
 
 ---
 
@@ -248,99 +305,9 @@ curl -X POST https://api.deepgram.com/v1/listen \
 
 Once everything is working:
 
-1. **Read the documentation:**
-   - [PROJECT.md](./PROJECT.md) - Understand the full vision
-   - [RULES.md](./RULES.md) - Learn coding standards
-   - [TIMELINE.md](./TIMELINE.md) - See the development roadmap
+1. **Complete your onboarding interview** — talk to JARVIS for 45 minutes, let it get to know you
+2. **Use it daily** — the product is only good if you use it every day and feel the difference
+3. **Follow [TIMELINE.md](./TIMELINE.md)** — check the current week's goals and work through them
+4. **Read [RULES.md](./RULES.md)** before writing code
 
-2. **Run tests:**
-   ```bash
-   # Backend tests
-   cd backend && pytest
-   
-   # Frontend tests
-   cd mobile && npm test
-   ```
-
-3. **Start developing:**
-   - Check [TIMELINE.md](./TIMELINE.md) for current week's goals
-   - Pick a task from the milestone checklist
-   - Create a feature branch: `git checkout -b feature/your-feature`
-   - Code following [RULES.md](./RULES.md)
-   - Submit PR when tests pass
-
-4. **Dogfood the app:**
-   - Use it daily for at least a week
-   - Log bugs and UX issues in GitHub Issues
-   - Track what works and what doesn't
-
----
-
-## Development Workflow
-
-**Daily routine:**
-```bash
-# Morning: Pull latest changes
-git pull origin main
-
-# Start backend (Terminal 1)
-cd backend
-source venv/bin/activate
-uvicorn app.main:app --reload
-
-# Start frontend (Terminal 2)
-cd mobile
-npm start
-
-# Code, test, commit
-git add .
-git commit -m "[PHASE-1] Your commit message"
-git push
-
-# End of day: Stop services
-# Ctrl+C in both terminals
-docker-compose stop  # Stop databases (optional)
-```
-
-**Weekly review:**
-- Run full test suite
-- Update TIMELINE.md with completed tasks
-- Review next week's milestones
-- Refactor and clean up technical debt
-
----
-
-## Getting Help
-
-**If you're stuck:**
-
-1. Check the troubleshooting section above
-2. Search GitHub Issues for similar problems
-3. Review relevant documentation (PROJECT.md, STACK.md, API.md)
-4. Ask in GitHub Discussions
-5. Contact: your.email@example.com
-
-**When asking for help, include:**
-- Exact error message
-- Steps to reproduce
-- Your environment (macOS version, Node/Python versions)
-- Relevant logs (backend terminal output)
-
----
-
-## Success Criteria
-
-**You're ready to develop when:**
-- [ ] Backend API docs load at http://localhost:8000/docs
-- [ ] Mobile app shows live HRV/BPM data
-- [ ] Voice interaction completes end-to-end (speak → transcribe → respond → play audio)
-- [ ] Tests pass: `pytest` (backend) and `npm test` (frontend)
-- [ ] No errors in console logs
-
-**Congratulations! You're ready to build J.A.R.V.I.S.** 🎉
-
----
-
-**Estimated total setup time:** 15-20 minutes (excluding first-time npm/pip downloads)
-
-If you completed this in <20 minutes, you're ahead of schedule. Now go read [PROJECT.md](./PROJECT.md) to understand what you're building and why it matters.
+**The onboarding interview is not optional.** It is the moment JARVIS becomes yours. Do not skip it.

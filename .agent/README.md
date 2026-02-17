@@ -1,298 +1,227 @@
-# J.A.R.V.I.S. - Your AI Executive Assistant
+# J.A.R.V.I.S.
+### Just A Rather Very Intelligent System
 
-> **Just A Rather Very Intelligent System**
+> A voice-first personal AI that knows your entire life and gets smarter about you with every conversation.
 
-A proactive AI assistant that monitors your biological state, environmental context, and behavioral patterns in real-time to optimize human performance.
-
-[![Phase](https://img.shields.io/badge/Phase-1%20Foundation-blue)]()
-[![License](https://img.shields.io/badge/License-MIT-green)]()
-[![iOS](https://img.shields.io/badge/Platform-iOS%2014%2B-black)]()
-
----
-
-## 🎯 What is J.A.R.V.I.S.?
-
-Unlike traditional AI chatbots that wait for prompts, J.A.R.V.I.S. functions as a **digital Chief of Staff** that:
-
-✅ **Monitors your biology** - Real-time HRV, heart rate, sleep quality via Apple Watch  
-✅ **Understands context** - Calendar events, location, ambient conditions  
-✅ **Intervenes proactively** - Suggests breaks before burnout, not after  
-✅ **Earns authority** - Progresses from Consultant → Advisor → Manager → Executive  
-✅ **Remembers everything** - Semantic memory of patterns across weeks/months  
-
-**Think:** JARVIS from Iron Man, but for your health and productivity.
+[![Phase](https://img.shields.io/badge/Phase-1%20Core%20Loop-blue)]()
+[![Platform](https://img.shields.io/badge/Platform-iOS%20only-black)]()
+[![Timeline](https://img.shields.io/badge/Timeline-12%20months-gold)]()
 
 ---
 
-## 🚀 Quick Start
+## What is J.A.R.V.I.S.?
 
-### Prerequisites
-- **macOS** (for iOS development)
-- **Node.js 18+** and **Python 3.11+**
-- **Docker** (for local databases)
-- **Xcode 15+** (with iOS Simulator)
-- **Apple Watch** (for real biometric data)
+JARVIS is a persistent, voice-first personal AI that knows who you are and gives you direct, specific, personalised opinions — not generic advice.
 
-### Setup (5 minutes)
+**This is not a health app. This is not a chatbot.**
+
+It is a thinking partner that lives in your iPhone, speaks to you in a distinct voice, and remembers everything you have ever told it. Over time, it becomes the single most knowledgeable entity about your life — more than any individual advisor, coach, or friend.
+
+The Iron Man reference is architectural, not aesthetic. JARVIS works because Tony Stark never has to re-explain himself. **The system already knows.**
+
+---
+
+## The Core Difference
+
+| Every Other AI Assistant | J.A.R.V.I.S. |
+|--------------------------|---------------|
+| Stateless — forgets you exist | Persistent — remembers everything |
+| Generic advice for anyone | Specific opinions about your situation |
+| Waits for you to explain context | Already knows your goals, projects, finances |
+| Agrees with whatever you say | Pushes back when you are wrong |
+| Useful for individual questions | Useful for your entire life |
+
+---
+
+## How It Works
+
+**Hold the button. Speak. Hear JARVIS respond.**
+
+Behind that simplicity:
+
+1. Your voice is transcribed by Deepgram (streaming, under 300ms)
+2. The Context Builder assembles everything JARVIS knows about you — your goals, your active projects, your recent conversations, your patterns
+3. GPT-4o generates a response as a specific entity with a specific character, not a generic assistant
+4. ElevenLabs voices the response and streams it back to your iPhone
+5. Everything said is processed by a background job that extracts new facts and updates the Knowledge Base
+
+**Total time from speech end to audio start: under 2 seconds.**
+
+---
+
+## The Knowledge Base
+
+The first time you launch JARVIS, it interviews you for 45 minutes. Six domains:
+
+- **Identity** — how you think, how you make decisions, what you respond to
+- **Goals & Ambitions** — what you are trying to build in 1, 3, and 10 years
+- **Active Projects** — everything you are working on right now
+- **Financial Situation** — current picture, targets, gaps
+- **Key Relationships** — the important people and their context
+- **Patterns & Habits** — where you consistently underperform
+
+After that interview, JARVIS knows you. Every conversation adds to that knowledge. You never have to update your profile manually — JARVIS learns by paying attention.
+
+---
+
+## Quick Start
 
 ```bash
-# 1. Clone the repository
+# Clone
 git clone https://github.com/yourusername/jarvis.git
 cd jarvis
 
-# 2. Start databases
-docker-compose up -d
-
-# 3. Setup backend
+# Backend
 cd backend
-python -m venv venv
-source venv/bin/activate
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env   # Add your API keys
+docker-compose up -d
 alembic upgrade head
 uvicorn app.main:app --reload
 
-# 4. Setup frontend (new terminal)
+# Frontend (new terminal)
 cd mobile
 npm install
-npm run ios
+npm start   # Press i for iOS simulator
 ```
 
-**First Launch:**
-1. Grant HealthKit permissions when prompted
-2. Pair your Apple Watch if not already paired
-3. Say "Hello JARVIS" to test voice pipeline
+Full setup instructions: **[QUICKSTART.md](./QUICKSTART.md)**
 
 ---
 
-## 📚 Documentation
+## Documentation
 
-**Core Documents:**
-- **[PROJECT.md](./PROJECT.md)** - Complete technical specification and philosophy
-- **[RULES.md](./RULES.md)** - Coding standards and best practices
-- **[TIMELINE.md](./TIMELINE.md)** - 6-month development roadmap with weekly milestones
-- **[STACK.md](./STACK.md)** - Detailed tech stack and infrastructure
-- **[API.md](./API.md)** - REST and WebSocket API specification
-
-**Getting Started:**
-1. Read [PROJECT.md](./PROJECT.md) to understand the vision
-2. Review [RULES.md](./RULES.md) before writing code
-3. Follow [TIMELINE.md](./TIMELINE.md) for weekly goals
-4. Reference [STACK.md](./STACK.md) for setup instructions
+| File | What It Contains |
+|------|-----------------|
+| **[PROJECT.md](./PROJECT.md)** | Complete technical specification — read this first |
+| **[TIMELINE.md](./TIMELINE.md)** | 12-month week-by-week development roadmap |
+| **[RULES.md](./RULES.md)** | Coding standards for TypeScript and Python |
+| **[STACK.md](./STACK.md)** | Tech stack, infrastructure, environment setup |
+| **[API.md](./API.md)** | REST and WebSocket API specification |
+| **[QUICKSTART.md](./QUICKSTART.md)** | Get running locally in under 20 minutes |
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                 MOBILE APP (React Native)                │
-│  Voice Interface • Biometric Display • Real-time Charts │
-└─────────────────────────────────────────────────────────┘
-                         ▲ ▼ WebSocket + REST
-┌─────────────────────────────────────────────────────────┐
-│                BACKEND (FastAPI + Python)                │
-│  State Machine • Decision Engine • Memory Hierarchy     │
-└─────────────────────────────────────────────────────────┘
-         ▲                    ▲                    ▲
-         │                    │                    │
-    PostgreSQL            Pinecone               Redis
-  (Structured Data)    (Vector Search)      (Working Memory)
-```
-
-**Key Components:**
-- **State Machine** - 6 life states (Sleeping, Exercising, Working, Meeting, Leisure, Stressed)
-- **Intervention Engine** - Confidence-based decision logic (>85% threshold)
-- **Memory Hierarchy** - Working (24h) → Episodic (30d) → Semantic (lifetime)
-- **Trust System** - 4 levels with escalating permissions
-
----
-
-## 🎨 Features by Phase
-
-### Phase 1: Foundation (Weeks 1-8) ✅
-- [x] HealthKit integration (HRV, BPM, Sleep)
-- [x] Voice pipeline (Deepgram STT → GPT-4 → ElevenLabs TTS)
-- [x] State machine with context awareness
-- [x] Calendar and location integration
-- [x] Basic conversational memory (24h window)
-- **Target:** <2s voice latency, 90% state accuracy
-
-### Phase 2: Intelligence Layer (Weeks 9-16) 🚧
-- [ ] Proactive notification system
-- [ ] Pattern detection (recurring stress moments)
-- [ ] Hierarchical memory (episodic + semantic)
-- [ ] Intervention decision logic (confidence scoring)
-- [ ] Explanation logging and transparency
-- **Target:** 70% intervention acceptance, <5% false positives
-
-### Phase 3: Autonomy (Weeks 17-24) 📅
-- [ ] Trust level system (Consultant → Executive)
-- [ ] Voice interruption capability
-- [ ] Calendar management (reschedule meetings)
-- [ ] Communication drafting (emails, messages)
-- [ ] Health intervention execution (breathing, movement)
-- **Target:** 90% autonomous action endorsement
-
----
-
-## 🧪 Testing
-
-### Backend Tests
-```bash
-cd backend
-pytest --cov=app tests/
-mypy app/
-```
-
-**Coverage targets:**
-- `core/`: >80% (state machine, decision logic)
-- `services/`: >70% (external integrations)
-
-### Frontend Tests
-```bash
-cd mobile
-npm test
-npm run type-check
-```
-
-**Coverage targets:**
-- `services/` and `hooks/`: >70%
-- `components/`: >60%
-
-### Manual Testing
-```bash
-# Weekly dogfooding checklist
-- [ ] Voice interaction works end-to-end
-- [ ] Biometric data updates every 5 minutes
-- [ ] State machine correctly identifies all 6 states
-- [ ] No crashes over 24-hour continuous run
+iPhone App (React Native + Expo)
+      │
+      │  Hold-to-talk → WebSocket audio stream
+      ▼
+FastAPI Backend
+      │
+      ├── Deepgram STT (streaming transcription)
+      │
+      ├── Context Builder
+      │       ├── PostgreSQL  ← Knowledge Base (6 domains)
+      │       ├── Redis       ← Last 30 conversations
+      │       └── Pinecone    ← Semantic memory (full history)
+      │
+      ├── GPT-4o (4-layer prompt: character + identity + recent + relevant)
+      │
+      └── ElevenLabs TTS (streaming audio back to iPhone)
+            │
+            ▼
+      Background: Celery fact-extraction job
+            └── Updates Knowledge Base from conversation
 ```
 
 ---
 
-## 📊 Performance Benchmarks
+## The JARVIS Character
 
-| Metric | Target | Current |
-|--------|--------|---------|
-| Voice round-trip latency | <2s (p95) | TBD |
-| HealthKit data fetch | <500ms | TBD |
-| State machine transition | <50ms | TBD |
-| Memory retrieval (Pinecone) | <300ms | TBD |
-| App launch time | <2s | TBD |
+JARVIS has a specific character enforced at the prompt level.
 
----
+**Direct.** Gives clear opinions without softening them. When asked what to do, says what to do.
 
-## 🔐 Privacy & Security
+**Honest.** Points out contradictions between your stated goals and your actual behaviour. Does not validate poor decisions.
 
-**Data Classification:**
-- **Never leaves device:** Raw heart rate waveforms, audio recordings
-- **Encrypted in transit:** HRV/BPM summaries, location (city-level)
-- **Stored encrypted:** Conversation transcripts, user goals
+**Contextually sharp.** References past conversations, decisions, and patterns by default. Never acts as if it does not remember what you said last week.
 
-**User Controls:**
-- Explicit opt-in for each data type
-- One-click data export (GDPR compliance)
-- Nuclear option: Delete all server data
+**Not subservient.** Pushes back when you are making an error. Agrees when you are right.
 
-**Security Measures:**
-- TLS 1.3 for all API communication
-- AES-256 encryption at rest
-- JWT authentication with 7-day expiration
-- Rate limiting (100 req/min per user)
+**Concise.** Short sentences. No preambles, no disclaimers.
 
 ---
 
-## 🛠️ Tech Stack
+## UI Design
 
-**Frontend:**
-- React Native 0.73 + Expo SDK 50
-- TypeScript 5.3 (strict mode)
-- Zustand (state management)
-- React Query (server state)
+**Aesthetic:** Iron Man — dark, structured, purposeful.
 
-**Backend:**
-- FastAPI 0.109 + Python 3.11
-- PostgreSQL 16 + TimescaleDB
-- Redis 7.2 (working memory)
-- Pinecone (vector search)
+- Background `#0A0A0A` — near black
+- Primary accent `#00B4D8` — cyan (JARVIS voice, interactive elements)
+- Secondary accent `#FFB703` — gold (status, labels)
+- Text `#F0F4F8` / `#8892A4`
 
-**External Services:**
-- OpenAI GPT-4o (LLM)
-- Deepgram (speech-to-text)
-- ElevenLabs (text-to-speech)
-- Sentry (error tracking)
-
-See [STACK.md](./STACK.md) for complete details.
+**Main screen:** Full dark background. Arc-reactor pulse animation when JARVIS is speaking. Waveform during your speech. Nothing else.
 
 ---
 
-## 🤝 Contributing
+## Tech Stack
 
-This is currently a **solo project** focused on rapid MVP development. Contributions will be accepted after Phase 3 launch.
+**iPhone app:** React Native + Expo, TypeScript, Zustand  
+**Backend:** FastAPI + Python 3.11, async throughout  
+**STT:** Deepgram (streaming)  
+**LLM:** GPT-4o  
+**TTS:** ElevenLabs  
+**Working memory:** Redis (last 30 conversations, 30-day TTL)  
+**Episodic memory:** Pinecone (semantic search over full history)  
+**Knowledge Base:** PostgreSQL (structured personal knowledge graph)  
+**Background jobs:** Celery (fact extraction after every conversation)  
+**Deployment:** Railway / Fly.io  
 
-**If you want to help now:**
-1. Test the app and report bugs (GitHub Issues)
-2. Suggest features (GitHub Discussions)
-3. Share usage patterns (what works, what doesn't)
-
-**Code contributions:**
-- All PRs must pass tests and type checking
-- Follow [RULES.md](./RULES.md) coding standards
-- Include tests for new features
-- Update documentation
-
----
-
-## 📈 Roadmap
-
-**Q1 2025:** Phase 1 - Foundation ✅  
-**Q2 2025:** Phase 2 - Intelligence Layer  
-**Q3 2025:** Phase 3 - Autonomy  
-**Q4 2025:** Public Beta Launch
-
-**2026 Vision:**
-- Android support
-- Computer vision integration (posture analysis)
-- Multi-wearable support (Oura, Whoop, CGM)
-- Team sync features (collective stress monitoring)
+Full stack details: **[STACK.md](./STACK.md)**
 
 ---
 
-## 📝 License
+## Development Roadmap
 
-MIT License - see [LICENSE](./LICENSE) for details.
+**Phase 1 — Months 1–3:** Voice loop + Knowledge Base + Memory. JARVIS hears you and knows you.
 
-**Disclaimer:** J.A.R.V.I.S. is a wellness tool, not a medical device. Always consult healthcare professionals for medical advice.
+**Phase 2 — Months 4–7:** Continuous learning + pattern recognition + proactive intelligence. JARVIS gets smarter every day.
 
----
+**Phase 3 — Months 8–12:** Action layer. Calendar integration, task tracking, financial monitoring. App Store.
 
-## 🙏 Acknowledgments
-
-**Inspiration:**
-- Iron Man (JARVIS character)
-- Andrew Huberman (neuroscience of performance)
-- Peter Attia (quantified health)
-
-**Technologies:**
-- Anthropic Claude (this documentation was co-written with Claude)
-- OpenAI (LLM infrastructure)
-- React Native community
+Full roadmap: **[TIMELINE.md](./TIMELINE.md)**
 
 ---
 
-## 📫 Contact
+## Privacy
 
-**Developer:** [Your Name]  
-**Email:** your.email@example.com  
-**Twitter:** @yourhandle  
-**Website:** https://jarvis.app
+**What is stored:** Conversation text summaries (not audio), your Knowledge Base (encrypted), structured facts extracted from conversations.
+
+**What is never stored:** Raw audio (deleted immediately after transcription). Ever.
+
+**User controls:** Full data export as JSON. One-click complete deletion. Per-domain opt-out (you can exclude financial data from storage, for example).
+
+All data encrypted at rest (AES-256). All traffic over HTTPS/WSS (TLS 1.3). OpenAI called with training data opt-out enabled.
 
 ---
 
-<div align="center">
+## What This Is Not
 
-**"The best way to predict the future is to build it."**
+To stay focused:
 
-Made with ❤️ and biometric data
+- ❌ Not a biometric monitoring app
+- ❌ Not a health tracker
+- ❌ Not a productivity suite
+- ❌ Not an Android app (Phase 1)
+- ❌ Not a multi-user product
 
-</div>
+v1 is a voice assistant that knows you deeply and gets smarter over time. **Build that first.**
+
+---
+
+## Success Criteria
+
+**After 30 days:** JARVIS references past conversations without prompting. Responses are specific to your situation. You speak to it before making decisions.
+
+**After 90 days:** JARVIS knows you well enough that its opinion on a decision genuinely surprises you sometimes. You would describe it as "the only AI that actually knows me."
+
+**The product works when you would rather have JARVIS's input than not have it, on any meaningful decision, every time.**
+
+---
+
+*Solo build. 12-month roadmap. February 2026.*
