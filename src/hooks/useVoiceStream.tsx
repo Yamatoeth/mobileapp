@@ -15,6 +15,7 @@ interface UseVoiceStreamOptions {
   onLLMDone?: (full: string) => void;
   onTTS?: (base64Audio: string) => void;
   onError?: (err: any) => void;
+  onMemoryUpdate?: (data: any) => void;
   chunkSize?: number; // base64 chunk size
 }
 
@@ -30,6 +31,7 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
     onLLMDone,
     onTTS,
     onError,
+    onMemoryUpdate,
     chunkSize = 64 * 1024,
   } = opts;
 
@@ -38,10 +40,25 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
   const [level, setLevel] = useState<number>(0);
 
   useEffect(() => {
+    // subscribe to memory updates (SSE) if provided
+    let unsub: (() => void) | null = null;
+    try {
+      // lazy import to avoid adding dependency at top
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const useMemory = require('./useMemory').default;
+      const mem = useMemory(apiBaseUrl);
+      if (onMemoryUpdate) {
+        unsub = mem.subscribe(userId, (data: any) => onMemoryUpdate && onMemoryUpdate(data));
+      }
+    } catch (e) {
+      // ignore if SSE not supported
+    }
+
     return () => {
       // cleanup on unmount
       wsRef.current?.disconnect();
       wsRef.current = null;
+      if (unsub) unsub();
     };
   }, []);
 
@@ -84,6 +101,20 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
         break;
       case 'stt_done':
         onSTT && onSTT(msg.transcript ?? null);
+        // persist transcript to memory backend
+        try {
+          // lazy import useMemory to avoid SSR issues
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const useMemory = require('./useMemory').default;
+          const mem = useMemory(apiBaseUrl);
+          if (msg.transcript) {
+            mem.upsert(userId, [{ content: msg.transcript, title: 'transcript' }]).catch((err: any) => {
+              console.warn('memory upsert failed', err);
+            });
+          }
+        } catch (e) {
+          // ignore
+        }
         break;
       case 'context_built':
         onContextBuilt && onContextBuilt();

@@ -17,6 +17,7 @@ from app.api.voice import router as voice_router
 from app.api.knowledge import router as knowledge_router
 from app.api.onboarding import router as onboarding_router
 from app.api.auth import router as auth_router
+from app.api.memory import router as memory_router
 
 settings = get_settings()
 
@@ -46,6 +47,7 @@ app.include_router(voice_router, prefix="/api/v1", tags=["voice"])
 app.include_router(knowledge_router, prefix="/api/v1", tags=["knowledge"])
 app.include_router(onboarding_router, prefix="/api/v1", tags=["onboarding"])
 app.include_router(auth_router, prefix="/api/v1", tags=["auth"])
+app.include_router(memory_router, prefix="/api/v1", tags=["memory"])
 
 # CORS middleware for mobile app
 app.add_middleware(

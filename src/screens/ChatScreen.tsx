@@ -13,6 +13,7 @@ import {
   Pressable,
 } from 'react-native'
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { Animated as RNAnimated } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import * as Clipboard from 'expo-clipboard'
@@ -22,6 +23,9 @@ import { useHealthLogs } from '../hooks/useHealthLogs'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { useChatHistory } from '../hooks/useChatHistory'
 import { useTheme } from '../hooks/useTheme'
+import useMemory from '../hooks/useMemory'
+import useVoiceStream from '../hooks/useVoiceStream'
+import FloatingSphere from '../components/FloatingSphere'
 import { sendChatMessageStreaming, type Message as AIMessage } from '../services/ai'
 // Backend context is fetched via `contextService.getServerContext` when needed.
 
@@ -67,11 +71,52 @@ export function ChatScreen() {
     resetTranscript 
   } = useSpeechRecognition()
 
+  const memory = useMemory()
+  const [lastStt, setLastStt] = useState<string | null>(null)
+
+  // voice stream hook (level for sphere responsiveness)
+  const voice = useVoiceStream({ userId: 'test', onSTT: (t) => { /* handled elsewhere */ } })
+  const sharedLevel = useRef(new RNAnimated.Value(0)).current
+  const pulseAnim = useRef(new RNAnimated.Value(0)).current
+
+  // keep shared Animated value in sync with numeric level
+  useEffect(() => {
+    const toVal = Math.max(0, Math.min(1, voice.level || 0))
+    RNAnimated.timing(sharedLevel, { toValue: toVal, duration: 80, useNativeDriver: true }).start()
+  }, [voice.level, sharedLevel])
+
+  // pulse when STT result arrives (transient)
+  useEffect(() => {
+    if (lastStt) {
+      pulseAnim.setValue(0)
+      RNAnimated.sequence([
+        RNAnimated.timing(pulseAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+        RNAnimated.timing(pulseAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]).start()
+    }
+  }, [lastStt, pulseAnim])
+
   // Update input when transcript changes
   useEffect(() => {
     if (transcript) {
+      // append to input
       setInput(prev => prev + transcript)
+      // persist transcript as a user message in conversation history
+      const sttMessage = {
+        id: Date.now().toString(),
+        role: 'user' as const,
+        content: transcript,
+      }
+      addMessage(sttMessage)
+      // optimistic local memory upsert
+      try {
+        memory.upsert('test', [{ content: transcript, title: 'transcript' }]).catch(() => {})
+      } catch (e) {}
+      setLastStt(transcript)
+      // reset speech hook
       resetTranscript()
+      // clear transient STT UI after a short delay
+      setTimeout(() => setLastStt(null), 3000)
     }
   }, [transcript, resetTranscript])
 
@@ -346,6 +391,61 @@ export function ChatScreen() {
 
   return (
     <SafeAreaView className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-white'}`} edges={['top']}>
+      {/* Floating AI sphere background */}
+      <FloatingSphere
+        size={420}
+        style={{ top: 120, opacity: 1 }}
+        // pass Animated.Value for realtime responsiveness
+        level={sharedLevel}
+        isPulsing={!!lastStt}
+        isStreaming={!!streamingMessageId}
+      />
+      <View style={{ position: 'absolute', width: '100%', height: '100%', zIndex: 0 }} pointerEvents="none" />
+
+      {/* Floating control overlay (microphone) */}
+      <View style={{ position: 'absolute', top: 220, left: 0, right: 0, alignItems: 'center', zIndex: 5 }} pointerEvents="box-none">
+        <RNAnimated.View
+          style={{
+            transform: [
+              { scale: RNAnimated.add(1, RNAnimated.multiply(sharedLevel, 0.18)) },
+              { scale: RNAnimated.add(1, RNAnimated.multiply(pulseAnim, 0.06)) },
+            ],
+          }}
+        >
+          <TouchableOpacity
+            onPress={() => {
+              if (voice.state === 'recording') {
+                voice.stopRecording()
+              } else {
+                voice.startRecording()
+              }
+            }}
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: 36,
+              backgroundColor: voice.state === 'recording' ? '#ef4444' : (isDark ? '#111827' : '#ffffff'),
+              alignItems: 'center',
+              justifyContent: 'center',
+              shadowColor: '#000',
+              shadowOpacity: 0.2,
+              shadowRadius: 10,
+            }}
+          >
+            <Ionicons name={voice.state === 'recording' ? 'stop' : 'mic'} size={26} color={voice.state === 'recording' ? '#fff' : (isDark ? '#9ca3af' : '#333')} />
+          </TouchableOpacity>
+        </RNAnimated.View>
+        {/* small status text */}
+        <View style={{ marginTop: 8 }}>
+          {voice.state === 'recording' ? (
+            <Text style={{ color: '#ef4444', fontSize: 12 }}>Listening...</Text>
+          ) : streamingMessageId ? (
+            <Text style={{ color: isDark ? '#9ca3af' : '#333', fontSize: 12 }}>Streaming...</Text>
+          ) : (
+            <Text style={{ color: isDark ? '#9ca3af' : '#666', fontSize: 12 }}>Tap to speak</Text>
+          )}
+        </View>
+      </View>
       {/* Header */}
       <View className={`flex-row p-4 border-b items-center justify-between ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
         <Text className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Medicus</Text>
@@ -515,6 +615,12 @@ export function ChatScreen() {
             editable={!isLoading}
             multiline
           />
+          {/* STT transient feedback */}
+          {lastStt && (
+            <View className="absolute left-16 bottom-16 bg-black/60 px-3 py-2 rounded-lg">
+              <Text style={{ color: '#fff' }} numberOfLines={2}>{lastStt}</Text>
+            </View>
+          )}
           <TouchableOpacity
             className={`bg-primary w-10 h-10 rounded-lg items-center justify-center active:opacity-80 ${isLoading || !input.trim() ? 'opacity-60' : ''}`}
             onPress={sendMessage}

@@ -83,7 +83,7 @@ async def _openai_extract(transcript: str) -> Optional[List[Dict[str, Any]]]:
         "Return ONLY valid JSON. If no facts, return an empty array."
     )
 
-    user_prompt = f"Transcript:\n"""{transcript}"""
+    user_prompt = f"Transcript:\n{transcript}"
 
     payload = {
         "model": "gpt-4o",
