@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import WSClient from '../services/wsClient';
 import { audioRecordingService } from '../services/audioRecording';
+import * as FileSystem from 'expo-file-system/legacy';
+import { audioPlaybackService } from '../services/textToSpeech';
 
 type VoiceState = 'idle' | 'connecting' | 'connected' | 'recording' | 'sending' | 'error';
 
@@ -14,6 +16,7 @@ interface UseVoiceStreamOptions {
   onLLMChunk?: (chunk: string) => void;
   onLLMDone?: (full: string) => void;
   onTTS?: (base64Audio: string) => void;
+  onTTSComplete?: () => void;
   onError?: (err: any) => void;
   onMemoryUpdate?: (data: any) => void;
   chunkSize?: number; // base64 chunk size
@@ -30,6 +33,7 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
     onLLMChunk,
     onLLMDone,
     onTTS,
+    onTTSComplete,
     onError,
     onMemoryUpdate,
     chunkSize = 64 * 1024,
@@ -44,7 +48,6 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
     let unsub: (() => void) | null = null;
     try {
       // lazy import to avoid adding dependency at top
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const useMemory = require('./useMemory').default;
       const mem = useMemory(apiBaseUrl);
       if (onMemoryUpdate) {
@@ -104,7 +107,6 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
         // persist transcript to memory backend
         try {
           // lazy import useMemory to avoid SSR issues
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
           const useMemory = require('./useMemory').default;
           const mem = useMemory(apiBaseUrl);
           if (msg.transcript) {
@@ -126,7 +128,39 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
         onLLMDone && onLLMDone(msg.content || '');
         break;
       case 'tts_audio_base64':
-        onTTS && onTTS(msg.data);
+        // Play received base64-encoded audio (mp3) via expo-av playback
+        (async () => {
+          try {
+            const b64 = msg.data as string;
+            onTTS && onTTS(b64);
+
+            // Write to cache and play
+            const fileName = `tts_${Date.now()}.mp3`;
+            const uri = `${FileSystem.cacheDirectory}${fileName}`;
+            await FileSystem.writeAsStringAsync(uri, b64, { encoding: FileSystem.EncodingType.Base64 });
+            await audioPlaybackService.initialize();
+            await audioPlaybackService.play(
+              uri,
+              () => {
+                try {
+                  onTTSComplete && onTTSComplete();
+                } catch (e) {}
+                // cleanup after playback
+                try {
+                  FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+                } catch (e) {}
+              },
+              (err) => {
+                console.warn('TTS playback error', err);
+                try {
+                  onTTSComplete && onTTSComplete();
+                } catch (e) {}
+              }
+            );
+          } catch (e) {
+            console.warn('Failed to play TTS audio from websocket', e);
+          }
+        })();
         break;
       case 'final_text':
         onLLMDone && onLLMDone(msg.text || '');

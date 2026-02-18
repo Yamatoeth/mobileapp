@@ -12,32 +12,34 @@ Solo development, full-time commitment. Three phases, twelve months. The rule is
 ### Month 1 — Voice Pipeline
 
 **Week 1: Infrastructure**
-- [ ] Monorepo setup (mobile/, backend/, shared/)
-- [ ] FastAPI backend with health check endpoint
-- [ ] PostgreSQL + Redis via Docker Compose locally
-- [ ] React Native + Expo iOS app skeleton
-- [ ] Navigation structure (VoiceScreen, HistoryScreen, KnowledgeScreen, SettingsScreen)
-- [ ] Zustand stores initialised (voice, conversation, knowledge)
+**Week 1: Infrastructure**
+- [x] Monorepo setup (mobile/, backend/, shared/)
+- [x] FastAPI backend with health check endpoint
+- [x] PostgreSQL + Redis via Docker Compose locally
+- [x] React Native + Expo iOS app skeleton
+- [x] Navigation structure (VoiceScreen, HistoryScreen, KnowledgeScreen, SettingsScreen)
+- [x] Zustand stores initialised (voice, conversation, knowledge)
 - [ ] GitHub repo with branch protection
 
 **Week 2: Voice Recording**
-- [ ] `expo-av` audio recording at 16kHz WAV
-- [ ] Microphone permission request and handling
-- [ ] Hold-to-talk button with press/release states
-- [ ] Visual feedback during recording (waveform animation placeholder)
-- [ ] Audio file saved to temp storage before upload
+- [x] `expo-av` audio recording at 16kHz WAV
+- [x] Microphone permission request and handling
+- [x] Hold-to-talk button with press/release states
+- [x] Visual feedback during recording (waveform animation placeholder)
+- [x] Audio file saved to temp storage before upload
 
 **Week 3: STT + LLM**
-- [ ] Deepgram account + streaming transcription endpoint
-- [ ] WebSocket connection (iPhone ↔ backend) for audio streaming
-- [ ] GPT-4o integration with basic system prompt
-- [ ] Streaming LLM response back to client
-- [ ] Basic conversation displayed as text on screen
+**Week 3: STT + LLM**
+- [x] Deepgram account + streaming transcription endpoint
+- [x] WebSocket connection (iPhone ↔ backend) for audio streaming
+- [x] GPT-4o integration with basic system prompt
+- [x] Streaming LLM response back to client
+- [x] Basic conversation displayed as text on screen
 
 **Week 4: TTS + End-to-End**
 - [ ] ElevenLabs account + JARVIS voice configured
 - [ ] Streaming TTS audio back to iPhone
-- [ ] Audio playback via `expo-av`
+- [x] Audio playback via `expo-av`
 - [ ] End-to-end latency test: target under 2 seconds
 - [ ] Fix top 5 latency issues before moving on
 
@@ -87,20 +89,23 @@ Solo development, full-time commitment. Three phases, twelve months. The rule is
 ### Month 3 — Memory System
 
 **Week 9: Working Memory (Redis)**
-- [ ] Store every conversation summary in Redis after each session
-- [ ] 30-conversation sliding window (TTL: 30 days)
-- [ ] Load last 30 summaries into Layer 3 of prompt on every call
-- [ ] Verify: JARVIS references something from 3 days ago unprompted
+**Week 9: Working Memory (Redis)**
+- [x] Store every conversation summary in Redis after each session
+- [x] 30-conversation sliding window (TTL: 30 days)
+- [x] Load last 30 summaries into Layer 3 of prompt on every call
+- [x] Verify: JARVIS references something from 3 days ago unprompted
 
 **Week 10: Episodic Memory (Pinecone)**
-- [ ] Pinecone index: 1536 dimensions, cosine similarity
-- [ ] After each conversation: generate embedding of summary, store in Pinecone
-- [ ] Semantic search on every voice call: retrieve top 5 relevant past conversations
-- [ ] Inject into Layer 4 of prompt
+**Week 10: Episodic Memory (Pinecone)**
+- [x] Pinecone index: 1536 dimensions, cosine similarity
+- [x] After each conversation: generate embedding of summary, store in Pinecone
+- [x] Semantic search on every voice call: retrieve top 5 relevant past conversations
+- [x] Inject into Layer 4 of prompt
 - [ ] Test: ask about a topic from 2 weeks ago — JARVIS finds it
 
 **Week 11: Fact Extraction Pipeline**
-- [ ] Celery worker runs after every conversation
+**Week 11: Fact Extraction Pipeline**
+- [x] Celery worker runs after every conversation
 - [ ] Sends transcript to GPT-4o with structured extraction prompt
 - [ ] Receives JSON list of Knowledge Base updates
 - [ ] Conflict resolution: higher confidence + more recent wins
@@ -121,6 +126,15 @@ Solo development, full-time commitment. Three phases, twelve months. The rule is
 - [ ] Fact extraction updates Knowledge Base after conversation
 - [ ] UI looks and feels like Iron Man, not a generic chatbot
 - [ ] Zero crashes over 7-day continuous use
+**Validation — Phase 1 complete when:**
+- [ ] Voice latency under 2 seconds (p95)
+- [ ] Knowledge Base accurate after onboarding
+- [x] Working memory + episodic memory both active
+- [ ] Fact extraction updates Knowledge Base after conversation
+- [ ] UI looks and feels like Iron Man, not a generic chatbot
+- [ ] Zero crashes over 7-day continuous use
+
+_Updated: 2026-02-18 — items marked done reflect current repo status (backend memory, Pinecone index, Celery worker, Redis, basic frontend skeleton/navigation)._
 
 ---
 

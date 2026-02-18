@@ -73,9 +73,30 @@ export function ChatScreen() {
 
   const memory = useMemory()
   const [lastStt, setLastStt] = useState<string | null>(null)
+  const [isPlayingTTS, setIsPlayingTTS] = useState(false)
+  const ttsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // voice stream hook (level for sphere responsiveness)
-  const voice = useVoiceStream({ userId: 'test', onSTT: (t) => { /* handled elsewhere */ } })
+  const voice = useVoiceStream({
+    userId: 'test',
+    onSTT: (t) => { /* handled elsewhere */ },
+    onTTS: (b64) => {
+      // Show transient playback indicator; cleared when playback likely finished
+      if (ttsTimeoutRef.current) {
+        clearTimeout(ttsTimeoutRef.current)
+      }
+      setIsPlayingTTS(true)
+      // Fallback clear after 8s in case playback completion event not received
+      ttsTimeoutRef.current = setTimeout(() => setIsPlayingTTS(false), 8000)
+    },
+    onTTSComplete: () => {
+      if (ttsTimeoutRef.current) {
+        clearTimeout(ttsTimeoutRef.current)
+        ttsTimeoutRef.current = null
+      }
+      setIsPlayingTTS(false)
+    }
+  })
   const sharedLevel = useRef(new RNAnimated.Value(0)).current
   const pulseAnim = useRef(new RNAnimated.Value(0)).current
 
@@ -173,6 +194,12 @@ export function ChatScreen() {
   useEffect(() => {
     if (!isLoadingApiKey && !apiKey) {
       setShowApiKeySheet(true)
+    }
+    return () => {
+      if (ttsTimeoutRef.current) {
+        clearTimeout(ttsTimeoutRef.current)
+        ttsTimeoutRef.current = null
+      }
     }
   }, [isLoadingApiKey, apiKey])
 
@@ -436,8 +463,13 @@ export function ChatScreen() {
           </TouchableOpacity>
         </RNAnimated.View>
         {/* small status text */}
-        <View style={{ marginTop: 8 }}>
-          {voice.state === 'recording' ? (
+        <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {isPlayingTTS ? (
+            <>
+              <ActivityIndicator size="small" color={isDark ? '#60a5fa' : '#3b82f6'} />
+              <Text style={{ color: isDark ? '#60a5fa' : '#3b82f6', fontSize: 12 }}>Playing...</Text>
+            </>
+          ) : voice.state === 'recording' ? (
             <Text style={{ color: '#ef4444', fontSize: 12 }}>Listening...</Text>
           ) : streamingMessageId ? (
             <Text style={{ color: isDark ? '#9ca3af' : '#333', fontSize: 12 }}>Streaming...</Text>

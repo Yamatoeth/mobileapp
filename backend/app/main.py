@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import sentry_sdk
+from sentry_sdk.integrations.logging import LoggingIntegration
 
 from app.core.config import get_settings
 from app.db.redis_client import redis_client
@@ -20,6 +22,24 @@ from app.api.auth import router as auth_router
 from app.api.memory import router as memory_router
 
 settings = get_settings()
+
+# Initialize Sentry as early as possible so any import-time errors are captured.
+try:
+    if settings.sentry_dsn:
+        # Capture Python logging breadcrumbs and errors
+        sentry_logging = LoggingIntegration(level=None, event_level=None)
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            send_default_pii=True,
+            integrations=[sentry_logging],
+            enable_logs=True,
+            traces_sample_rate=1.0,
+            profile_session_sample_rate=1.0,
+            profile_lifecycle="trace",
+        )
+except Exception:
+    # Fail open: do not prevent app from starting if Sentry setup fails
+    pass
 
 
 @asynccontextmanager
@@ -40,6 +60,14 @@ app = FastAPI(
     version=settings.app_version,
     lifespan=lifespan,
 )
+
+# Optionally attach ASGI middleware for Sentry if available in the runtime.
+try:
+    from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
+    app.add_middleware(SentryAsgiMiddleware)
+except Exception:
+    # integration not available or failed — ignore
+    pass
 
 # Register API routers
 app.include_router(conversations_router, prefix="/api/v1", tags=["conversations"])

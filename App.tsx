@@ -1,4 +1,7 @@
+import 'react-native-gesture-handler'
+import 'react-native-reanimated'
 import './global.css'
+import './src/utils/skiaSafe'
 
 import { StatusBar } from 'expo-status-bar'
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native'

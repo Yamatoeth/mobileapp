@@ -123,7 +123,8 @@ async def _redis_pubsub_generator(user_id: str, request: Request) -> AsyncGenera
     try:
         # aioredis interface
         try:
-            pubsub = redis.pubsub()
+            # use the low-level async client for pubsub
+            pubsub = redis.client.pubsub()
             channel = f"memory_updates:{user_id}"
             await pubsub.subscribe(channel)
             while True:

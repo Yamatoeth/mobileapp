@@ -2,8 +2,13 @@
  * Audio Recording Service - Handles microphone recording for voice input
  * Uses expo-av for recording and file management
  */
-import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+// Import expo-audio at runtime to avoid type/export mismatches across SDKs
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const Audio: any = require('expo-audio')
+// Expo types may vary across SDK versions; use flexible aliases here
+type ExpoRecordingOptions = any
+type ExpoRecording = any
+import * as FileSystem from 'expo-file-system/legacy';
 
 // ============================================
 // Types
@@ -27,39 +32,37 @@ export type RecordingState = 'idle' | 'preparing' | 'recording' | 'stopping';
 // ============================================
 
 // High quality recording for speech recognition
-const RECORDING_OPTIONS: Audio.RecordingOptions = {
-  isMeteringEnabled: true,
-  android: {
-    extension: '.wav',
-    outputFormat: Audio.AndroidOutputFormat.DEFAULT,
-    audioEncoder: Audio.AndroidAudioEncoder.DEFAULT,
-    sampleRate: 16000,
-    numberOfChannels: 1,
-    bitRate: 256000,
-  },
-  ios: {
-    extension: '.wav',
-    outputFormat: Audio.IOSOutputFormat.LINEARPCM,
-    audioQuality: Audio.IOSAudioQuality.HIGH,
-    sampleRate: 16000,
-    numberOfChannels: 1,
-    bitRate: 256000,
-    linearPCMBitDepth: 16,
-    linearPCMIsBigEndian: false,
-    linearPCMIsFloat: false,
-  },
-  web: {
-    mimeType: 'audio/wav',
-    bitsPerSecond: 256000,
-  },
-};
+const RECORDING_OPTIONS: ExpoRecordingOptions =
+  // Prefer built-in preset when available
+  (Audio && Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY) || {
+    isMeteringEnabled: true,
+    android: {
+      extension: '.wav',
+      sampleRate: 16000,
+      numberOfChannels: 1,
+      bitRate: 256000,
+    },
+    ios: {
+      extension: '.wav',
+      sampleRate: 16000,
+      numberOfChannels: 1,
+      bitRate: 256000,
+      linearPCMBitDepth: 16,
+      linearPCMIsBigEndian: false,
+      linearPCMIsFloat: false,
+    },
+    web: {
+      mimeType: 'audio/wav',
+      bitsPerSecond: 256000,
+    },
+  };
 
 // ============================================
 // Audio Recording Service Class
 // ============================================
 
 class AudioRecordingService {
-  private recording: Audio.Recording | null = null;
+  private recording: ExpoRecording | null = null;
   private state: RecordingState = 'idle';
   private startTime: number = 0;
   private levelUpdateCallback: ((level: AudioLevel) => void) | null = null;
@@ -98,12 +101,12 @@ class AudioRecordingService {
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: true,
       playsInSilentModeIOS: true,
-      interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-      interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      interruptionModeIOS: Audio.InterruptionModeIOS?.DO_NOT_MIX ?? 1,
+      interruptionModeAndroid: Audio.InterruptionModeAndroid?.DO_NOT_MIX ?? 1,
       shouldDuckAndroid: true,
       playThroughEarpieceAndroid: false,
       staysActiveInBackground: false,
-    });
+    })
   }
 
   /**

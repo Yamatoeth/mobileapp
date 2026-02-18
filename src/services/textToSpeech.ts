@@ -2,8 +2,141 @@
  * Text-to-Speech Service
  * Supports both ElevenLabs and OpenAI TTS APIs
  */
-import { Audio, AVPlaybackStatus } from 'expo-av';
+// Import expo-audio at runtime to avoid TS export mismatches across SDKs
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const Audio: any = require('expo-audio')
+// Use permissive playback types
+type AVPlaybackStatus = any
+type Sound = any
 import * as FileSystem from 'expo-file-system/legacy';
+// Buffer for base64 conversion
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { Buffer } = require('buffer')
+
+// XHR fallback to reliably fetch ArrayBuffer in React Native environments
+async function fetchArrayBufferViaXHR(url: string, opts: { method?: string; headers?: Record<string, string>; body?: any } = {}): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    try {
+      // @ts-ignore - global XMLHttpRequest available in React Native runtime
+      const xhr = new XMLHttpRequest()
+      xhr.open(opts.method || 'GET', url, true)
+      xhr.responseType = 'arraybuffer'
+      const headers = opts.headers || {}
+      Object.keys(headers).forEach((k) => {
+        try {
+          xhr.setRequestHeader(k, String(headers[k]))
+        } catch (e) {
+          // ignore header set errors
+        }
+      })
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(xhr.response)
+        } else {
+          reject(new Error(`XHR failed: ${xhr.status} ${xhr.statusText}`))
+        }
+      }
+      xhr.onerror = () => reject(new Error('XHR network error'))
+      if (opts.body != null) {
+        xhr.send(opts.body)
+      } else {
+        xhr.send()
+      }
+    } catch (err) {
+      reject(err)
+    }
+  })
+}
+
+import { toUint8Array } from '../utils/binary'
+
+// Robustly convert a Response into a Uint8Array, trying multiple strategies
+async function bufferFromResponse(resp: Response, xhrRetry?: () => Promise<ArrayBuffer>): Promise<Uint8Array> {
+  const tryConvert = (ab: any) => {
+    const u8 = toUint8Array(ab)
+    return u8 && u8.length ? u8 : null
+  }
+
+  // 1) resp.arrayBuffer()
+  if (resp && typeof (resp as any).arrayBuffer === 'function') {
+    try {
+      const ab = await (resp as any).arrayBuffer()
+      const b = tryConvert(ab)
+      if (b) return b
+    } catch (e) {
+      // continue to other strategies
+    }
+  }
+
+  // 2) resp.body stream (ReadableStream)
+  if (resp && (resp as any).body && typeof (resp as any).body.getReader === 'function') {
+    try {
+      const reader = (resp as any).body.getReader()
+      const chunks: Uint8Array[] = []
+      let totalLength = 0
+      while (true) {
+        // eslint-disable-next-line no-await-in-loop
+        const { done, value } = await reader.read()
+        if (done) break
+        if (value) {
+          const v = value instanceof Uint8Array ? value : new Uint8Array(value)
+          chunks.push(v)
+          totalLength += v.byteLength
+        }
+      }
+      const out = new Uint8Array(totalLength)
+      let offset = 0
+      for (const c of chunks) {
+        out.set(c, offset)
+        offset += c.byteLength
+      }
+      return out
+    } catch (e) {
+      // continue
+    }
+  }
+
+  // 3) resp.blob()
+  if (resp && typeof (resp as any).blob === 'function') {
+    try {
+      const blob = await (resp as any).blob()
+      if (blob && typeof (blob as any).arrayBuffer === 'function') {
+        const ab = await (blob as any).arrayBuffer()
+        const b = tryConvert(ab)
+        if (b) return b
+      }
+    } catch (e) {
+      // continue
+    }
+  }
+
+  // 4) resp.text() as last resort if content-type isn't JSON
+  try {
+    const text = await resp.text()
+    const contentType = (resp.headers && typeof resp.headers.get === 'function') ? resp.headers.get('content-type') || '' : ''
+    if (contentType.includes('application/json') || text.trim().startsWith('{')) {
+      throw new Error('Expected binary response but received JSON/text: ' + text.slice(0, 500))
+    }
+    return toUint8Array(Buffer.from(text, 'binary'))
+  } catch (err) {
+    // If provided, try XHR retry which is often reliable in RN
+    if (typeof xhrRetry === 'function') {
+      const ab = await xhrRetry()
+      const b = tryConvert(ab)
+      if (b) return b
+    }
+
+    // Provide debug preview
+    let preview = ''
+    try {
+      preview = await resp.text()
+    } catch (_) {
+      preview = '<unable to read text preview>'
+    }
+    console.error('[textToSpeech] bufferFromResponse failed', { error: String(err), preview })
+    throw new Error('Failed to obtain binary response: ' + String(err) + ' — preview: ' + preview)
+  }
+}
 
 // ============================================
 // Types
@@ -82,40 +215,36 @@ class ElevenLabsService {
     const startTime = Date.now();
     const voiceId = options.voiceId || this.defaultVoiceId;
 
-    const response = await fetch(
-      `${ELEVENLABS_API_URL}/text-to-speech/${voiceId}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'xi-api-key': this.apiKey,
-        },
-        body: JSON.stringify({
-          text: options.text,
-          model_id: 'eleven_turbo_v2', // Fastest model
-          voice_settings: {
-            stability: options.stability ?? 0.5,
-            similarity_boost: options.similarityBoost ?? 0.75,
-            style: 0.5,
-            use_speaker_boost: true,
-          },
-        }),
-      }
-    );
+    const url = `${ELEVENLABS_API_URL}/text-to-speech/${voiceId}`
+    const payload = JSON.stringify({
+      text: options.text,
+      model_id: 'eleven_turbo_v2', // Fastest model
+      voice_settings: {
+        stability: options.stability ?? 0.5,
+        similarity_boost: options.similarityBoost ?? 0.75,
+        style: 0.5,
+        use_speaker_boost: true,
+      },
+    })
+    const headersObj: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'xi-api-key': this.apiKey,
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: headersObj,
+      body: payload,
+    })
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`);
     }
 
-    // Convert response to base64 and save to file
-    const arrayBuffer = await response.arrayBuffer();
-    const base64 = btoa(
-      new Uint8Array(arrayBuffer).reduce(
-        (data, byte) => data + String.fromCharCode(byte),
-        ''
-      )
-    );
+    // Convert response to binary Buffer (robust across RN runtimes)
+    const base64U8 = await bufferFromResponse(response, () => fetchArrayBufferViaXHR(url, { method: 'POST', headers: headersObj, body: payload }))
+    const base64 = Buffer.from(base64U8).toString('base64')
 
     const audioUri = `${FileSystem.cacheDirectory}tts_${Date.now()}.mp3`;
     await FileSystem.writeAsStringAsync(audioUri, base64, {
@@ -129,6 +258,7 @@ class ElevenLabsService {
       durationMs,
       provider: 'elevenlabs',
     };
+
   }
 
   /**
@@ -167,20 +297,24 @@ class OpenAITTSService {
     const startTime = Date.now();
     const voice = options.voiceId || this.defaultVoice;
 
-    const response = await fetch(OPENAI_TTS_URL, {
+    const url = OPENAI_TTS_URL
+    const payload = JSON.stringify({
+      model: 'tts-1', // Use tts-1-hd for higher quality but slower
+      input: options.text,
+      voice,
+      speed: options.speed ?? 1.0,
+      response_format: 'mp3',
+    })
+    const headersObj: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${this.apiKey}`,
+    }
+
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'tts-1', // Use tts-1-hd for higher quality but slower
-        input: options.text,
-        voice,
-        speed: options.speed ?? 1.0,
-        response_format: 'mp3',
-      }),
-    });
+      headers: headersObj,
+      body: payload,
+    })
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -189,14 +323,8 @@ class OpenAITTSService {
       );
     }
 
-    // Convert response to base64 and save to file
-    const arrayBuffer = await response.arrayBuffer();
-    const base64 = btoa(
-      new Uint8Array(arrayBuffer).reduce(
-        (data, byte) => data + String.fromCharCode(byte),
-        ''
-      )
-    );
+    const base64U8 = await bufferFromResponse(response, () => fetchArrayBufferViaXHR(url, { method: 'POST', headers: headersObj, body: payload }))
+    const base64 = Buffer.from(base64U8).toString('base64')
 
     const audioUri = `${FileSystem.cacheDirectory}tts_${Date.now()}.mp3`;
     await FileSystem.writeAsStringAsync(audioUri, base64, {
@@ -306,7 +434,7 @@ class TextToSpeechService {
 // ============================================
 
 class AudioPlaybackService {
-  private sound: Audio.Sound | null = null;
+  private sound: Sound | null = null;
   private isPlaying: boolean = false;
   private onPlaybackStatusUpdate: ((status: AVPlaybackStatus) => void) | null = null;
 
@@ -337,7 +465,7 @@ class AudioPlaybackService {
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUri },
         { shouldPlay: true },
-        (status) => {
+        (status: AVPlaybackStatus) => {
           if (status.isLoaded) {
             if (status.didJustFinish) {
               this.isPlaying = false;

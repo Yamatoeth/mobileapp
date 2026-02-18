@@ -1,6 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
-import { ChatScreen } from '../screens/ChatScreen'
+import { VoiceScreen } from '../screens/VoiceScreen'
 import { LogScreen } from '../screens/LogScreen'
 // Progress screen removed in pivot
 import { ProfileScreen } from '../screens/ProfileScreen'
@@ -28,7 +28,7 @@ export function TabNavigator() {
     >
       <Tab.Screen
         name="Chat"
-        component={ChatScreen}
+        component={VoiceScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="chatbubble-outline" size={size} color={color} />
