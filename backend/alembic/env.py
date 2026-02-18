@@ -3,6 +3,7 @@ from logging.config import fileConfig
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
+from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
@@ -12,7 +13,9 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.db.database import Base
+from app.db.base import Base
+# Import models so that Alembic's autogenerate can see them
+import app.db.models  # noqa: F401
 from app.db.models import User, BiometricReading, Conversation, Message, Intervention
 from app.core.config import get_settings
 
@@ -66,25 +69,20 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode with async support."""
-    
     def do_run_migrations(connection: Connection) -> None:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
 
-    async def run_async_migrations() -> None:
-        connectable = async_engine_from_config(
-            config.get_section(config.config_ini_section, {}),
-            prefix="sqlalchemy.",
-            poolclass=pool.NullPool,
-        )
+    # Prefer a synchronous engine for Alembic migrations so we don't need an async DBAPI.
+    url = config.get_main_option("sqlalchemy.url")
+    # If the URL contains an async driver suffix (eg. +asyncpg), strip it for migrations
+    sync_url = url.replace("+asyncpg", "") if url else url
 
-        async with connectable.connect() as connection:
-            await connection.run_sync(do_run_migrations)
+    connectable = create_engine(sync_url, poolclass=pool.NullPool)
 
-        await connectable.dispose()
-
-    asyncio.run(run_async_migrations())
+    with connectable.connect() as connection:
+        do_run_migrations(connection)
 
 
 if context.is_offline_mode():

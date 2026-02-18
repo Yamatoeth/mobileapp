@@ -12,9 +12,10 @@ function wrapMakePicture() {
     if ((orig as any).__wrapped_by_skiaSafe) return
 
     const wrapped = function (this: any, data: any, ...args: any[]) {
-      // Ensure first arg is Uint8Array
+      // Ensure first arg is an ArrayBuffer (Skia JSI expects ArrayBuffer)
       const u8 = toUint8Array(data)
-      return orig.call(this, u8, ...args)
+      const ab = u8 && u8.buffer ? u8.buffer : u8
+      return orig.call(this, ab, ...args)
     }
     ;(wrapped as any).__wrapped_by_skiaSafe = true
     Picture[name] = wrapped
@@ -35,7 +36,8 @@ function wrapDataMakeFromBytes() {
     if ((orig as any).__wrapped_by_skiaSafe) return
     const wrapped = function (this: any, data: any, ...args: any[]) {
       const u8 = toUint8Array(data)
-      return orig.call(this, u8, ...args)
+      const ab = u8 && u8.buffer ? u8.buffer : u8
+      return orig.call(this, ab, ...args)
     }
     ;(wrapped as any).__wrapped_by_skiaSafe = true
     if (Data.MakeFromBytes) Data.MakeFromBytes = wrapped
@@ -56,7 +58,8 @@ function wrapImageMakeFromEncoded() {
     if ((orig1 as any).__wrapped_by_skiaSafe) return
     const wrapped = function (this: any, data: any, ...args: any[]) {
       const u8 = toUint8Array(data)
-      return orig1.call(this, u8, ...args)
+      const ab = u8 && u8.buffer ? u8.buffer : u8
+      return orig1.call(this, ab, ...args)
     }
     ;(wrapped as any).__wrapped_by_skiaSafe = true
     if (Image.MakeImageFromEncoded) Image.MakeImageFromEncoded = wrapped

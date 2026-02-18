@@ -9,7 +9,7 @@ from uuid import uuid4
 from sqlalchemy import DateTime, Enum, Float, Integer, String, Text, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.database import Base
+from app.db.base import Base
 
 
 def generate_uuid() -> str:
@@ -129,3 +129,109 @@ class Intervention(Base):
     user_response: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     responded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+# ============================================
+# Knowledge Base Models
+# ============================================
+
+
+class KnowledgeIdentity(Base):
+    __tablename__ = "knowledge_identity"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    field_name: Mapped[str] = mapped_column(String(128), index=True)
+    field_value: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    source: Mapped[str] = mapped_column(String(50), default="onboarding")
+    last_updated: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user: Mapped["User"] = relationship()
+
+
+class KnowledgeGoals(Base):
+    __tablename__ = "knowledge_goals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    field_name: Mapped[str] = mapped_column(String(128), index=True)
+    field_value: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    source: Mapped[str] = mapped_column(String(50), default="onboarding")
+    last_updated: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user: Mapped["User"] = relationship()
+
+
+class KnowledgeProjects(Base):
+    __tablename__ = "knowledge_projects"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    field_name: Mapped[str] = mapped_column(String(128), index=True)
+    field_value: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    source: Mapped[str] = mapped_column(String(50), default="onboarding")
+    last_updated: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user: Mapped["User"] = relationship()
+
+
+class KnowledgeFinances(Base):
+    __tablename__ = "knowledge_finances"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    field_name: Mapped[str] = mapped_column(String(128), index=True)
+    field_value: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    source: Mapped[str] = mapped_column(String(50), default="onboarding")
+    last_updated: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user: Mapped["User"] = relationship()
+
+
+class KnowledgeRelationships(Base):
+    __tablename__ = "knowledge_relationships"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    field_name: Mapped[str] = mapped_column(String(128), index=True)
+    field_value: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    source: Mapped[str] = mapped_column(String(50), default="onboarding")
+    last_updated: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user: Mapped["User"] = relationship()
+
+
+class KnowledgePatterns(Base):
+    __tablename__ = "knowledge_patterns"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    field_name: Mapped[str] = mapped_column(String(128), index=True)
+    field_value: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    source: Mapped[str] = mapped_column(String(50), default="analysis")
+    last_updated: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user: Mapped["User"] = relationship()
+
+
+class KnowledgeUpdate(Base):
+    __tablename__ = "knowledge_updates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("conversations.id"), nullable=True)
+    table_name: Mapped[str] = mapped_column(String(64))
+    field_name: Mapped[str] = mapped_column(String(128))
+    old_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    new_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    source: Mapped[str] = mapped_column(String(50), default="system")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    user: Mapped["User"] = relationship()

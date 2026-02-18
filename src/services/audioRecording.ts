@@ -2,9 +2,9 @@
  * Audio Recording Service - Handles microphone recording for voice input
  * Uses expo-av for recording and file management
  */
-// Import expo-audio at runtime to avoid type/export mismatches across SDKs
+// Import `Audio` from `expo-av` at runtime to avoid type/export mismatches across SDKs
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const Audio: any = require('expo-audio')
+const { Audio }: any = require('expo-av')
 // Expo types may vary across SDK versions; use flexible aliases here
 type ExpoRecordingOptions = any
 type ExpoRecording = any
@@ -73,7 +73,9 @@ class AudioRecordingService {
    */
   async requestPermissions(): Promise<boolean> {
     try {
+      console.log('[audioRecording] requestPermissions: requesting');
       const { status } = await Audio.requestPermissionsAsync();
+      console.log('[audioRecording] requestPermissions: status=', status);
       return status === 'granted';
     } catch (error) {
       console.error('Failed to request audio permissions:', error);
@@ -87,6 +89,7 @@ class AudioRecordingService {
   async hasPermissions(): Promise<boolean> {
     try {
       const { status } = await Audio.getPermissionsAsync();
+      console.log('[audioRecording] hasPermissions:', status);
       return status === 'granted';
     } catch (error) {
       console.error('Failed to check audio permissions:', error);
@@ -135,6 +138,7 @@ class AudioRecordingService {
       this.levelUpdateCallback = onLevelUpdate || null;
 
       // Configure audio mode
+      console.log('[audioRecording] configuring audio mode');
       await this.configureAudioMode();
 
       // Create and prepare recording
@@ -153,7 +157,7 @@ class AudioRecordingService {
         this.startLevelMonitoring();
       }
 
-      console.log('Recording started');
+      console.log('[audioRecording] Recording started');
       return true;
     } catch (error) {
       console.error('Failed to start recording:', error);
@@ -238,7 +242,7 @@ class AudioRecordingService {
       this.recording = null;
       this.state = 'idle';
 
-      console.log(`Recording stopped: ${durationMs}ms, ${fileSize} bytes`);
+      console.log(`[audioRecording] Recording stopped: ${durationMs}ms, ${fileSize} bytes, uri=${uri}`);
 
       return {
         uri,
@@ -311,9 +315,11 @@ class AudioRecordingService {
    */
   async getRecordingAsBase64(uri: string): Promise<string | null> {
     try {
+      console.log('[audioRecording] Reading recording as base64 from', uri);
       const base64 = await FileSystem.readAsStringAsync(uri, {
         encoding: 'base64',
       });
+      console.log('[audioRecording] Read base64 length=', base64?.length || 0);
       return base64;
     } catch (error) {
       console.error('Failed to read recording as base64:', error);

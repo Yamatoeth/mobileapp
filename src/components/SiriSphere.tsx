@@ -26,6 +26,20 @@ function generateParticles(count: number, radius: number) {
 }
 
 export const SiriSphere: React.FC<SiriSphereProps> = ({ state, audioLevel, size = 100 }) => {
+  // Defensive: if Skia native bindings are not available or misbehaving
+  // avoid calling any Skia factories (which can throw JSI errors about ArrayBuffer)
+  const SKIA_AVAILABLE = typeof Skia !== 'undefined' && !!Canvas && !!Circle && !!Group
+  if (!SKIA_AVAILABLE) {
+    // Render a simple React Native fallback so the app remains usable
+    const fallbackRadius = size
+    const backgroundColor = voiceColors.primary
+    return (
+      <View style={{ width: fallbackRadius * 2, height: fallbackRadius * 2, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: fallbackRadius * 1.6, height: fallbackRadius * 1.6, borderRadius: fallbackRadius * 0.8, backgroundColor: backgroundColor, opacity: 0.18 }} />
+        <View style={{ position: 'absolute', width: fallbackRadius, height: fallbackRadius, borderRadius: fallbackRadius / 2, backgroundColor: backgroundColor }} />
+      </View>
+    )
+  }
   const [particles, setParticles] = useState(() => generateParticles(64, size))
   const rafRef = useRef<number | null>(null)
   const tRef = useRef<number>(0)

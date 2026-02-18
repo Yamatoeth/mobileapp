@@ -1,3 +1,164 @@
+from typing import List, Optional
+from datetime import datetime
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+
+from app.db.database import async_session_maker
+from app.core import prompt_engine
+import os
+import asyncio
+import openai
+
+router = APIRouter(prefix="/kb", tags=["kb"])
+
+
+class KBUpdate(BaseModel):
+    domain: str
+    user_id: int
+    field_name: str
+    field_value: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    source: str
+    conversation_id: Optional[int] = None
+
+
+class KBApplyRequest(BaseModel):
+    updates: List[KBUpdate]
+
+
+MODEL_MAP = {
+    "identity": "KnowledgeIdentity",
+    "goals": "KnowledgeGoals",
+    "projects": "KnowledgeProjects",
+    "finances": "KnowledgeFinances",
+    "relationships": "KnowledgeRelationships",
+    "patterns": "KnowledgePatterns",
+}
+
+
+@router.post("/apply")
+async def apply_updates(req: KBApplyRequest):
+    applied = 0
+    for u in req.updates:
+        model_name = MODEL_MAP.get(u.domain)
+        if not model_name:
+            raise HTTPException(status_code=400, detail=f"unknown domain: {u.domain}")
+        models_mod = __import__("app.db.models", fromlist=[model_name])
+        model_cls = getattr(models_mod, model_name, None)
+        if model_cls is None:
+            raise HTTPException(status_code=500, detail=f"model {model_name} not found")
+
+        async with async_session_maker() as session:
+            obj = model_cls(
+                user_id=u.user_id,
+                field_name=u.field_name,
+                field_value=u.field_value,
+                confidence=u.confidence,
+                source=u.source,
+                last_updated=datetime.utcnow(),
+            )
+            session.add(obj)
+            await session.commit()
+            applied += 1
+
+    return {"applied": applied}
+
+
+@router.get("/items/{domain}/{user_id}")
+async def list_domain_items(domain: str, user_id: int):
+    model_name = MODEL_MAP.get(domain)
+    if not model_name:
+        raise HTTPException(status_code=400, detail=f"unknown domain: {domain}")
+    models_mod = __import__("app.db.models", fromlist=[model_name])
+    model_cls = getattr(models_mod, model_name, None)
+    if model_cls is None:
+        raise HTTPException(status_code=500, detail=f"model {model_name} not found")
+
+    async with async_session_maker() as session:
+        q = await session.execute(select(model_cls).where(model_cls.user_id == user_id))
+        rows = q.scalars().all()
+
+    out = []
+    for r in rows:
+        out.append({
+            "id": getattr(r, "id", None),
+            "field_name": getattr(r, "field_name", None),
+            "field_value": getattr(r, "field_value", None),
+            "confidence": getattr(r, "confidence", None),
+            "source": getattr(r, "source", None),
+            "last_updated": getattr(r, "last_updated", None).isoformat() if getattr(r, "last_updated", None) else None,
+        })
+
+    return {"items": out}
+
+
+class ExtractRequest(BaseModel):
+    user_id: int
+    transcript: str
+    conversation_id: Optional[int] = None
+
+
+@router.post("/extract")
+async def extract_updates(req: ExtractRequest):
+    """Call LLM to extract KB updates from a conversation transcript.
+
+    Returns a JSON array of KBUpdate-like dicts the frontend can review.
+    """
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
+
+    # Compose an instruction prompt for structured JSON extraction
+    extra_instructions = (
+        "Extract factual user knowledge into a JSON array.\n"
+        "Each item must be an object with keys: domain (one of identity, goals, projects, finances, relationships, patterns),\n"
+        "field_name, field_value, confidence (0.0-1.0), source (onboarding/conversation/manual).\n"
+        "Return only JSON (no explanation). Example:\n"
+        "[ { \"domain\": \"identity\", \"user_id\": 1, \"field_name\": \"name\", \"field_value\": \"Simon\", \"confidence\": 0.95, \"source\": \"onboarding\", \"conversation_id\": 123 } ]"
+    )
+
+    messages = prompt_engine.build_messages(
+        user_input=req.transcript,
+        context=None,
+        extra_instructions=extra_instructions,
+    )
+
+    # Use blocking openai.ChatCompletion in a thread to avoid blocking the event loop
+    async def call_openai():
+        openai.api_key = api_key
+        resp = openai.ChatCompletion.create(
+            model="gpt-4o",
+            messages=[{"role": m["role"], "content": m["content"]} for m in messages],
+            temperature=0.0,
+            max_tokens=800,
+        )
+        return resp
+
+    try:
+        resp = await asyncio.to_thread(call_openai)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    try:
+        text = resp.choices[0].message.content
+        # Parse JSON from model output
+        import json
+
+        parsed = json.loads(text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"failed to parse LLM output: {e}")
+
+    # Attach user_id and conversation_id if missing
+    out = []
+    for item in parsed:
+        item.setdefault("user_id", req.user_id)
+        if req.conversation_id is not None:
+            item.setdefault("conversation_id", req.conversation_id)
+        out.append(item)
+
+    return {"suggested": out}
 """
 Knowledge Base API (Layer 2)
 

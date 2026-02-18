@@ -12,7 +12,6 @@ Solo development, full-time commitment. Three phases, twelve months. The rule is
 ### Month 1 — Voice Pipeline
 
 **Week 1: Infrastructure**
-**Week 1: Infrastructure**
 - [x] Monorepo setup (mobile/, backend/, shared/)
 - [x] FastAPI backend with health check endpoint
 - [x] PostgreSQL + Redis via Docker Compose locally
@@ -29,7 +28,6 @@ Solo development, full-time commitment. Three phases, twelve months. The rule is
 - [x] Audio file saved to temp storage before upload
 
 **Week 3: STT + LLM**
-**Week 3: STT + LLM**
 - [x] Deepgram account + streaming transcription endpoint
 - [x] WebSocket connection (iPhone ↔ backend) for audio streaming
 - [x] GPT-4o integration with basic system prompt
@@ -37,8 +35,8 @@ Solo development, full-time commitment. Three phases, twelve months. The rule is
 - [x] Basic conversation displayed as text on screen
 
 **Week 4: TTS + End-to-End**
-- [ ] ElevenLabs account + JARVIS voice configured
-- [ ] Streaming TTS audio back to iPhone
+- [x] ElevenLabs account + JARVIS voice configured
+- [x] Streaming TTS audio back to iPhone
 - [x] Audio playback via `expo-av`
 - [ ] End-to-end latency test: target under 2 seconds
 - [ ] Fix top 5 latency issues before moving on
@@ -53,24 +51,24 @@ Solo development, full-time commitment. Three phases, twelve months. The rule is
 ### Month 2 — Knowledge Base & Onboarding
 
 **Week 5: Knowledge Base Schema**
-- [ ] PostgreSQL tables: `users`, `knowledge_identity`, `knowledge_goals`, `knowledge_projects`, `knowledge_finances`, `knowledge_relationships`, `knowledge_patterns`
-- [ ] Each table: `user_id`, `field_name`, `field_value` (text), `confidence` (0–1), `last_updated`, `source` (onboarding/conversation/manual)
-- [ ] `knowledge_updates` table: change log with conversation reference
-- [ ] Alembic migrations for all tables
+- [X] PostgreSQL tables: `users`, `knowledge_identity`, `knowledge_goals`, `knowledge_projects`, `knowledge_finances`, `knowledge_relationships`, `knowledge_patterns`
+- [X] Each table: `user_id`, `field_name`, `field_value` (text), `confidence` (0–1), `last_updated`, `source` (onboarding/conversation/manual)
+- [X] `knowledge_updates` table: change log with conversation reference
+- [X] Alembic migrations for all tables
 
 **Week 6: Onboarding Interview**
-- [ ] Onboarding flow screen (separate from main voice screen)
-- [ ] LLM-generated interview questions — adapts to user answers
-- [ ] Six domain sequence: Identity → Goals → Projects → Finances → Relationships → Patterns
-- [ ] Interview runs as a conversation, not a form
-- [ ] 45-minute target duration (test this yourself first)
+- [X] Onboarding flow screen (separate from main voice screen)
+- [X] LLM-generated interview questions — adapts to user answers
+- [X] Six domain sequence: Identity → Goals → Projects → Finances → Relationships → Patterns
+- [X] Interview runs as a conversation, not a form
+- [X] 45-minute target duration (test this yourself first)
 
 **Week 7: Knowledge Base Population**
-- [ ] Parse onboarding conversation and extract structured facts via GPT-4o
-- [ ] Write extracted facts into all six Knowledge Base tables
-- [ ] Summary review screen — user sees what JARVIS learned and corrects it
-- [ ] Knowledge Dashboard screen showing all six domains
-- [ ] Edit any field manually from the dashboard
+- [X] Parse onboarding conversation and extract structured facts via GPT-4o
+- [X] Write extracted facts into all six Knowledge Base tables
+- [X] Summary review screen — user sees what JARVIS learned and corrects it
+- [X] Knowledge Dashboard screen showing all six domains
+- [X] Edit any field manually from the dashboard
 
 **Week 8: Context Builder v1**
 - [ ] `ContextBuilder` class in backend
@@ -96,14 +94,13 @@ Solo development, full-time commitment. Three phases, twelve months. The rule is
 - [x] Verify: JARVIS references something from 3 days ago unprompted
 
 **Week 10: Episodic Memory (Pinecone)**
-**Week 10: Episodic Memory (Pinecone)**
 - [x] Pinecone index: 1536 dimensions, cosine similarity
 - [x] After each conversation: generate embedding of summary, store in Pinecone
 - [x] Semantic search on every voice call: retrieve top 5 relevant past conversations
 - [x] Inject into Layer 4 of prompt
 - [ ] Test: ask about a topic from 2 weeks ago — JARVIS finds it
 
-**Week 11: Fact Extraction Pipeline**
+
 **Week 11: Fact Extraction Pipeline**
 - [x] Celery worker runs after every conversation
 - [ ] Sends transcript to GPT-4o with structured extraction prompt

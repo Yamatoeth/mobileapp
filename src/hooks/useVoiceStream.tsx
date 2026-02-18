@@ -40,6 +40,7 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
   } = opts;
 
   const wsRef = useRef<WSClient | null>(null);
+  const ttsChunksRef = useRef<string[]>([]);
   const [state, setState] = useState<VoiceState>('idle');
   const [level, setLevel] = useState<number>(0);
 
@@ -91,6 +92,9 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
 
   function handleMessage(msg: any) {
     if (!msg || typeof msg !== 'object') return;
+    try {
+      console.debug('[useVoiceStream] handleMessage', msg.type || msg);
+    } catch (e) {}
     const t = msg.type;
     switch (t) {
       case 'ready':
@@ -133,15 +137,18 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
           try {
             const b64 = msg.data as string;
             onTTS && onTTS(b64);
-
             // Write to cache and play
             const fileName = `tts_${Date.now()}.mp3`;
             const uri = `${FileSystem.cacheDirectory}${fileName}`;
+            console.log('[useVoiceStream] Writing TTS base64 to', uri, 'size=', b64.length);
             await FileSystem.writeAsStringAsync(uri, b64, { encoding: FileSystem.EncodingType.Base64 });
+            console.log('[useVoiceStream] Written TTS file, initializing playback');
             await audioPlaybackService.initialize();
+            console.log('[useVoiceStream] Playing TTS file', uri);
             await audioPlaybackService.play(
               uri,
               () => {
+                console.log('[useVoiceStream] TTS playback complete', uri);
                 try {
                   onTTSComplete && onTTSComplete();
                 } catch (e) {}
@@ -159,6 +166,62 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
             );
           } catch (e) {
             console.warn('Failed to play TTS audio from websocket', e);
+          }
+        })();
+        break;
+      case 'tts_audio_chunk':
+        try {
+          const chunk = msg.data as string;
+          // collect chunks in memory until done
+          ttsChunksRef.current.push(chunk);
+          console.debug('[useVoiceStream] Collected tts chunk, total_chunks=', ttsChunksRef.current.length, 'chunk_len=', chunk.length);
+        } catch (e) {
+          console.warn('Failed to collect tts chunk', e);
+        }
+        break;
+      case 'tts_audio_done':
+        // assemble collected chunks and play as a single mp3 file
+        (async () => {
+          try {
+            const all = ttsChunksRef.current.join('');
+            const count = ttsChunksRef.current.length;
+            ttsChunksRef.current = [];
+            console.log('[useVoiceStream] Assembling TTS stream, chunks=', count, 'total_len=', all.length);
+            if (!all) {
+              onTTSComplete && onTTSComplete();
+              return;
+            }
+            onTTS && onTTS(all);
+            const fileName = `tts_${Date.now()}.mp3`;
+            const uri = `${FileSystem.cacheDirectory}${fileName}`;
+            console.log('[useVoiceStream] Writing assembled TTS to', uri);
+            await FileSystem.writeAsStringAsync(uri, all, { encoding: FileSystem.EncodingType.Base64 });
+            console.log('[useVoiceStream] Written assembled TTS, initializing playback');
+            await audioPlaybackService.initialize();
+            console.log('[useVoiceStream] Playing assembled TTS file', uri);
+            await audioPlaybackService.play(
+              uri,
+              () => {
+                console.log('[useVoiceStream] Assembled TTS playback complete', uri);
+                try {
+                  onTTSComplete && onTTSComplete();
+                } catch (e) {}
+                try {
+                  FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+                } catch (e) {}
+              },
+              (err) => {
+                console.warn('TTS playback error', err);
+                try {
+                  onTTSComplete && onTTSComplete();
+                } catch (e) {}
+              }
+            );
+          } catch (e) {
+            console.warn('Failed to assemble/play TTS stream', e);
+            try {
+              onTTSComplete && onTTSComplete();
+            } catch (ee) {}
           }
         })();
         break;
@@ -203,15 +266,18 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
       }
 
       // split into chunks to avoid huge frames
+      let idx = 0;
       for (let i = 0; i < b64.length; i += chunkSize) {
         const chunk = b64.slice(i, i + chunkSize);
         try {
+          console.debug('[useVoiceStream] Sending audio chunk', idx, 'len=', chunk.length);
           wsRef.current?.sendAudioBase64(chunk);
           // small pause to avoid flooding
           await new Promise((r) => setTimeout(r, 50));
         } catch (err) {
           console.warn('Failed sending audio chunk', err);
         }
+        idx += 1;
       }
 
       // signal final

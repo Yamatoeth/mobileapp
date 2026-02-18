@@ -2,9 +2,9 @@
  * Text-to-Speech Service
  * Supports both ElevenLabs and OpenAI TTS APIs
  */
-// Import expo-audio at runtime to avoid TS export mismatches across SDKs
+// Import expo-av at runtime to avoid TS export mismatches across SDKs
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const Audio: any = require('expo-audio')
+const { Audio }: any = require('expo-av')
 // Use permissive playback types
 type AVPlaybackStatus = any
 type Sound = any
@@ -368,18 +368,22 @@ class TextToSpeechService {
    */
   autoConfigureFromEnv(): boolean {
     const elevenlabsKey = process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY;
+    const elevenlabsVoice = process.env.EXPO_PUBLIC_ELEVENLABS_VOICE_ID;
     const openaiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 
     if (elevenlabsKey) {
       this.configure({
         provider: 'elevenlabs',
         apiKey: elevenlabsKey,
+        voiceId: elevenlabsVoice,
       });
       return true;
     } else if (openaiKey) {
+      const openaiVoice = process.env.EXPO_PUBLIC_OPENAI_VOICE_ID;
       this.configure({
         provider: 'openai',
         apiKey: openaiKey,
+        voiceId: openaiVoice,
       });
       return true;
     }
@@ -442,6 +446,7 @@ class AudioPlaybackService {
    * Initialize audio settings
    */
   async initialize(): Promise<void> {
+    console.log('[audioPlayback] initialize: setting audio mode');
     await Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
       staysActiveInBackground: false,
@@ -462,6 +467,7 @@ class AudioPlaybackService {
       await this.stop();
 
       // Create and load new sound
+      console.log('[audioPlayback] play:', audioUri);
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUri },
         { shouldPlay: true },
@@ -469,6 +475,7 @@ class AudioPlaybackService {
           if (status.isLoaded) {
             if (status.didJustFinish) {
               this.isPlaying = false;
+              console.log('[audioPlayback] didJustFinish', audioUri);
               onComplete?.();
             }
           }
@@ -480,6 +487,7 @@ class AudioPlaybackService {
       this.isPlaying = true;
     } catch (error) {
       this.isPlaying = false;
+      console.error('[audioPlayback] play error', error);
       onError?.(error instanceof Error ? error : new Error(String(error)));
     }
   }

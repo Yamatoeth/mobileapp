@@ -8,6 +8,7 @@ import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { View } from 'react-native'
 import { TabNavigator } from './src/navigation/TabNavigator'
+import { VoiceScreen } from './src/screens/VoiceScreen'
 import { ThemeProvider, useTheme } from './src/hooks/useTheme'
 import { OnboardingScreen } from './src/screens/OnboardingScreen'
 import { useOnboarding } from './src/hooks/useOnboarding'
@@ -60,7 +61,7 @@ function AppContent() {
   return (
     <View className={`flex-1 ${isDark ? 'dark' : ''}`}>
       <NavigationContainer theme={navigationTheme}>
-        <TabNavigator />
+        {process.env.EXPO_PUBLIC_FORCE_VOICE === '1' ? <VoiceScreen /> : <TabNavigator />}
         <StatusBar style={isDark ? 'light' : 'dark'} />
       </NavigationContainer>
     </View>

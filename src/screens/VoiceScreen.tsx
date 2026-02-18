@@ -79,6 +79,13 @@ export function VoiceScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: voiceGradient[0] }]}> 
       <Animated.View style={[styles.backgroundGlow, { transform: [{ scale: pulseAnim }], opacity: glowAnim.interpolate({ inputRange: [0,1], outputRange: [0.45, 0.95] }) }]} />
 
+      {/* Arc-reactor rings behind the mic button */}
+      <View style={styles.ringsWrap} pointerEvents="none">
+        <Animated.View style={[styles.ring, { transform: [{ scale: pulseAnim }], opacity: glowAnim.interpolate({ inputRange: [0,1], outputRange: [0.06, 0.28] }) }]} />
+        <Animated.View style={[styles.ringSmall, { transform: [{ scale: pulseAnim }], opacity: glowAnim.interpolate({ inputRange: [0,1], outputRange: [0.04, 0.22] }) }]} />
+        <Animated.View style={[styles.ringInner, { transform: [{ scale: pulseAnim }], opacity: glowAnim.interpolate({ inputRange: [0,1], outputRange: [0.08, 0.36] }) }]} />
+      </View>
+
       <View style={styles.header} accessible accessibilityRole="header">
         <Text style={[styles.title, { color: '#00D9FF' }]}>JARVIS</Text>
       </View>
@@ -91,7 +98,6 @@ export function VoiceScreen() {
         <View style={styles.waveContainer} pointerEvents="none">
           <SiriSphere audioLevel={audioLevel ?? 0} state={state} size={100} />
         </View>
-
         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
           <Pressable
             onPressIn={handlePressIn}
@@ -111,9 +117,22 @@ export function VoiceScreen() {
 
       {!!(transcript || response) && (
         <Animated.View style={styles.transcriptWrap} accessibilityLiveRegion="polite">
-          <View style={styles.transcriptCard}>
-            <Text style={styles.transcriptTitle}>Transcript</Text>
-            <Text style={styles.transcriptText}>{transcript || response}</Text>
+          <View style={styles.transcriptCardRow}>
+            {/* Assistant (JARVIS) message on the left */}
+            {response ? (
+              <View style={[styles.bubble, styles.bubbleLeft]}>
+                <Text style={styles.bubbleAuthor}>JARVIS</Text>
+                <Text style={styles.bubbleText}>{response}</Text>
+              </View>
+            ) : null}
+
+            {/* User message on the right */}
+            {transcript ? (
+              <View style={[styles.bubble, styles.bubbleRight]}>
+                <Text style={styles.bubbleAuthorRight}>You</Text>
+                <Text style={[styles.bubbleText, { color: '#001022' }]}>{transcript}</Text>
+              </View>
+            ) : null}
           </View>
         </Animated.View>
       )}
@@ -215,5 +234,73 @@ const styles = StyleSheet.create({
   },
   transcriptText: {
     color: '#d0f8ff'
+  }
+  ,
+  ringsWrap: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    top: '45%',
+    left: '50%',
+    transform: [{ translateX: -BUTTON_SIZE / 2 }, { translateY: -BUTTON_SIZE / 2 }],
+    width: BUTTON_SIZE * 2,
+    height: BUTTON_SIZE * 2,
+  },
+  ring: {
+    position: 'absolute',
+    width: BUTTON_SIZE * 1.8,
+    height: BUTTON_SIZE * 1.8,
+    borderRadius: (BUTTON_SIZE * 1.8) / 2,
+    backgroundColor: voiceColors.primary,
+    opacity: 0.12,
+  },
+  ringSmall: {
+    position: 'absolute',
+    width: BUTTON_SIZE * 1.25,
+    height: BUTTON_SIZE * 1.25,
+    borderRadius: (BUTTON_SIZE * 1.25) / 2,
+    backgroundColor: voiceColors.primary,
+    opacity: 0.08,
+  },
+  ringInner: {
+    position: 'absolute',
+    width: BUTTON_SIZE * 0.9,
+    height: BUTTON_SIZE * 0.9,
+    borderRadius: (BUTTON_SIZE * 0.9) / 2,
+    backgroundColor: voiceColors.primary,
+    opacity: 0.18,
+  },
+  transcriptCardRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+  },
+  bubble: {
+    maxWidth: '70%',
+    padding: 12,
+    borderRadius: 12,
+    margin: 6,
+  },
+  bubbleLeft: {
+    backgroundColor: 'rgba(0,180,216,0.12)',
+    alignSelf: 'flex-start',
+  },
+  bubbleRight: {
+    backgroundColor: '#ffffff',
+    alignSelf: 'flex-end',
+  },
+  bubbleAuthor: {
+    color: voiceColors.accent,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  bubbleAuthorRight: {
+    color: '#333',
+    fontWeight: '700',
+    marginBottom: 6,
+    textAlign: 'right'
+  },
+  bubbleText: {
+    color: '#d8fbff'
   }
 })

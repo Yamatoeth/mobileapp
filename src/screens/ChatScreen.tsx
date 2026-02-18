@@ -26,6 +26,9 @@ import { useTheme } from '../hooks/useTheme'
 import useMemory from '../hooks/useMemory'
 import useVoiceStream from '../hooks/useVoiceStream'
 import FloatingSphere from '../components/FloatingSphere'
+import ArcReactor from '../components/ArcReactor'
+import VoiceStateIndicator from '../components/VoiceStateIndicator'
+import COLORS from '../styles/colors'
 import { sendChatMessageStreaming, type Message as AIMessage } from '../services/ai'
 // Backend context is fetched via `contextService.getServerContext` when needed.
 
@@ -439,6 +442,10 @@ export function ChatScreen() {
             ],
           }}
         >
+          <View style={{ position: 'absolute', top: -90, alignItems: 'center' }} pointerEvents="none">
+            <ArcReactor size={180} />
+          </View>
+
           <TouchableOpacity
             onPress={() => {
               if (voice.state === 'recording') {
@@ -451,7 +458,7 @@ export function ChatScreen() {
               width: 72,
               height: 72,
               borderRadius: 36,
-              backgroundColor: voice.state === 'recording' ? '#ef4444' : (isDark ? '#111827' : '#ffffff'),
+              backgroundColor: voice.state === 'recording' ? '#ef4444' : (isDark ? COLORS.background : '#ffffff'),
               alignItems: 'center',
               justifyContent: 'center',
               shadowColor: '#000',
@@ -462,6 +469,9 @@ export function ChatScreen() {
             <Ionicons name={voice.state === 'recording' ? 'stop' : 'mic'} size={26} color={voice.state === 'recording' ? '#fff' : (isDark ? '#9ca3af' : '#333')} />
           </TouchableOpacity>
         </RNAnimated.View>
+        <View style={{ marginTop: 120 }}>
+          <VoiceStateIndicator state={voice.state} />
+        </View>
         {/* small status text */}
         <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {isPlayingTTS ? (
@@ -479,8 +489,8 @@ export function ChatScreen() {
         </View>
       </View>
       {/* Header */}
-      <View className={`flex-row p-4 border-b items-center justify-between ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <Text className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Medicus</Text>
+      <View style={{ flexDirection: 'row', padding: 16, borderBottomWidth: 1, alignItems: 'center', justifyContent: 'space-between', borderBottomColor: isDark ? '#374151' : '#e5e7eb' }}>
+        <Text style={{ fontSize: 24, fontWeight: '700', color: COLORS.accent }}>Medicus</Text>
         <View className="flex-row gap-2">
           {messages.length > 1 && (
             <TouchableOpacity
@@ -505,26 +515,14 @@ export function ChatScreen() {
         ref={scrollViewRef}
       >
         {messages.map((message) => (
-          <View
-            key={message.id}
-            className={`flex-row ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            <Pressable
-              onLongPress={() => copyToClipboard(message.content, message.id)}
-              className={`max-w-[85%] rounded-2xl ${
-                message.role === 'user' 
-                  ? 'bg-primary px-4 py-3' 
-                  : message.error 
-                    ? `${isDark ? 'bg-red-900/30 border-red-800' : 'bg-red-50 border-red-200'} border px-4 py-2`
-                    : `${isDark ? 'bg-gray-800' : 'bg-gray-100'} px-4 py-2`
-              }`}
-            >
+          <View key={message.id} style={{ flexDirection: 'row', justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start' }}>
+            <Pressable onLongPress={() => copyToClipboard(message.content, message.id)} style={{ maxWidth: '85%', borderRadius: 18, paddingHorizontal: 12, paddingVertical: message.role === 'user' ? 12 : 10, backgroundColor: message.role === 'user' ? COLORS.accent : (message.error ? (isDark ? '#4b0000' : '#fff1f2') : (isDark ? '#111827' : '#f3f4f6')), borderWidth: message.error ? 1 : 0, borderColor: message.error ? (isDark ? '#7f1d1d' : '#fecaca') : undefined }}>
               {message.role === 'user' ? (
-                <Text className="text-base text-white">{message.content}</Text>
+                <Text style={{ color: COLORS.white, fontSize: 16 }}>{message.content}</Text>
               ) : message.id === streamingMessageId && message.content === '' ? (
-                <View className="flex-row items-center gap-2">
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <ActivityIndicator size="small" color={isDark ? '#9ca3af' : '#666'} />
-                  <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Thinking...</Text>
+                  <Text style={{ fontSize: 13, color: isDark ? '#9ca3af' : '#6b7280' }}>Thinking...</Text>
                 </View>
               ) : (
                 <Markdown style={markdownStyles}>{message.content}</Markdown>
@@ -553,15 +551,9 @@ export function ChatScreen() {
                   className="flex-row items-center gap-1 py-1"
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Ionicons 
-                    name={copiedId === message.id ? 'checkmark' : 'copy-outline'} 
-                    size={14} 
-                    color={message.role === 'user' ? 'rgba(255,255,255,0.7)' : isDark ? '#6b7280' : '#9ca3af'} 
-                  />
+                  <Ionicons name={copiedId === message.id ? 'checkmark' : 'copy-outline'} size={14} color={message.role === 'user' ? 'rgba(255,255,255,0.9)' : isDark ? '#6b7280' : '#9ca3af'} />
                   <Text 
-                    className={`text-xs ${
-                      message.role === 'user' ? 'text-white/70' : isDark ? 'text-gray-500' : 'text-gray-400'
-                    }`}
+                    style={{ fontSize: 12, color: message.role === 'user' ? 'rgba(255,255,255,0.8)' : (isDark ? '#9ca3af' : '#6b7280') }}
                   >
                     {copiedId === message.id ? 'Copied!' : 'Copy'}
                   </Text>

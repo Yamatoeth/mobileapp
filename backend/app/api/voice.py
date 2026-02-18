@@ -204,9 +204,12 @@ async def websocket_voice(user_id: str, websocket: WebSocket):
 
                         await websocket.send_json({"type": "stt_done", "transcript": transcript})
 
-                        # Build server-side context
+                        # Build server-side context and measure latency
+                        import time
+                        start = time.perf_counter()
                         context = await build_context(user_id, transcript)
-                        await websocket.send_json({"type": "context_built"})
+                        elapsed_ms = int((time.perf_counter() - start) * 1000)
+                        await websocket.send_json({"type": "context_built", "ms": elapsed_ms})
 
                         # Prepare messages for LLM: include server-assembled context
                         system_message = {
@@ -218,11 +221,33 @@ async def websocket_voice(user_id: str, websocket: WebSocket):
                         # Stream LLM output back to the websocket
                         full_text = await stream_openai_chat([system_message, user_message], websocket)
 
-                        # Optionally synthesize TTS and send audio as base64
+                        # Optionally synthesize TTS and stream/send audio back in chunks
                         tts_audio = await synthesize_elevenlabs(full_text)
                         if tts_audio:
-                            b64 = base64.b64encode(tts_audio).decode()
-                            await websocket.send_json({"type": "tts_audio_base64", "data": b64})
+                            try:
+                                chunk_size = 32 * 1024
+                                # send in base64-encoded chunks to avoid huge single frames
+                                for i in range(0, len(tts_audio), chunk_size):
+                                    chunk = tts_audio[i : i + chunk_size]
+                                    b64chunk = base64.b64encode(chunk).decode()
+                                    logger.debug(
+                                        "Sending tts chunk %s/%s",
+                                        (i // chunk_size) + 1,
+                                        (len(tts_audio) + chunk_size - 1) // chunk_size,
+                                    )
+                                    await websocket.send_json({"type": "tts_audio_chunk", "data": b64chunk})
+
+                                await websocket.send_json({"type": "tts_audio_done"})
+                                logger.debug("Sent tts_audio_done to websocket for user %s", user_id)
+                            except Exception:
+                                logger.exception("Failed streaming TTS chunks")
+                                # fallback to sending whole audio as one base64 frame
+                                try:
+                                    b64 = base64.b64encode(tts_audio).decode()
+                                    logger.debug("Sending fallback tts_audio_base64, size=%s", len(b64))
+                                    await websocket.send_json({"type": "tts_audio_base64", "data": b64})
+                                except Exception:
+                                    logger.exception("Failed fallback TTS send")
                         else:
                             # If TTS not available, send final text explicitly
                             await websocket.send_json({"type": "final_text", "text": full_text})

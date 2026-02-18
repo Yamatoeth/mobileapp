@@ -1,8 +1,9 @@
 export const voiceColors = {
-  primary: '#00D9FF', // cyan/teal glow
-  secondary: '#0A4D5C',
-  background: '#0B1120',
-  accent: '#FFD700'
+  // Updated Iron Man palette
+  primary: '#00B4D8', // cyan-teal
+  secondary: '#0A0A0A',
+  background: '#0A0A0A',
+  accent: '#FFB703',
 }
 
-export const voiceGradient = ['#0B1120', '#0A1929', '#0A4D5C']
+export const voiceGradient = ['#0A0A0A', '#071216', '#0A0A0A']
