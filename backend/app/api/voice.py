@@ -23,6 +23,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.context_builder import build_context
+from app.core.prompt_engine import build_messages
 
 settings = get_settings()
 router = APIRouter()
@@ -223,15 +224,19 @@ async def websocket_voice(user_id: str, websocket: WebSocket):
                     elapsed_ms = int((time.perf_counter() - start) * 1000)
                     await websocket.send_json({"type": "context_built", "ms": elapsed_ms})
 
-                    # Prepare messages for LLM: include server-assembled context
-                    system_message = {
-                        "role": "system",
-                        "content": "You are J.A.R.V.I.S. Use the provided server-side context to answer concisely. Do not perform interventions unless explicitly asked. Context: " + str(context),
-                    }
-                    user_message = {"role": "user", "content": transcript or ""}
+                    logger.debug(
+                        "Context assembled",
+                        extra={
+                            "user_id": user_id,
+                            "has_kb": bool(context.get("knowledge_summary")),
+                            "has_memory": bool(context.get("working_memory")),
+                            "episodic_count": len(context.get("episodic", [])),
+                            "context_ms": elapsed_ms,
+                        }
+                    )
 
-                    # Stream LLM output back to the websocket
-                    full_text = await stream_openai_chat([system_message, user_message], websocket)
+                    messages = build_messages(user_input=transcript or "", context=context)
+                    full_text = await stream_openai_chat(messages, websocket)
 
                     # Optionally synthesize TTS and stream/send audio back in chunks
                     tts_audio = await synthesize_elevenlabs(full_text)
@@ -318,16 +323,19 @@ async def websocket_voice(user_id: str, websocket: WebSocket):
                         context = await build_context(user_id, transcript)
                         elapsed_ms = int((time.perf_counter() - start) * 1000)
                         await websocket.send_json({"type": "context_built", "ms": elapsed_ms})
+                        logger.debug(
+                            "Context assembled",
+                            extra={
+                                "user_id": user_id,
+                                "has_kb": bool(context.get("knowledge_summary")),
+                                "has_memory": bool(context.get("working_memory")),
+                                "episodic_count": len(context.get("episodic", [])),
+                                "context_ms": elapsed_ms,
+                            }
+                        )
 
-                        # Prepare messages for LLM: include server-assembled context
-                        system_message = {
-                            "role": "system",
-                            "content": "You are J.A.R.V.I.S. Use the provided server-side context to answer concisely. Do not perform interventions unless explicitly asked. Context: " + str(context),
-                        }
-                        user_message = {"role": "user", "content": transcript or ""}
-
-                        # Stream LLM output back to the websocket
-                        full_text = await stream_openai_chat([system_message, user_message], websocket)
+                        messages = build_messages(user_input=transcript or "", context=context)
+                        full_text = await stream_openai_chat(messages, websocket)
 
                         # Optionally synthesize TTS and stream/send audio back in chunks
                         tts_audio = await synthesize_elevenlabs(full_text)

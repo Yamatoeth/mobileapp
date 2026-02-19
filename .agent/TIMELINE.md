@@ -1,49 +1,95 @@
 # J.A.R.V.I.S. — 12-Month Development Timeline
 
-## Overview
+> **Read this file every Monday morning.** Update the Current State block every Friday.
 
-Solo development, full-time commitment. Three phases, twelve months. The rule is simple: **build the current phase completely before touching the next one.**
+---
+
+## Notation Convention
+
+| Symbol | Meaning |
+|--------|---------|
+| `[ ]` | Not started |
+| `[~]` | Code written, not yet tested / validated |
+| `[X]` | Tested and validated against month criteria |
+| `[!]` | Blocked — reason noted below |
+| `[-]` | Deprioritised / deferred — reason noted |
+
+**Absolute rule:** An item moves from `[~]` to `[X]` only when the validation test specified in the month's checklist passes. "Code exists" = `[~]`. "Works in real conditions" = `[X]`.
+
+---
+
+## 🔴 CURRENT STATE — Last updated: 2026-02-18
+
+**Current phase:** Phase 1 — End of Month 3
+
+**Where things actually stand:**
+
+Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all operational. Frontend skeleton with navigation, Zustand stores, and basic Iron Man UI in place. Voice pipeline partially built.
+
+**What is actually working (tested end-to-end):**
+- Redis working memory: storing and retrieving conversation summaries ✓
+- Pinecone index: upserting and searching vectors ✓
+- Celery fact extraction: job triggers, extracts facts ✓
+- React Native navigation: 4 screens accessible ✓
+- Arc-reactor and waveform animations ✓
+
+**What exists but is not yet validated end-to-end:**
+- ContextBuilder: is it wired into the voice handler? To be verified
+- Complete voice pipeline: end-to-end latency measured? No
+- Fact extraction → KB update: tested with a real conversation? No
+- Onboarding flow: complete 45-minute session without errors? No
+
+**Current blockers:**
+- Week 8 (ContextBuilder injection) marked `[X]` in the old timeline but not validated
+- End-to-end latency test < 2s not yet done
+
+**Next focus this week:**
+1. Verify that the voice WebSocket handler actually calls `context_builder.build_context()`
+2. Measure end-to-end latency on iOS simulator
+3. Run a complete 45-minute onboarding session
 
 ---
 
 ## PHASE 1: Core Loop (Months 1–3)
 **Goal:** JARVIS can hear you, knows who you are, and responds with genuine personal context.
 
+---
+
 ### Month 1 — Voice Pipeline
 
 **Week 1: Infrastructure**
-- [x] Monorepo setup (mobile/, backend/, shared/)
-- [x] FastAPI backend with health check endpoint
-- [x] PostgreSQL + Redis via Docker Compose locally
-- [x] React Native + Expo iOS app skeleton
-- [x] Navigation structure (VoiceScreen, HistoryScreen, KnowledgeScreen, SettingsScreen)
-- [x] Zustand stores initialised (voice, conversation, knowledge)
+- [X] Monorepo setup (mobile/, backend/, shared/)
+- [X] FastAPI backend with health check endpoint
+- [X] PostgreSQL + Redis via Docker Compose locally
+- [X] React Native + Expo iOS app skeleton
+- [X] Navigation (VoiceScreen, HistoryScreen, KnowledgeScreen, SettingsScreen)
+- [X] Zustand stores initialised (voice, conversation, knowledge)
 - [ ] GitHub repo with branch protection
 
 **Week 2: Voice Recording**
-- [x] `expo-av` audio recording at 16kHz WAV
-- [x] Microphone permission request and handling
-- [x] Hold-to-talk button with press/release states
-- [x] Visual feedback during recording (waveform animation placeholder)
-- [x] Audio file saved to temp storage before upload
+- [X] `expo-av` audio recording at 16kHz WAV
+- [X] Microphone permission request and handling
+- [X] Hold-to-talk button with press/release states
+- [X] Visual feedback during recording (waveform animation)
+- [X] Audio file saved to temp storage before upload
 
 **Week 3: STT + LLM**
-- [x] Deepgram account + streaming transcription endpoint
-- [x] WebSocket connection (iPhone ↔ backend) for audio streaming
-- [x] GPT-4o integration with basic system prompt
-- [x] Streaming LLM response back to client
-- [x] Basic conversation displayed as text on screen
+- [X] Deepgram streaming transcription endpoint
+- [X] WebSocket connection (iPhone ↔ backend) for audio streaming
+- [X] GPT-4o integration with basic system prompt
+- [X] Streaming LLM response back to client
+- [~] Conversation displayed as text on screen
 
 **Week 4: TTS + End-to-End**
-- [x] ElevenLabs account + JARVIS voice configured
-- [x] Streaming TTS audio back to iPhone
-- [x] Audio playback via `expo-av`
-- [ ] End-to-end latency test: target under 2 seconds
-- [ ] Fix top 5 latency issues before moving on
+- [X] ElevenLabs TTS configured with JARVIS voice
+- [X] Streaming TTS audio back to iPhone
+- [X] Audio playback via `expo-av`
+- [ ] End-to-end latency test: target < 2 seconds
+- [ ] Fix top 5 latency issues
 
-**Validation — Month 1 complete when:**
-- [ ] Speak a sentence → hear JARVIS respond within 2 seconds
-- [ ] No crashes over 48-hour test
+**✅ Month 1 validation — complete when:**
+- [ ] Speak → hear JARVIS respond within 2 seconds
+- [ ] No crashes over a 48-hour test
 - [ ] WebSocket reconnects automatically on drop
 
 ---
@@ -52,151 +98,142 @@ Solo development, full-time commitment. Three phases, twelve months. The rule is
 
 **Week 5: Knowledge Base Schema**
 - [X] PostgreSQL tables: `users`, `knowledge_identity`, `knowledge_goals`, `knowledge_projects`, `knowledge_finances`, `knowledge_relationships`, `knowledge_patterns`
-- [X] Each table: `user_id`, `field_name`, `field_value` (text), `confidence` (0–1), `last_updated`, `source` (onboarding/conversation/manual)
+- [X] Schema: `user_id`, `field_name`, `field_value`, `confidence`, `last_updated`, `source`
 - [X] `knowledge_updates` table: change log with conversation reference
 - [X] Alembic migrations for all tables
 
 **Week 6: Onboarding Interview**
-- [X] Onboarding flow screen (separate from main voice screen)
-- [X] LLM-generated interview questions — adapts to user answers
-- [X] Six domain sequence: Identity → Goals → Projects → Finances → Relationships → Patterns
+- [X] Onboarding screen (separate from the main VoiceScreen)
+- [X] LLM-generated questions that adapt to user answers
+- [X] 6-domain sequence: Identity → Goals → Projects → Finances → Relationships → Patterns
 - [X] Interview runs as a conversation, not a form
-- [X] 45-minute target duration (test this yourself first)
+- [ ] Tested in real conditions: 45 minutes without errors
 
-**Week 7: Knowledge Base Population**
+**Week 7: KB Population**
 - [X] Parse onboarding conversation and extract structured facts via GPT-4o
-- [X] Write extracted facts into all six Knowledge Base tables
-- [X] Summary review screen — user sees what JARVIS learned and corrects it
-- [X] Knowledge Dashboard screen showing all six domains
-- [X] Edit any field manually from the dashboard
+- [X] Write extracted facts into all 6 KB tables
+- [X] Review screen: user sees what JARVIS learned and corrects it
+- [X] Knowledge Dashboard showing all 6 domains
+- [X] Manual editing of any field from the dashboard
 
 **Week 8: Context Builder v1**
-- [ ] `ContextBuilder` class in backend
-- [ ] Queries Knowledge Base on every voice call
-- [ ] Injects user identity summary into system prompt Layer 2
-- [ ] Verify: JARVIS responses now reference your goals and situation by default
-- [ ] Latency test: context build under 300ms
+- [~] `ContextBuilder` class in the backend
+- [~] Query KB on every voice call
+- [~] Inject user identity summary into system prompt Layer 2
+- [ ] **Critical validation:** JARVIS responses mention your goals and situation without being told
+- [ ] Latency test: context build < 300ms
 
-**Validation — Month 2 complete when:**
-- [ ] Onboarding interview completes without errors
+**✅ Month 2 validation — complete when:**
+- [ ] Onboarding completes without errors (one full 45-minute session)
 - [ ] Knowledge Dashboard shows accurate information about you
-- [ ] Ask JARVIS about your goals — it gives a specific answer without being told
+- [ ] Ask JARVIS about your goals → specific answer without additional prompting
 
 ---
 
 ### Month 3 — Memory System
 
 **Week 9: Working Memory (Redis)**
-- [x] Store every conversation summary in Redis after each session
-- [x] 30-conversation sliding window (TTL: 30 days)
-- [x] Load last 30 summaries into Layer 3 of prompt on every call
-- [x] Verify: JARVIS references something from 3 days ago unprompted
+- [X] Store every conversation summary in Redis after each session
+- [X] 30-conversation sliding window (TTL: 30 days)
+- [X] Load last 30 summaries into Layer 3 of prompt on every call
+- [ ] **Validation:** JARVIS references something said 3 days ago without being reminded
 
 **Week 10: Episodic Memory (Pinecone)**
-- [x] Pinecone index: 1536 dimensions, cosine similarity
-- [x] After each conversation: generate embedding of summary, store in Pinecone
-- [x] Semantic search on every voice call: retrieve top 5 relevant past conversations
-- [x] Inject into Layer 4 of prompt
-- [ ] Test: ask about a topic from 2 weeks ago — JARVIS finds it
-
+- [X] Pinecone index: 1536 dimensions, cosine similarity
+- [X] After each conversation: embedding of summary upserted to Pinecone
+- [X] Semantic search on every voice call: top 5 results → Layer 4 of prompt
+- [ ] **Validation:** ask about a topic from 2 weeks ago → JARVIS finds it
 
 **Week 11: Fact Extraction Pipeline**
-- [x] Celery worker runs after every conversation
-- [x] Sends transcript to GPT-4o with structured extraction prompt
-- [X] Receives JSON list of Knowledge Base updates
+- [X] Celery worker runs after every conversation
+- [X] Transcription sent to GPT-4o with structured extraction prompt
+- [X] JSON of knowledge updates received and parsed
 - [X] Conflict resolution: higher confidence + more recent wins
-- [ ] All changes logged to `knowledge_updates` table
-- [ ] Test: tell JARVIS you changed a goal → Knowledge Base updates automatically
+- [ ] All updates logged in `knowledge_updates`
+- [ ] **Validation:** tell JARVIS you changed a goal → KB updates automatically
 
 **Week 12: Iron Man UI Polish**
 - [X] Arc-reactor pulse animation on VoiceScreen (Reanimated)
-- [X] Full colour system applied: `#0A0A0A` / `#00B4D8` / `#FFB703`
+- [X] Full colour system: `#0A0A0A` / `#00B4D8` / `#FFB703`
 - [X] Voice state transitions: Idle → Recording → Processing → Speaking
-- [X] Conversation history with JARVIS left (cyan) / user right (white)
+- [X] Conversation history: JARVIS left (cyan) / user right (white)
 - [X] App icon and splash screen
 
-**Validation — Phase 1 complete when:**
-- [ ] Voice latency under 2 seconds (p95)
+**✅ Phase 1 validation — complete when:**
+- [ ] Voice latency < 2 seconds (p95 over 20 tests)
 - [ ] Knowledge Base accurate after onboarding
-- [ ] Working memory + episodic memory both active
-- [ ] Fact extraction updates Knowledge Base after conversation
-- [ ] UI looks and feels like Iron Man, not a generic chatbot
-- [ ] Zero crashes over 7-day continuous use
-
-**Validation — Phase 1 complete when:**
-- [ ] Voice latency under 2 seconds (p95)
-- [ ] Knowledge Base accurate after onboarding
-- [x] Working memory + episodic memory both active
-- [ ] Fact extraction updates Knowledge Base after conversation
-- [ ] UI looks and feels like Iron Man, not a generic chatbot
-- [ ] Zero crashes over 7-day continuous use
-
-_Updated: 2026-02-18 — items marked done reflect current repo status (backend memory, Pinecone index, Celery worker, Redis, basic frontend skeleton/navigation)._
+- [ ] Working memory + episodic memory both active and verified
+- [ ] Fact extraction updates KB after a real conversation
+- [ ] Iron Man UI: no resemblance to a generic chatbot
+- [ ] Zero crashes over 7 days of continuous use
 
 ---
 
 ## PHASE 2: Proactive Intelligence (Months 4–7)
 **Goal:** JARVIS surfaces what matters without being asked.
 
+> ⚠️ Do not start Phase 2 until all 6 Phase 1 validation criteria are marked `[X]`.
+
 ### Month 4 — Pattern Recognition
 
 **Week 13: Conversation Analysis**
-- [ ] Weekly background job analyses last 30 days of conversations
+- [ ] Weekly background job analyses the last 30 days of conversations
 - [ ] Identifies recurring topics, avoided topics, repeated concerns
-- [ ] Stores patterns in `knowledge_patterns` table
-- [ ] JARVIS begins referencing patterns in responses: "You have mentioned X three times this week"
+- [ ] Stores patterns in `knowledge_patterns`
+- [ ] JARVIS references patterns in responses: "You've mentioned X three times this week"
 
 **Week 14: Goal Tracking**
-- [ ] JARVIS tracks progress against stated goals from Knowledge Base
-- [ ] Detects when user has not mentioned a goal in 2+ weeks → flags it
-- [ ] Detects when actions contradict stated goals → surfaces contradiction
-- [ ] Weekly goal review prompt initiated by JARVIS (push notification)
+- [ ] JARVIS tracks progress against goals declared in the KB
+- [ ] Detects when a goal hasn't been mentioned in 2+ weeks → flags it
+- [ ] Detects when actions contradict stated goals → surfaces the contradiction
+- [ ] Weekly goal review initiated by JARVIS (push notification)
 
 **Week 15: Wake Word**
-- [X] Wake word detection ("Hey JARVIS") using on-device model
-- [X] App listens in background when enabled (user opt-in)
-- [X] Immediate voice activation without touching phone
+- [~] Wake word detection ("Hey JARVIS") via on-device model
+- [~] App listens in background when enabled (user opt-in)
+- [~] Immediate voice activation without touching the phone
 
 **Week 16: Notification System**
 - [ ] Push notification infrastructure (expo-notifications)
-- [ ] JARVIS-initiated check-ins: "You mentioned finishing X last week — update?"
-- [ ] Morning briefing option: daily summary of active projects + goals
-- [ ] Max 3 proactive notifications per day (configurable)
+- [ ] JARVIS-initiated check-ins: "You said you'd finish X last week — update?"
+- [ ] Optional morning briefing: daily summary of active projects + goals
+- [ ] Maximum 3 proactive notifications per day (configurable)
 
-**Validation — Month 4–5 complete when:**
+**✅ Months 4–5 validation — complete when:**
 - [ ] JARVIS identifies at least 3 behavioural patterns from conversation history
 - [ ] Morning briefing works and is accurate
 - [ ] Proactive check-ins reference specific past conversations
 
 ---
 
-### Month 5–7 — Opinion Engine
+### Months 5–7 — Opinion Engine
 
-**Week 17–20: Deep Opinion Mode**
-- [ ] "Challenge me" command — JARVIS reviews your current projects and goals and gives unsolicited honest feedback
-- [ ] "Devil's advocate" mode — argues the opposite of your stated position
-- [ ] Decision support: "Should I do X?" triggers structured analysis using Knowledge Base
+**Weeks 17–20: Deep Opinion Mode**
+- [ ] "Challenge me" command — JARVIS reviews current projects and goals, gives unsolicited honest feedback
+- [ ] "Devil's advocate" mode — argues against the user's stated position
+- [ ] Decision support: "Should I do X?" triggers structured analysis using the KB
 - [ ] Weekly pattern report: what JARVIS has noticed about your behaviour this week
 
-**Week 21–24: Conversation Quality**
-- [ ] Improve context builder to prioritise most relevant memories
+**Weeks 21–24: Conversation Quality**
+- [ ] Context builder prioritises the most relevant memories (not just the most recent)
 - [ ] Reduce prompt token count while increasing relevance (cost + latency)
+- [ ] Feedback loop: thumbs up/down on responses feeds into prompt tuning
 - [ ] A/B test: different JARVIS character prompts, measure response quality
-- [ ] User feedback loop: thumbs up/down on responses feeds into prompt tuning
 
-**Validation — Phase 2 complete when:**
-- [ ] Proactive suggestion acceptance rate over 70%
+**✅ Phase 2 validation — complete when:**
+- [ ] Proactive suggestion acceptance rate > 70% (self-assessed)
 - [ ] Pattern recognition identifies at least 5 patterns per user
-- [ ] "Challenge me" output is useful and specific (test yourself)
-- [ ] Daily active use sustained for 30 days
+- [ ] "Challenge me" output is useful and specific (self-tested)
+- [ ] Daily active use sustained for 30 consecutive days
 
 ---
 
 ## PHASE 3: Action Layer (Months 8–12)
 **Goal:** JARVIS does things, not just says things.
 
-### Month 8–9: Calendar Integration
+> ⚠️ Do not start Phase 3 until all 4 Phase 2 validation criteria are marked `[X]`.
 
+### Months 8–9: Calendar Integration
 - [ ] iOS Calendar read access (`expo-calendar`)
 - [ ] JARVIS aware of your schedule in every response
 - [ ] "What do I have today?" — full schedule summary
@@ -205,23 +242,20 @@ _Updated: 2026-02-18 — items marked done reflect current repo status (backend 
 - [ ] Calendar write access (with explicit user confirmation for every action)
 
 ### Month 10: Financial Monitoring
-
-- [ ] Manual financial data entry via voice ("I spent €200 on X today")
-- [ ] JARVIS tracks against your stated budget/goals from Knowledge Base
+- [ ] Manual financial data entry by voice ("I spent €200 on X today")
+- [ ] JARVIS tracks against stated budget/goals from KB
 - [ ] Weekly financial summary: spending vs targets
 - [ ] Plaid integration (read-only bank connection) — optional, user-initiated
 
 ### Month 11: Task & Project Management
-
-- [ ] Voice-first task creation: "Add a task to X project: do Y by Friday"
-- [ ] Project status tracking via voice: "Update project X — completed Y, blocked on Z"
-- [ ] JARVIS weekly project review: what is stalled, what needs attention
-- [ ] Integration with Notion or Linear (read/write via API)
+- [ ] Voice-first task creation: "Add a task to Project X: do Y by Friday"
+- [ ] Project status tracking by voice: "Update Project X — finished Y, blocked on Z"
+- [ ] JARVIS weekly project review: what's stalled, what needs attention
+- [ ] Notion or Linear integration (read/write via API)
 
 ### Month 12: Production & Launch
-
 - [ ] App Store submission preparation
-- [ ] Privacy policy and terms of service
+- [ ] Privacy policy and terms of service (see PRIVACY.md)
 - [ ] TestFlight beta: 10–20 users
 - [ ] Performance audit: all latency targets met
 - [ ] Security audit: encryption, data handling, API key management
@@ -231,27 +265,13 @@ _Updated: 2026-02-18 — items marked done reflect current repo status (backend 
 
 ## Weekly Rhythm
 
-**Monday:** Plan week, review last week's progress, update this file  
-**Tuesday–Thursday:** Deep work — code, test, commit daily  
-**Friday:** Code review, write tests for the week, update documentation  
-**Saturday:** Dogfooding — use JARVIS yourself for a full day, log everything  
-**Sunday:** Rest  
+**Monday:** Read this file. Update CURRENT STATE. Plan the week.
+**Tuesday–Thursday:** Deep work — code, test, commit daily.
+**Friday:** Code review, write tests, update documentation.
+**Saturday:** Dogfooding — use JARVIS for a full day, log everything.
+**Sunday:** Rest.
 
-**Non-negotiable rule:** Use JARVIS yourself every day from Month 1 Week 3 onwards. If you would not use it, do not ship it.
-
----
-
-## Key Milestones Summary
-
-| Milestone | Target Date | Definition of Done |
-|-----------|-------------|-------------------|
-| Voice loop works | End of Month 1 | Speak → hear JARVIS respond in under 2s |
-| JARVIS knows you | End of Month 2 | Responses reference your goals without prompting |
-| Full memory active | End of Month 3 | References conversations from weeks ago |
-| Iron Man UI complete | End of Month 3 | Looks and feels like the product |
-| Proactive intelligence | End of Month 7 | Morning briefings + pattern recognition working |
-| Action layer | End of Month 11 | Calendar + tasks + financial tracking |
-| App Store | Month 12 | Approved and live |
+**Non-negotiable rule:** Use JARVIS yourself every day from Month 1 Week 3 onwards. If you wouldn't use it, don't ship it.
 
 ---
 
@@ -259,11 +279,24 @@ _Updated: 2026-02-18 — items marked done reflect current repo status (backend 
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|-----------|
-| Voice latency over 2s | Medium | High | Stream everything; degrade to text if needed |
-| Knowledge Base becomes inaccurate over time | Medium | High | Weekly user review prompt; easy manual correction |
-| Fact extraction hallucinates wrong updates | Low | High | Confidence scoring; manual review for low-confidence updates |
-| LLM costs exceed budget | Medium | Medium | Cache frequent queries; use GPT-4o-mini for extraction jobs |
+| Voice latency > 2s | Medium | High | Stream everything; degrade to text if needed |
+| KB becomes inaccurate over time | Medium | High | Weekly review prompt; easy manual correction |
+| Fact extraction hallucinates wrong updates | Low | High | Confidence scoring; manual review for confidence < 0.6 |
+| LLM costs exceed budget | Medium | Medium | Cache frequent queries; GPT-4o-mini for extraction |
 | App Store rejection | Low | High | No medical claims; wellness framing; privacy policy clear |
-| Feature creep delays Phase 1 | High | High | This file exists to prevent exactly this |
+| Feature creep delays Phase 1 | **High** | **High** | This file exists to prevent exactly this |
+| ContextBuilder not wired into the hot path | **Confirmed** | High | **Priority fix #1 this week** |
 
-**The biggest risk is building Phase 3 features during Phase 1. Do not do it.**
+---
+
+## Key Milestones Summary
+
+| Milestone | Target date | Definition of Done |
+|-----------|------------|-------------------|
+| Voice loop works | End of Month 1 | Speak → hear JARVIS in < 2s |
+| JARVIS knows you | End of Month 2 | Responses reference your goals without prompting |
+| Full memory active | End of Month 3 | References conversations from weeks ago |
+| Iron Man UI complete | End of Month 3 | Looks and feels like the product |
+| Proactive intelligence | End of Month 7 | Morning briefings + pattern recognition |
+| Action layer | End of Month 11 | Calendar + tasks + financial tracking |
+| App Store | Month 12 | Approved and live |

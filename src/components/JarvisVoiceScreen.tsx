@@ -12,12 +12,12 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import ParticleSphere from './ParticleSphere'
+import ParticleSphere from '../components/ParticleSphere'
 import * as Haptics from 'expo-haptics'
 import { useFonts as useOrbitron, Orbitron_700Bold } from '@expo-google-fonts/orbitron'
 import { useFonts as useRajdhani, Rajdhani_300Light } from '@expo-google-fonts/rajdhani'
 import { useNavigation } from '@react-navigation/native'
-import { useWakeWord } from '../src/hooks/useWakeWord'
+import { useWakeWord } from '../hooks/useWakeWord'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const { width: screenWidth } = Dimensions.get('window')

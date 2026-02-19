@@ -1,517 +1,759 @@
-# J.A.R.V.I.S. Development Standards
+# J.A.R.V.I.S. — Coding & Prompt Standards
 
-## Core Principles
-
-### 1. Latency is Sacred
-Every millisecond matters in voice interaction. A 2-second response feels instant. A 3-second response kills the product.
-
-- All API calls must have timeout limits
-- Log latency for every operation (STT, LLM, TTS, context build)
-- Never add a synchronous operation to the hot path without measuring its impact
-
-### 2. Type Safety Everywhere
-No `any` in TypeScript. No untyped dicts in Python.
-
-- TypeScript: `strict: true`, no `@ts-ignore` without explanation comment
-- Python: `mypy` strict mode, all functions must have type hints
-
-### 3. The Knowledge Base is Sacred
-The Knowledge Base is the product. Treat it with the same care you would give production financial data.
-
-- Never overwrite a field without logging the old value in `knowledge_updates`
-- Never allow a low-confidence extraction to silently overwrite a high-confidence manual entry
-- Every automated Knowledge Base update must be traceable to a source conversation
-
-### 4. Fail Gracefully
-The app must never crash. Degrade functionality, never explode.
-
-- All external API calls wrapped in try/catch with fallbacks
-- If context build fails, fall back to minimal system prompt (do not crash the voice call)
-- If TTS fails, return text only (do not fail silently)
+> These rules apply to every line of code and every prompt written in this project. Consistency > individual creativity. Read this file before writing any code.
 
 ---
 
-## TypeScript / React Native Standards
+## Table of Contents
 
-### File Structure
+1. [Core Principles](#1-core-principles)
+2. [TypeScript / React Native](#2-typescript--react-native)
+3. [Python / FastAPI](#3-python--fastapi)
+4. [Prompt Engineering Rules](#4-prompt-engineering-rules)
+5. [Testing](#5-testing)
+6. [Git & Versioning](#6-git--versioning)
+7. [Performance Rules](#7-performance-rules)
+8. [Common Problems & Solutions](#8-common-problems--solutions)
 
-```
-src/
-├── components/        # Reusable UI — VoiceButton, PulseAnimation, KnowledgeCard
-├── screens/           # VoiceScreen, HistoryScreen, KnowledgeScreen, SettingsScreen, OnboardingScreen
-├── services/          # ApiClient, WebSocketService, AudioService
-├── hooks/             # useVoice, useKnowledge, useConversation, useOnboarding
-├── store/             # Zustand stores: voiceStore, conversationStore, knowledgeStore
-├── types/             # TypeScript interfaces: api.ts, knowledge.ts, voice.ts
-└── utils/             # Pure functions: dateHelpers, audioHelpers, validators
-```
+---
 
-### Naming Conventions
-- Components: PascalCase (`VoiceButton`, `PulseAnimation`)
-- Screens: PascalCase + Screen suffix (`VoiceScreen`, `KnowledgeScreen`)
-- Hooks: camelCase with `use` prefix (`useVoice`, `useKnowledge`)
-- Services: PascalCase + Service suffix (`AudioService`, `ApiClient`)
-- Types: PascalCase with `I` prefix for interfaces (`IKnowledgeField`, `IConversation`)
+## 1. Core Principles
 
-### Component Pattern
+**Latency is Sacred.** Every millisecond counts in a real-time voice interaction. Never block the hot path.
+
+**Type Safety Everywhere.** No `any` in TypeScript. No untyped dicts in Python. If you can't type something, it's a signal the architecture isn't clear.
+
+**Privacy by Default.** Every piece of data is potentially GDPR-sensitive. Treat it that way by default.
+
+**Fail Gracefully.** Degrade functionally, never crash. A JARVIS without episodic memory (Pinecone down) is better than a crash.
+
+**Ship Phase 1 first.** If the feature isn't in the current phase of TIMELINE.md, it's not in the sprint. No exceptions.
+
+---
+
+## 2. TypeScript / React Native
+
+### Component pattern
 
 ```typescript
+// Always functional components with strict TypeScript
 import React, { useState, useCallback } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
-import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 
 interface VoiceButtonProps {
   onPressIn: () => void;
   onPressOut: () => void;
   isRecording: boolean;
-  isProcessing: boolean;
+  isDisabled?: boolean;
 }
 
 export const VoiceButton: React.FC<VoiceButtonProps> = ({
   onPressIn,
   onPressOut,
   isRecording,
-  isProcessing,
+  isDisabled = false,
 }) => {
-  // Implementation
+  const handlePressIn = useCallback(() => {
+    if (!isDisabled) onPressIn();
+  }, [isDisabled, onPressIn]);
+
+  return (
+    <View style={styles.container}>
+      <Pressable
+        onPressIn={handlePressIn}
+        onPressOut={onPressOut}
+        disabled={isDisabled}
+      >
+        <Text style={styles.label}>
+          {isRecording ? 'Listening...' : 'Hold to speak'}
+        </Text>
+      </Pressable>
+    </View>
+  );
 };
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#0A0A0A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    color: '#00B4D8',
+    fontSize: 14,
+    fontFamily: 'Rajdhani_500Medium',
   },
 });
 ```
 
-**Rules:**
-- Named exports only (no `export default`)
-- Props interface always explicitly typed
-- Styles colocated at bottom of file
-- Never use inline styles for values shared across components — use constants
-
-### Zustand Store Pattern
+### Zustand stores — rules
 
 ```typescript
-import { create } from 'zustand';
-import { IConversation } from '@/types/api';
+// One store = one domain. No catch-all global store.
+// Flat state only — no deeply nested objects.
+// Always type the store interface explicitly.
 
-interface ConversationState {
-  conversations: IConversation[];
-  isLoading: boolean;
-  addConversation: (conversation: IConversation) => void;
-  setLoading: (loading: boolean) => void;
+interface VoiceState {
+  status: 'idle' | 'recording' | 'processing' | 'speaking';
+  transcript: string;
+  error: string | null;
+}
+
+interface VoiceActions {
+  setStatus: (status: VoiceState['status']) => void;
+  setTranscript: (text: string) => void;
+  setError: (error: string | null) => void;
   reset: () => void;
 }
 
-export const useConversationStore = create<ConversationState>((set) => ({
-  conversations: [],
-  isLoading: false,
-  addConversation: (conversation) =>
-    set((state) => ({ conversations: [conversation, ...state.conversations] })),
-  setLoading: (loading) => set({ isLoading: loading }),
-  reset: () => set({ conversations: [], isLoading: false }),
+const initialState: VoiceState = {
+  status: 'idle',
+  transcript: '',
+  error: null,
+};
+
+export const useVoiceStore = create<VoiceState & VoiceActions>((set) => ({
+  ...initialState,
+  setStatus: (status) => set({ status }),
+  setTranscript: (transcript) => set({ transcript }),
+  setError: (error) => set({ error }),
+  reset: () => set(initialState),
 }));
 ```
 
-**Rules:**
-- One store per domain: voice, conversation, knowledge, settings
-- State is flat — no nested objects in state
-- Actions are synchronous — async logic belongs in services
-- No API calls inside stores — call from hooks, update store with result
-
-### Custom Hook Pattern
+### Strict TypeScript rules
 
 ```typescript
-import { useState, useEffect, useCallback } from 'react';
-import { ApiClient } from '@/services/ApiClient';
-import { IKnowledgeDomain } from '@/types/knowledge';
+// ✅ Always
+const response: ApiResponse<KnowledgeDomain> = await fetchDomain('goals');
 
-export const useKnowledge = (domain: string) => {
-  const [data, setData] = useState<IKnowledgeDomain | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-
-  const fetch = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const result = await ApiClient.getKnowledgeDomain(domain);
-      setData(result);
-      setError(null);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [domain]);
-
-  useEffect(() => {
-    fetch();
-  }, [fetch]);
-
-  return { data, isLoading, error, refetch: fetch };
-};
+// ❌ Never
+const response: any = await fetchDomain('goals');
+const data = response.data; // untyped chain
 ```
-
-**Rules:**
-- Always return `{ data, isLoading, error }` — never just the data
-- Always clean up subscriptions and intervals in useEffect return function
-- Accept configuration as parameters so hooks are testable in isolation
-
-### Error Handling
 
 ```typescript
-// Custom error class
-export class AppError extends Error {
-  constructor(
-    message: string,
-    public readonly code: string,
-    public readonly severity: 'low' | 'medium' | 'high'
-  ) {
-    super(message);
-    this.name = 'AppError';
-  }
-}
+// ✅ Explicit union types for states
+type VoiceStatus = 'idle' | 'recording' | 'processing' | 'speaking';
 
-// Usage
-try {
-  await AudioService.startRecording();
-} catch (err) {
-  if (err instanceof AppError && err.severity === 'high') {
-    // Show error to user
-  }
-  // Always log
-  console.error('[AudioService]', err);
-}
+// ❌ Generic string
+type VoiceStatus = string;
 ```
 
-**Rules:**
-- Never catch and ignore errors silently
-- User-facing error messages must be actionable ("Microphone permission required — tap to grant")
-- Log all errors with service prefix: `[AudioService]`, `[ApiClient]`, `[WebSocket]`
+```typescript
+// ✅ Optional chaining + nullish coalescing
+const goal = user?.knowledgeBase?.goals?.[0] ?? 'No goals set';
+
+// ❌ Direct access without guard
+const goal = user.knowledgeBase.goals[0];
+```
+
+### Naming conventions
+
+| Element | Convention | Example |
+|---------|-----------|---------|
+| Components | PascalCase | `VoiceButton`, `KnowledgeDomainCard` |
+| Hooks | camelCase with `use` | `useVoiceStore`, `useKnowledgeBase` |
+| Stores | camelCase | `voiceStore`, `conversationStore` |
+| Constants | SCREAMING_SNAKE | `MAX_RECORDING_DURATION` |
+| Types/Interfaces | PascalCase | `KnowledgeDomain`, `ApiResponse<T>` |
+| Component files | PascalCase | `VoiceButton.tsx` |
+| Utils/hooks files | camelCase | `useAudioRecorder.ts` |
+
+### Colour palette — use only these values
+
+```typescript
+// Never hardcode a colour elsewhere. Always import from theme.ts
+export const COLORS = {
+  background: '#0A0A0A',
+  surface1: '#141414',
+  surface2: '#1E1E1E',
+  accent: '#00B4D8',       // Cyan — JARVIS voice, interactive elements
+  gold: '#FFB703',          // Gold — status, labels
+  textPrimary: '#F0F4F8',
+  textSecondary: '#8892A4',
+  success: '#4CAF50',
+  error: '#EF5350',
+} as const;
+```
 
 ---
 
-## Python / FastAPI Standards
+## 3. Python / FastAPI
 
-### File Structure
-
-```
-app/
-├── api/
-│   ├── voice.py           # WebSocket voice endpoint
-│   ├── knowledge.py       # Knowledge Base REST endpoints
-│   ├── memory.py          # Memory search and history
-│   ├── onboarding.py      # Onboarding interview endpoints
-│   └── users.py           # User management
-├── core/
-│   ├── context_builder.py # Assembles 4-layer LLM prompt
-│   ├── fact_extractor.py  # Extracts KB updates from conversations
-│   └── prompt_engine.py   # JARVIS character + prompt templates
-├── db/
-│   ├── models.py          # SQLAlchemy models
-│   ├── redis_client.py    # Working memory operations
-│   └── pinecone_client.py # Episodic memory operations
-├── services/
-│   ├── openai_service.py  # LLM + embeddings
-│   ├── deepgram_service.py # STT
-│   └── elevenlabs_service.py # TTS
-├── tasks/
-│   ├── fact_extraction.py # Celery: runs after every conversation
-│   └── weekly_analysis.py # Celery: weekly pattern detection
-└── schemas/
-    ├── knowledge.py       # Pydantic models for Knowledge Base
-    ├── voice.py           # Pydantic models for voice endpoints
-    └── memory.py          # Pydantic models for memory endpoints
-```
-
-### Type Hints (Mandatory)
-
-```python
-from typing import Optional, List, Literal
-from datetime import datetime
-from pydantic import BaseModel
-
-class KnowledgeField(BaseModel):
-    domain: Literal["identity", "goals", "projects", "finances", "relationships", "patterns"]
-    field: str
-    value: str
-    confidence: float  # 0.0 to 1.0
-    source: Literal["onboarding", "conversation", "manual"]
-    last_updated: datetime
-
-async def get_knowledge_domain(
-    user_id: str,
-    domain: str
-) -> List[KnowledgeField]:
-    """
-    Retrieve all fields for a knowledge domain.
-
-    Args:
-        user_id: The user's unique identifier
-        domain: One of the six knowledge domains
-
-    Returns:
-        List of KnowledgeField objects for this domain
-
-    Raises:
-        ValueError: If domain is not one of the six valid domains
-        HTTPException(404): If user has no knowledge base (onboarding incomplete)
-    """
-```
-
-**Rules:**
-- All functions must have type hints on all arguments and return value
-- All public functions must have docstrings with Args, Returns, Raises
-- Use `Literal` for string enums, not plain `str`
-- Use `Optional[T]` for nullable values, never `T | None` inconsistently
-
-### Context Builder Pattern
-
-The Context Builder is the most critical component. Every LLM call must go through it.
-
-```python
-import asyncio
-from typing import Dict, Any
-
-class ContextBuilder:
-    async def build(self, user_id: str, query: str) -> Dict[str, Any]:
-        """Build the four-layer prompt context. Target: under 300ms."""
-        
-        # Layer 2: Knowledge Base (always included)
-        # Layer 3: Working Memory (last 30 conversations)
-        # Layer 4: Relevant Episodic Memories (top 5 from Pinecone)
-        # All three retrieved concurrently
-        
-        kb_task = self._get_knowledge_summary(user_id)
-        wm_task = self._get_working_memory(user_id)
-        em_task = self._get_episodic_memories(user_id, query)
-        
-        knowledge_summary, working_memory, episodic_memories = await asyncio.gather(
-            kb_task, wm_task, em_task
-        )
-        
-        return {
-            "layer1_character": self._get_character_prompt(),
-            "layer2_identity": knowledge_summary,
-            "layer3_recent": working_memory,
-            "layer4_relevant": episodic_memories,
-        }
-    
-    def _get_character_prompt(self) -> str:
-        return """You are JARVIS, a personal AI assistant with deep knowledge of the user.
-        
-        You are:
-        - Direct: give clear opinions without softening them
-        - Honest: point out contradictions between stated goals and actual behaviour
-        - Contextually sharp: always reference relevant past conversations
-        - Not subservient: push back when the user is making an error
-        - Concise: short sentences, no preambles, no unnecessary caveats
-        
-        You are never:
-        - Generic: every response must be specific to this user
-        - A yes-man: agreeing because the user seems committed
-        - Forgetful: you remember everything and reference it"""
-```
-
-### Fact Extraction Pattern
-
-```python
-async def extract_facts_from_conversation(
-    transcript: str,
-    user_id: str,
-    conversation_id: str
-) -> List[KnowledgeUpdate]:
-    """
-    Extract structured Knowledge Base updates from a conversation transcript.
-    
-    Confidence scoring:
-    - 0.9+: Explicit, unambiguous statement ("My goal is X")
-    - 0.7-0.9: Clear implication ("I've decided to X")
-    - 0.5-0.7: Possible update ("I'm thinking about X")
-    - <0.5: Do not write to Knowledge Base
-    
-    Conflict resolution:
-    - Manual entry (source=manual): never overwritten automatically
-    - Higher confidence wins over lower confidence
-    - More recent wins when confidence is equal
-    """
-```
-
-### FastAPI Endpoint Pattern
+### Endpoint pattern
 
 ```python
 from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+from typing import Optional
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/knowledge", tags=["knowledge"])
+
+class KnowledgeDomainResponse(BaseModel):
+    domain: str
+    fields: dict[str, str]
+    completeness: float
+    last_updated: Optional[str] = None
 
 @router.get("/{domain}", response_model=KnowledgeDomainResponse)
 async def get_knowledge_domain(
     domain: str,
-    user_id: str = Depends(verify_token)
+    user_id: str = Depends(verify_token),
+    db: AsyncSession = Depends(get_db),
 ) -> KnowledgeDomainResponse:
     """
     Get all fields for a knowledge domain.
     
+    Args:
+        domain: One of identity, goals, projects, finances, relationships, patterns
+        user_id: From JWT token
+    
+    Returns:
+        KnowledgeDomainResponse with all fields and completeness score
+    
     Raises:
-        HTTPException(400): Invalid domain name
-        HTTPException(403): Onboarding not complete
-        HTTPException(404): User not found
+        404: Domain not found
+        422: Invalid domain name
     """
-    if domain not in VALID_DOMAINS:
-        raise HTTPException(status_code=400, detail=f"Invalid domain: {domain}")
+    valid_domains = {"identity", "goals", "projects", "finances", "relationships", "patterns"}
+    if domain not in valid_domains:
+        raise HTTPException(status_code=422, detail=f"Invalid domain: {domain}")
     
     try:
-        fields = await knowledge_service.get_domain(user_id, domain)
-        return KnowledgeDomainResponse(domain=domain, fields=fields)
-    except OnboardingIncompleteError:
-        raise HTTPException(status_code=403, detail="Complete onboarding first")
+        result = await knowledge_service.get_domain(db, user_id, domain)
+        if not result:
+            raise HTTPException(status_code=404, detail=f"No knowledge found for domain: {domain}")
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"[Knowledge] Get domain failed: {e}", exc_info=True)
+        logger.error(f"Failed to get knowledge domain {domain} for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 ```
 
-**Rules:**
-- Always specify `response_model`
-- Catch specific exceptions, map to appropriate HTTP status codes
-- Log all 500 errors with `exc_info=True` for stack trace
-- Never return raw exception messages to the client
+### ContextBuilder — mandatory pattern
 
----
+```python
+# backend/app/core/context_builder.py
+# This pattern is non-negotiable. Every LLM call goes through it.
 
-## Knowledge Base Rules (Critical)
+import asyncio
+from typing import Dict, Any, Optional
 
-These rules are non-negotiable. The Knowledge Base is the product.
-
-1. **Every automated update must be logged.** Write to `knowledge_updates` before updating the field. If the log write fails, do not update the field.
-
-2. **Manual entries are immutable by automation.** If `source == "manual"`, the fact extraction pipeline must never overwrite it, regardless of confidence.
-
-3. **Confidence threshold for automated writes is 0.7.** Below this, the update is logged as a candidate but not applied. Present low-confidence candidates to the user for review.
-
-4. **Conflict resolution is explicit, not silent.** When a new value conflicts with an existing one, log both and apply the resolution rule. Never silently drop either value.
-
-5. **The Knowledge Base must always be consistent.** If a fact update job fails partway through, it must roll back cleanly. Use database transactions for all Knowledge Base writes.
-
----
-
-## Performance Requirements
-
-### Voice Pipeline Latency Budget
-
-| Stage | Target | Max Allowed |
-|-------|--------|-------------|
-| Audio upload to backend | <200ms | 500ms |
-| Deepgram STT (streaming) | <300ms | 700ms |
-| Context Builder | <300ms | 500ms |
-| GPT-4o first token | <800ms | 1500ms |
-| ElevenLabs TTS first chunk | <400ms | 800ms |
-| **Total end-to-end** | **<2.0s** | **3.0s** |
-
-If total latency exceeds 3 seconds, degrade gracefully: return text response only, log the failure, investigate before next release.
-
-### Other Performance Targets
-
-| Operation | Target |
-|-----------|--------|
-| Knowledge Base read (full) | <100ms |
-| Pinecone semantic search | <300ms |
-| Redis working memory read | <20ms |
-| Fact extraction job | <10 seconds (background, not blocking) |
-| App launch to voice ready | <3 seconds |
-
----
-
-## Testing Requirements
-
-### Coverage Targets
-
-| Module | Target |
-|--------|--------|
-| `core/context_builder.py` | >85% |
-| `core/fact_extractor.py` | >85% |
-| `core/prompt_engine.py` | >80% |
-| `services/` | >70% |
-| React Native `hooks/` | >70% |
-| React Native `services/` | >70% |
-| React Native `components/` | >60% |
-
-### Critical Test Cases (must exist)
-
-**Context Builder:**
-- Assembles all four layers correctly
-- Falls back to minimal prompt if Knowledge Base is empty (onboarding not complete)
-- Respects 300ms latency budget under normal load
-
-**Fact Extractor:**
-- Does not overwrite manual entries
-- Rejects updates below 0.7 confidence
-- Rolls back cleanly on failure
-- Logs all updates before applying them
-
-**Voice Pipeline:**
-- Handles Deepgram timeout gracefully (does not crash)
-- Handles ElevenLabs timeout gracefully (returns text only)
-- Reconnects WebSocket automatically after drop
-
----
-
-## Security Standards
-
-### Data Handling
-- All Knowledge Base data encrypted at rest (AES-256)
-- All API traffic over HTTPS/WSS (TLS 1.3)
-- JWT expiration: 7 days
-- No PII in logs — use user ID, not email or name
-
-### API Keys
-- Never in source code
-- Always in environment variables
-- Rotate quarterly
-
-### OpenAI
-- Enable "No training data" opt-out on all API calls
-- Never log the full prompt (contains personal user data)
-- Log only: model used, token count, latency, error code if any
-
----
-
-## Git Workflow
-
-**Commit format:**
-```
-[PHASE-1] Add Context Builder with four-layer prompt assembly
-
-- Implements Knowledge Base injection (Layer 2)
-- Implements Redis working memory retrieval (Layer 3)  
-- Implements Pinecone semantic search (Layer 4)
-- asyncio.gather() for concurrent retrieval
-- Tests: 87% coverage on context_builder.py
+class ContextBuilder:
+    async def build_context(
+        self, 
+        user_id: str, 
+        query: Optional[str] = None,
+        timeout: float = 0.3  # 300ms max
+    ) -> Dict[str, Any]:
+        """
+        Build the 4-layer prompt context. Target: under 300ms.
+        
+        Fails gracefully: if any layer fails, returns empty dict for that layer.
+        Never raises — always returns something.
+        """
+        kb_task = asyncio.create_task(self._fetch_knowledge_summary(user_id))
+        wm_task = asyncio.create_task(self._fetch_working_memory(user_id))
+        em_task = asyncio.create_task(self._fetch_episodic(user_id, query))
+        
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(kb_task, wm_task, em_task, return_exceptions=True),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"Context build timeout for user {user_id}, using partial context")
+            results = [{}, {}, []]
+        
+        knowledge_summary = results[0] if not isinstance(results[0], Exception) else {}
+        working_memory = results[1] if not isinstance(results[1], Exception) else {}
+        episodic = results[2] if not isinstance(results[2], Exception) else []
+        
+        return {
+            "knowledge_summary": knowledge_summary,
+            "working_memory": working_memory,
+            "episodic": episodic,
+        }
 ```
 
-**Branch naming:**
-- `feature/context-builder`
-- `feature/knowledge-base-schema`
-- `fix/voice-latency-spike`
-- `refactor/fact-extractor`
+### Fact Extractor — confidence rules
 
-**PR requirements:**
-- All tests pass
-- Type checking passes (`tsc --noEmit` / `mypy app/`)
-- Linting passes
-- No `console.log` or `print` in production paths
-- Latency impact documented if touching hot path
+```python
+# Confidence scoring — strict rules
+
+CONFIDENCE_THRESHOLDS = {
+    "write_to_kb": 0.6,      # Minimum to write to KB
+    "overwrite_manual": 1.1,  # Never (> 1.0 = impossible) — manual entries are never automatically overwritten
+    "financial_data": 0.8,    # Higher threshold for financial data
+}
+
+# Scoring guide
+# 0.9+  : Explicit, unambiguous statement ("My goal is X")
+# 0.7-0.9: Clear implication ("I've decided to X")
+# 0.5-0.7: Possible update ("I'm thinking about X")
+# < 0.5 : Do not write to KB
+# source="manual" : NEVER automatically overwritten
+```
+
+### Async — absolute rules
+
+```python
+# ✅ Always async for I/O operations
+async def get_user_goals(user_id: str, db: AsyncSession) -> list[Goal]:
+    result = await db.execute(select(Goal).where(Goal.user_id == user_id))
+    return result.scalars().all()
+
+# ❌ Never block inside an async handler
+def get_user_goals_WRONG(user_id: str):
+    time.sleep(0.1)  # Blocks the entire event loop
+    return db.query(Goal).filter(Goal.user_id == user_id).all()
+```
+
+```python
+# ✅ asyncio.gather() for parallel operations
+kb, memory, episodic = await asyncio.gather(
+    get_knowledge(user_id),
+    get_working_memory(user_id),
+    get_episodic(user_id, query),
+)
+
+# ❌ Sequential when parallel is possible
+kb = await get_knowledge(user_id)           # 100ms
+memory = await get_working_memory(user_id)  # 20ms
+episodic = await get_episodic(user_id, query)  # 300ms
+# Total: 420ms instead of 300ms
+```
+
+### Python naming conventions
+
+| Element | Convention | Example |
+|---------|-----------|---------|
+| Files | snake_case | `context_builder.py`, `fact_extractor.py` |
+| Classes | PascalCase | `ContextBuilder`, `FactExtractor` |
+| Functions/methods | snake_case | `build_context()`, `extract_facts()` |
+| Constants | SCREAMING_SNAKE | `CONFIDENCE_THRESHOLDS`, `MAX_RETRIES` |
+| Variables | snake_case | `user_id`, `knowledge_summary` |
+| Pydantic models | PascalCase | `KnowledgeDomainUpdate`, `ConversationSummary` |
+
+### Logging — always structured
+
+```python
+# ✅ Structured with context
+logger.info("Context built", user_id=user_id, duration_ms=elapsed, layers_loaded=3)
+logger.error("Pinecone search failed", user_id=user_id, error=str(e), query=query[:50])
+
+# ❌ Print or string formatting
+print(f"Context built for {user_id}")
+logger.error(f"Error: {e}")
+```
 
 ---
 
-## What Has Been Removed vs Original RULES.md
+## 4. Prompt Engineering Rules
 
-The following sections from the original `RULES.md` no longer apply:
+> See `PROMPT.md` for the full specification. These rules are the operational summary.
 
-- ❌ `HealthKitService` — no biometric integration in v1
-- ❌ `BiometricStore` — removed
-- ❌ `StateMachine` — removed entirely
-- ❌ `intervention_engine` — removed entirely
-- ❌ `biometricStore` — removed
-- ❌ All HealthKit-related code patterns and tests
+### Core rules
 
-The knowledge and voice sections are new and replace the biometric sections completely.
+**1. No hardcoded prompts outside `prompt_engine.py`.** All templates live in that file. Zero exceptions.
+
+**2. Always version.** Every prompt modification = version bump in `PROMPT_VERSION`. See PROMPT.md section 9.
+
+**3. Test before merging.** Every Layer 1 change must pass the 10 golden examples in PROMPT.md section 7. Minimum score: 10/10.
+
+**4. Never hardcode prompts in tests.** Tests call `build_system_prompt()`, they do not reconstruct the prompt manually.
+
+**5. Log the version on every LLM call.**
+
+```python
+logger.info("LLM call", 
+    prompt_version=PROMPT_VERSION,
+    user_id=user_id,
+    layers_loaded=layers_present,
+    estimated_tokens=token_estimate
+)
+```
+
+### Verification before every LLM call
+
+```python
+def validate_before_llm_call(system_prompt: str, user_message: str) -> bool:
+    """Guard to call before every GPT-4o invocation."""
+    
+    # Token budget
+    estimated = (len(system_prompt) + len(user_message)) // 4
+    if estimated > 3000:
+        logger.warning(f"Prompt budget exceeded: ~{estimated} tokens")
+        # Truncate Layer 3 (working memory) first
+        return False
+    
+    # Layer 1 always present
+    if "You are JARVIS" not in system_prompt:
+        logger.error("Layer 1 character missing from system prompt!")
+        return False
+    
+    return True
+```
+
+### What the JARVIS character prompt must NEVER output
+
+```python
+FORBIDDEN_PATTERNS = [
+    "As an AI",
+    "I'm happy to",
+    "Of course!",
+    "Certainly!",
+    "That's a great question",
+    "It's important to note",
+    "Here are some things to consider",
+    "Feel free to",
+    "I'd be happy to help",
+]
+# These patterns in production = character regression. Alert immediately.
+```
+
+---
+
+## 5. Testing
+
+### Minimum coverage
+
+| Module | Target coverage |
+|--------|---------------|
+| `context_builder.py` | 90% |
+| `fact_extractor.py` | 85% |
+| `prompt_engine.py` | 95% |
+| API endpoints | 80% |
+| React components | 70% |
+
+### Python test pattern
+
+```python
+# tests/test_context_builder.py
+import pytest
+from unittest.mock import AsyncMock, patch
+from app.core.context_builder import ContextBuilder
+
+@pytest.mark.asyncio
+async def test_context_builder_injects_knowledge_base():
+    """ContextBuilder must always return a knowledge_summary."""
+    builder = ContextBuilder()
+    
+    with patch.object(builder, '_fetch_knowledge_summary', new_callable=AsyncMock) as mock_kb:
+        mock_kb.return_value = {"goals": [{"description": "€8,000/month"}]}
+        
+        context = await builder.build_context("user_123", query="priorities")
+        
+        assert "knowledge_summary" in context
+        assert len(context["knowledge_summary"].get("goals", [])) > 0
+
+@pytest.mark.asyncio
+async def test_context_builder_graceful_degradation():
+    """If Pinecone fails, the context builder must not crash."""
+    builder = ContextBuilder()
+    
+    with patch.object(builder, '_fetch_episodic', side_effect=Exception("Pinecone down")):
+        # Must not raise
+        context = await builder.build_context("user_123")
+        
+        # Episodic empty, but the rest is present
+        assert context["episodic"] == []
+        assert "knowledge_summary" in context
+
+@pytest.mark.asyncio
+async def test_context_builder_timeout():
+    """The context builder must respect the 300ms timeout."""
+    import asyncio
+    builder = ContextBuilder()
+    
+    async def slow_pinecone(*args, **kwargs):
+        await asyncio.sleep(1.0)  # Simulate slow Pinecone
+        return []
+    
+    with patch.object(builder, '_fetch_episodic', side_effect=slow_pinecone):
+        import time
+        start = time.monotonic()
+        context = await builder.build_context("user_123", timeout=0.3)
+        elapsed = time.monotonic() - start
+        
+        assert elapsed < 0.5  # Generous buffer
+        assert context["episodic"] == []  # Graceful empty
+```
+
+### Critical integration test — Context Injection
+
+```python
+# tests/integration/test_context_injection.py
+
+@pytest.mark.asyncio
+async def test_jarvis_response_references_knowledge_base():
+    """
+    Most important test in the project.
+    Verifies that JARVIS responses actually use the KB.
+    
+    This test must pass before checking off Week 8 in TIMELINE.md.
+    """
+    # Setup: KB with a specific goal
+    mock_kb = {
+        "goals": [{"description": "Reach €8,000/month by December"}],
+        "projects": [{"name": "ProjectX", "status": "blocked"}]
+    }
+    
+    # Call prompt engine with this context
+    system_prompt = build_system_prompt({"knowledge_summary": mock_kb})
+    
+    # Verify the goal is in the prompt
+    assert "€8,000" in system_prompt or "8,000" in system_prompt
+    assert "ProjectX" in system_prompt
+    
+    # If using a real LLM call in testing, verify the response mentions it
+    # (with mocked OpenAI in CI, or real call in local testing)
+```
+
+### React Native test pattern
+
+```typescript
+// __tests__/components/VoiceButton.test.tsx
+import React from 'react';
+import { render, fireEvent } from '@testing-library/react-native';
+import { VoiceButton } from '../src/components/VoiceButton';
+
+describe('VoiceButton', () => {
+  it('calls onPressIn when pressed', () => {
+    const mockPressIn = jest.fn();
+    const mockPressOut = jest.fn();
+    
+    const { getByTestId } = render(
+      <VoiceButton
+        onPressIn={mockPressIn}
+        onPressOut={mockPressOut}
+        isRecording={false}
+      />
+    );
+    
+    fireEvent(getByTestId('voice-button'), 'pressIn');
+    expect(mockPressIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onPressIn when disabled', () => {
+    const mockPressIn = jest.fn();
+    
+    const { getByTestId } = render(
+      <VoiceButton
+        onPressIn={mockPressIn}
+        onPressOut={jest.fn()}
+        isRecording={false}
+        isDisabled={true}
+      />
+    );
+    
+    fireEvent(getByTestId('voice-button'), 'pressIn');
+    expect(mockPressIn).not.toHaveBeenCalled();
+  });
+});
+```
+
+---
+
+## 6. Git & Versioning
+
+### Branch naming
+
+```
+main          — stable production only
+dev           — continuous integration
+feature/      — new features (feature/context-builder-v2)
+fix/          — bug fixes (fix/websocket-reconnect)
+prompt/       — prompt changes (prompt/v1.1-character-update)
+infra/        — infrastructure (infra/redis-config)
+```
+
+### Commit convention
+
+```
+type(scope): short description
+
+Types: feat, fix, refactor, test, docs, prompt, infra, chore
+Scope: voice, kb, memory, ui, api, prompt
+
+Examples:
+feat(kb): add confidence threshold validation for financial data
+fix(voice): resolve WebSocket reconnection on iOS background
+prompt(v1.1): tighten character enforcement, add pushback examples
+test(context): add integration test for KB injection in voice handler
+docs(rules): remove deprecated HealthKit references
+```
+
+### Merge rules
+
+- Never push directly to `main`
+- PR minimum: 1 reviewer (yourself after 24 hours of distance if solo)
+- All tests pass before merge
+- For prompt changes: golden examples validated (see PROMPT.md)
+
+---
+
+## 7. Performance Rules
+
+### Latency budget — non-negotiable
+
+| Stage | Target | Hard limit | Action if exceeded |
+|-------|--------|-----------|-------------------|
+| Audio → backend (WS) | <200ms | 400ms | Check audio compression |
+| Deepgram STT (streaming) | <300ms | 700ms | Check Deepgram tier |
+| Context Builder (3 tiers) | <300ms | 500ms | Verify asyncio.gather() |
+| GPT-4o first token | <800ms | 1500ms | Verify streaming enabled |
+| ElevenLabs first audio chunk | <400ms | 800ms | Verify streaming enabled |
+| **Total end-to-end** | **<2.0s** | **3.0s** | **Degrade to text only** |
+
+### Graceful degradation order
+
+```python
+# Degradation order when latency exceeds targets:
+# 1. Skip Layer 4 (Pinecone) → context without episodic
+# 2. Truncate Layer 3 to 10 conversations instead of 30
+# 3. Minimal Layer 2 summary (3 fields instead of full)
+# 4. Text-only fallback (no ElevenLabs TTS) if latency > 3s
+# 5. NEVER: response without Layer 1 (character definition)
+```
+
+### Performance prohibitions
+
+```python
+# ❌ Never in the voice hot path
+time.sleep()           # Blocking
+requests.get()         # Blocking HTTP
+db.execute() sync      # Blocking DB
+
+# ❌ Never without cache
+def build_kb_summary():  # Called on every message without cache
+    return db.query(...)  # 100ms every time → use Redis cache 5min
+```
+
+---
+
+## 8. Common Problems & Solutions
+
+### Problem: WebSocket disconnects in iOS background
+
+**Cause:** iOS suspends network connections when the app goes to the background.
+
+**Solution:**
+```typescript
+// mobile/src/hooks/useWebSocket.ts
+import { AppState, AppStateStatus } from 'react-native';
+
+useEffect(() => {
+  const subscription = AppState.addEventListener('change', (state: AppStateStatus) => {
+    if (state === 'active') {
+      // App returns to foreground — reconnect
+      reconnectWebSocket();
+    }
+  });
+  return () => subscription.remove();
+}, []);
+
+// With exponential backoff
+const reconnectWithBackoff = async (attempt: number = 0) => {
+  const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+  await new Promise(resolve => setTimeout(resolve, delay));
+  try {
+    await connect();
+  } catch {
+    if (attempt < 5) reconnectWithBackoff(attempt + 1);
+  }
+};
+```
+
+### Problem: LLM response too slow (> 800ms to first token)
+
+**Possible causes:**
+1. Streaming not enabled → verify `stream=True` in the OpenAI call
+2. Prompt too long → verify `validate_prompt_budget()` before the call
+3. Layer 4 (Pinecone) blocking → verify the timeout in `build_context()`
+
+**Solution:**
+```python
+# Always stream
+async def stream_llm_response(messages: list, user_id: str):
+    async with openai_client.chat.completions.stream(
+        model="gpt-4o",
+        messages=messages,
+        max_tokens=500,  # Limit for voice — keep responses short
+        stream=True,
+    ) as stream:
+        async for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+```
+
+### Problem: Fact extraction writes wrong information to the KB
+
+**Cause:** Confidence too low accepted, or conflict resolution misconfigured.
+
+**Solution:**
+```python
+# Always validate before writing
+def should_write_to_kb(update: KnowledgeUpdate, existing: Optional[KnowledgeEntry]) -> bool:
+    # Rule 1: manual entry = untouchable
+    if existing and existing.source == "manual":
+        return False
+    
+    # Rule 2: minimum confidence
+    if update.confidence < CONFIDENCE_THRESHOLDS["write_to_kb"]:
+        return False
+    
+    # Rule 3: financial data = higher threshold
+    if update.domain == "finances" and update.confidence < CONFIDENCE_THRESHOLDS["financial_data"]:
+        return False
+    
+    # Rule 4: don't lower existing confidence
+    if existing and existing.confidence > update.confidence:
+        return False
+    
+    return True
+```
+
+### Problem: JARVIS character degrades over time (generic responses)
+
+**Cause:** Layer 1 too short, or context taking up too much space and drowning the character.
+
+**Solution:**
+1. Check `PROMPT_VERSION` in logs — look for a recent modification that shortened Layer 1
+2. Test the golden examples from PROMPT.md
+3. Ensure Layer 1 is **always first** in the system prompt, before any context
+4. Verify the system prompt doesn't exceed 2000 tokens (budget)
+
+### Problem: ContextBuilder returns empty context
+
+**Possible cause:** Onboarding not completed, or `ContextBuilder` not wired into the WebSocket handler.
+
+**Diagnosis:**
+```python
+# Add this temporary log in the voice WebSocket handler
+context = await context_builder.build_context(user_id, query=transcript)
+logger.debug("Context built", 
+    has_kb=bool(context.get("knowledge_summary")),
+    has_memory=bool(context.get("working_memory")),
+    has_episodic=len(context.get("episodic", [])),
+    user_id=user_id
+)
+# If has_kb=False → verify the WebSocket handler actually calls build_context()
+# If has_kb=True but KB is empty → onboarding not done
+```
+
+---
+
+## Final Reminders
+
+1. **Read PROJECT.md before coding** — understand the vision before implementing
+2. **Consult PROMPT.md before any prompt change** — don't improvise
+3. **Check TIMELINE.md** — is the feature in the current phase?
+4. **Test first** — TDD prevents rework
+5. **Optimise latency** — every millisecond counts in the voice hot path
+6. **Privacy non-negotiable** — see PRIVACY.md for every data decision
+
+**The goal is to ship a working Phase 1 MVP, not a perfect architecture that never ships.**

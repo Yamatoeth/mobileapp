@@ -9,12 +9,13 @@
 // Voice Components
 export { HoldToTalkButton } from './HoldToTalkButton';
 export { VoiceInput, VoiceInputCompact } from './VoiceInput';
+export { default as JarvisVoiceScreen } from './JarvisVoiceScreen';
+export { default as ParticleSphere } from './ParticleSphere';
 
 // Form Components
 export { LogForm } from './LogForm';
 
-// State Indicator Components
-export { StateIndicator, StateSelector, StateHistory } from './StateIndicator';
+// State Indicator Components removed (pivot)
 
 // Calendar Components removed in pivot
 

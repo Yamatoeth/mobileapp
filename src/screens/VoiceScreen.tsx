@@ -3,7 +3,6 @@ import { Animated, Dimensions, Pressable, StyleSheet, Text, Vibration, View, Pla
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useVoiceAssistant } from '../hooks/useVoiceAssistant'
 import { useTheme } from '../hooks/useTheme'
-import { SiriSphere } from '../components/SiriSphere'
 import { voiceColors, voiceGradient } from '../styles/voiceTheme'
 
 const { width, height } = Dimensions.get('window')
@@ -96,7 +95,6 @@ export function VoiceScreen() {
         </Animated.View>
 
         <View style={styles.waveContainer} pointerEvents="none">
-          <SiriSphere audioLevel={audioLevel ?? 0} state={state} size={100} />
         </View>
         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
           <Pressable

@@ -1,20 +1,20 @@
 import 'react-native-gesture-handler'
 import 'react-native-reanimated'
 import './global.css'
-import './src/utils/skiaSafe'
+
 
 import { StatusBar } from 'expo-status-bar'
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { View } from 'react-native'
-import JarvisVoiceScreen from './components/JarvisVoiceScreen'
+import JarvisVoiceScreen from './src/components/JarvisVoiceScreen'
 import { ProfileScreen } from './src/screens/ProfileScreen'
 import { ThemeProvider, useTheme } from './src/hooks/useTheme'
 import { OnboardingScreen } from './src/screens/OnboardingScreen'
 import { useOnboarding } from './src/hooks/useOnboarding'
 import { useEffect, useState } from 'react'
-import { addNotificationActionListener } from './src/services/notificationService'
+import { addNotificationActionListener, registerForPushNotificationsAsync } from './src/services/notificationService'
 
 const Stack = createNativeStackNavigator()
 
@@ -44,9 +44,19 @@ function AppContent() {
       }
     })
     return () => {
-      // No cleanup needed as addNotificationActionListener returns void
+      if (subscription && typeof subscription.remove === 'function') {
+        subscription.remove()
+      }
     }
   }, [])
+
+  // Register for push notifications after onboarding (temporary user id)
+  useEffect(() => {
+    if (hasSeenOnboarding) {
+      // TODO: replace with real authenticated user id
+      registerForPushNotificationsAsync(1)
+    }
+  }, [hasSeenOnboarding])
 
   if (isLoading) {
     return null

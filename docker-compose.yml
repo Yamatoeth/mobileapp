@@ -30,6 +30,42 @@ services:
       timeout: 5s
       retries: 5
 
+  backend:
+    build: ./backend
+    container_name: jarvis-backend
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://jarvis:jarvis_dev@postgres:5432/jarvis_db
+    ports:
+      - "8000:8000"
+
+  celery_worker:
+    image: python:3.11-slim
+    container_name: jarvis-celery-worker
+    command: bash -c "cd backend && celery -A app.tasks.fact_extraction.celery_app worker --loglevel=info"
+    depends_on:
+      - backend
+      - redis
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    volumes:
+      - ./backend:/app/backend
+
+  celery_beat:
+    image: python:3.11-slim
+    container_name: jarvis-celery-beat
+    command: bash -c "cd backend && celery -A app.tasks.fact_extraction.celery_app beat --loglevel=info"
+    depends_on:
+      - backend
+      - redis
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    volumes:
+      - ./backend:/app/backend
+
 volumes:
   postgres_data:
   redis_data:

@@ -1,8 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
 import { VoiceScreen } from '../screens/VoiceScreen'
-import { ChatScreen } from '../screens/ChatScreen'
-import { LogScreen } from '../screens/LogScreen'
 // Progress screen removed in pivot
 import { ProfileScreen } from '../screens/ProfileScreen'
 import { useTheme } from '../hooks/useTheme'
@@ -36,24 +34,7 @@ export function TabNavigator() {
           ),
         }}
       />
-      <Tab.Screen
-        name="Chat"
-        component={ChatScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubble-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Log"
-        component={LogScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="clipboard-outline" size={size} color={color} />
-          ),
-        }}
-      />
+      {/* Chat and Log tabs removed in pivot — Home and Profile only */}
       {/* Progress tab removed in pivot */}
       <Tab.Screen
         name="Profile"

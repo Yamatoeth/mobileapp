@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     debug: bool = True
     app_name: str = "J.A.R.V.I.S."
     app_version: str = "1.0.0"
+    # Notifications
+    max_proactive_notifications_per_day: int = 3
     # Test helpers
     test_mode: bool = False  # When true, use local stubs for external services
 
