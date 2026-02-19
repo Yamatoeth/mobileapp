@@ -13,7 +13,7 @@ export { default as JarvisVoiceScreen } from './JarvisVoiceScreen';
 export { default as ParticleSphere } from './ParticleSphere';
 
 // Form Components
-export { LogForm } from './LogForm';
+// `LogForm` removed during pivot — use specialized health entry UI or restore if needed
 
 // State Indicator Components removed (pivot)
 

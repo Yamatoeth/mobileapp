@@ -1,7 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
 import { VoiceScreen } from '../screens/VoiceScreen'
-// Progress screen removed in pivot
 import { ProfileScreen } from '../screens/ProfileScreen'
 import { useTheme } from '../hooks/useTheme'
 
