@@ -2,22 +2,37 @@ from typing import List, Optional
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
+    try:
+        parsed = json.loads(text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"failed to parse LLM output: {e}")
 
-from app.db.database import async_session_maker
-from app.core import prompt_engine
-import os
-import asyncio
-import openai
+    # Validate and normalize each suggested item using the KBUpdate model.
+    valid: List[dict] = []
+    errors: List[dict] = []
 
-router = APIRouter(prefix="/kb", tags=["kb"])
+    if not isinstance(parsed, list):
+        raise HTTPException(status_code=500, detail="LLM did not return a JSON array")
 
+    for idx, item in enumerate(parsed):
+        if not isinstance(item, dict):
+            errors.append({"index": idx, "error": "item is not an object", "item": item})
+            continue
 
-class KBUpdate(BaseModel):
-    domain: str
-    user_id: int
-    field_name: str
+        # Ensure required routing fields are present
+        item.setdefault("user_id", req.user_id)
+        if req.conversation_id is not None:
+            item.setdefault("conversation_id", req.conversation_id)
+
+        try:
+            kb_item = KBUpdate.parse_obj(item)
+            valid.append(kb_item.dict())
+        except ValidationError as exc:
+            errors.append({"index": idx, "errors": exc.errors(), "item": item})
+
+    return {"suggested": valid, "errors": errors}
     field_value: str
     confidence: float = Field(ge=0.0, le=1.0)
     source: str
@@ -51,17 +66,87 @@ async def apply_updates(req: KBApplyRequest):
             raise HTTPException(status_code=500, detail=f"model {model_name} not found")
 
         async with async_session_maker() as session:
-            obj = model_cls(
-                user_id=u.user_id,
-                field_name=u.field_name,
-                field_value=u.field_value,
-                confidence=u.confidence,
-                source=u.source,
-                last_updated=datetime.utcnow(),
-            )
-            session.add(obj)
-            await session.commit()
-            applied += 1
+            # Look for existing entry for this user + field
+            try:
+                q = await session.execute(
+                    select(model_cls).where(
+                        model_cls.user_id == u.user_id,
+                        model_cls.field_name == u.field_name,
+                    )
+                )
+                existing = q.scalars().first()
+            except Exception:
+                existing = None
+
+            # Helper to create a knowledge_updates log
+            def make_update_log(old_val, new_val):
+                ku = models_mod.KnowledgeUpdate(
+                    user_id=str(u.user_id),
+                    conversation_id=str(u.conversation_id) if u.conversation_id is not None else None,
+                    table_name=getattr(model_cls, "__tablename__", model_name),
+                    field_name=u.field_name,
+                    old_value=old_val,
+                    new_value=new_val,
+                    confidence=u.confidence,
+                    source=u.source,
+                )
+                return ku
+
+            # No existing row -> insert
+            if not existing:
+                obj = model_cls(
+                    user_id=str(u.user_id),
+                    field_name=u.field_name,
+                    field_value=u.field_value,
+                    confidence=u.confidence,
+                    source=u.source,
+                    last_updated=datetime.utcnow(),
+                )
+                session.add(obj)
+                # Log insertion
+                session.add(make_update_log(None, u.field_value))
+                await session.commit()
+                applied += 1
+                continue
+
+            # Conflict resolution: prefer higher confidence; tie-breaker by recency
+            try:
+                existing_conf = float(getattr(existing, "confidence", 0.0) or 0.0)
+            except Exception:
+                existing_conf = 0.0
+
+            incoming_conf = float(u.confidence or 0.0)
+            should_update = False
+
+            if incoming_conf > existing_conf + 1e-6:
+                should_update = True
+            elif abs(incoming_conf - existing_conf) <= 1e-6:
+                # Tie: if conversation_id provided, prefer newer conversation
+                if u.conversation_id is not None:
+                    try:
+                        conv = await session.get(models_mod.Conversation, str(u.conversation_id))
+                        if conv and getattr(conv, "created_at", None):
+                            existing_updated = getattr(existing, "last_updated", None)
+                            if existing_updated is None or conv.created_at > existing_updated:
+                                should_update = True
+                    except Exception:
+                        # If any error, don't update on tie
+                        should_update = False
+
+            if should_update:
+                old_val = getattr(existing, "field_value", None)
+                existing.field_value = u.field_value
+                existing.confidence = u.confidence
+                existing.source = u.source
+                existing.last_updated = datetime.utcnow()
+
+                # Log the change
+                session.add(make_update_log(old_val, u.field_value))
+                await session.commit()
+                applied += 1
+            else:
+                # Skip applying lower-confidence / older update
+                continue
 
     return {"applied": applied}
 

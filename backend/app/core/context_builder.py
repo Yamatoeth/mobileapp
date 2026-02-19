@@ -228,6 +228,3 @@ class ContextBuilder:
 default_context_builder = ContextBuilder()
 
 __all__ = ["build_context", "default_context_builder", "ContextBuilder"]
-
-
-__all__ = ["build_context"]

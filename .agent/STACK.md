@@ -1,31 +1,31 @@
-# J.A.R.V.I.S. Technical Stack
+  # J.A.R.V.I.S. Technical Stack
 
-## Overview
+  ## Overview
 
-```
-┌─────────────────────────────────────────────────────────┐
-│              iOS App (React Native + Expo)               │
-│         VoiceScreen · HistoryScreen · KnowledgeScreen   │
-└─────────────────────────────────────────────────────────┘
-                         ▲ ▼ WSS + HTTPS
-┌─────────────────────────────────────────────────────────┐
-│             Backend (FastAPI + Python 3.11)              │
-│     Context Builder · Fact Extractor · Prompt Engine    │
-└─────────────────────────────────────────────────────────┘
-        ▲               ▲               ▲               ▲
-        │               │               │               │
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│  PostgreSQL  │ │   Pinecone   │ │    Redis     │ │    Celery    │
-│ Knowledge    │ │  Episodic    │ │  Working     │ │  Background  │
-│    Base      │ │   Memory     │ │   Memory     │ │    Jobs      │
-└──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
-        ▲               ▲               ▲
-        │               │               │
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│   Deepgram   │ │   GPT-4o    │ │  ElevenLabs  │
-│     STT      │ │     LLM     │ │     TTS      │
-└──────────────┘ └──────────────┘ └──────────────┘
-```
+  ```
+  ┌─────────────────────────────────────────────────────────┐
+  │              iOS App (React Native + Expo)               │
+  │         VoiceScreen · HistoryScreen · KnowledgeScreen   │
+  └─────────────────────────────────────────────────────────┘
+                          ▲ ▼ WSS + HTTPS
+  ┌─────────────────────────────────────────────────────────┐
+  │             Backend (FastAPI + Python 3.11)              │
+  │     Context Builder · Fact Extractor · Prompt Engine    │
+  └─────────────────────────────────────────────────────────┘
+          ▲               ▲               ▲               ▲
+          │               │               │               │
+  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+  │  PostgreSQL  │ │   Pinecone   │ │    Redis     │ │    Celery    │
+  │ Knowledge    │ │  Episodic    │ │  Working     │ │  Background  │
+  │    Base      │ │   Memory     │ │   Memory     │ │    Jobs      │
+  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+          ▲               ▲               ▲
+          │               │               │
+  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+  │   Deepgram   │ │   GPT-4o    │ │  ElevenLabs  │
+  │     STT      │ │     LLM     │ │     TTS      │
+  └──────────────┘ └──────────────┘ └──────────────┘
+  ```
 
 ---
 

@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 
 async def transcribe_audio_deepgram(audio_bytes: bytes) -> Optional[str]:
     """Try Deepgram transcription if key is configured."""
+    # Test-mode stub
+    if settings.test_mode:
+        return "this is a test transcript from deepgram stub"
+
     if not settings.deepgram_api_key:
         return None
 
@@ -50,6 +54,10 @@ async def transcribe_audio_deepgram(audio_bytes: bytes) -> Optional[str]:
 
 async def transcribe_audio_openai_whisper(audio_bytes: bytes) -> Optional[str]:
     """Fallback to OpenAI Whisper transcription via REST API (multipart)."""
+    # Test-mode stub
+    if settings.test_mode:
+        return "this is a test transcript from whisper stub"
+
     if not settings.openai_api_key:
         return None
 
@@ -72,6 +80,16 @@ async def transcribe_audio_openai_whisper(audio_bytes: bytes) -> Optional[str]:
 
 async def stream_openai_chat(messages, websocket: WebSocket) -> str:
     """Stream OpenAI chat completions to the websocket. Returns the full text."""
+    # Test-mode streaming stub
+    if settings.test_mode:
+        full_text = "Hello — this is JARVIS (test mode). I know your goals and will help you."
+        # simulate streaming in chunks
+        for chunk in [full_text[:20], full_text[20:40], full_text[40:]]:
+            await websocket.send_json({"type": "llm_chunk", "data": chunk})
+            await asyncio.sleep(0.02)
+        await websocket.send_json({"type": "llm_done", "content": full_text})
+        return full_text
+
     if not settings.openai_api_key:
         await websocket.send_json({"type": "error", "message": "OpenAI API key not configured"})
         return ""
@@ -135,6 +153,20 @@ async def stream_openai_chat(messages, websocket: WebSocket) -> str:
 
 async def synthesize_elevenlabs(text: str) -> Optional[bytes]:
     """Synthesize speech using ElevenLabs (best-effort). Returns raw audio bytes or None."""
+    # Test-mode stub: return a short silent WAV
+    if settings.test_mode:
+        # 0.1s of silence WAV (PCM 16kHz mono)
+        import wave, io, struct
+
+        buf = io.BytesIO()
+        with wave.open(buf, 'wb') as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(16000)
+            frames = b'\x00\x00' * 1600
+            w.writeframes(frames)
+        return buf.getvalue()
+
     if not settings.elevenlabs_api_key:
         return None
 
@@ -173,6 +205,69 @@ async def websocket_voice(user_id: str, websocket: WebSocket):
 
             # Support binary frames (append) or JSON text frames
             if "bytes" in msg and msg["bytes"]:
+                # Special-case: client can send a single-frame b"__FINAL__" to indicate end-of-utterance
+                if msg["bytes"] == b"__FINAL__":
+                    await websocket.send_json({"type": "stt_start"})
+
+                    # STT: try Deepgram then OpenAI Whisper
+                    transcript = await transcribe_audio_deepgram(bytes(audio_buffer))
+                    if not transcript:
+                        transcript = await transcribe_audio_openai_whisper(bytes(audio_buffer))
+
+                    await websocket.send_json({"type": "stt_done", "transcript": transcript})
+
+                    # Build server-side context and measure latency
+                    import time
+                    start = time.perf_counter()
+                    context = await build_context(user_id, transcript)
+                    elapsed_ms = int((time.perf_counter() - start) * 1000)
+                    await websocket.send_json({"type": "context_built", "ms": elapsed_ms})
+
+                    # Prepare messages for LLM: include server-assembled context
+                    system_message = {
+                        "role": "system",
+                        "content": "You are J.A.R.V.I.S. Use the provided server-side context to answer concisely. Do not perform interventions unless explicitly asked. Context: " + str(context),
+                    }
+                    user_message = {"role": "user", "content": transcript or ""}
+
+                    # Stream LLM output back to the websocket
+                    full_text = await stream_openai_chat([system_message, user_message], websocket)
+
+                    # Optionally synthesize TTS and stream/send audio back in chunks
+                    tts_audio = await synthesize_elevenlabs(full_text)
+                    if tts_audio:
+                        try:
+                            chunk_size = 32 * 1024
+                            # send in base64-encoded chunks to avoid huge single frames
+                            for i in range(0, len(tts_audio), chunk_size):
+                                chunk = tts_audio[i : i + chunk_size]
+                                b64chunk = base64.b64encode(chunk).decode()
+                                logger.debug(
+                                    "Sending tts chunk %s/%s",
+                                    (i // chunk_size) + 1,
+                                    (len(tts_audio) + chunk_size - 1) // chunk_size,
+                                )
+                                await websocket.send_json({"type": "tts_audio_chunk", "data": b64chunk})
+
+                            await websocket.send_json({"type": "tts_audio_done"})
+                            logger.debug("Sent tts_audio_done to websocket for user %s", user_id)
+                        except Exception:
+                            logger.exception("Failed streaming TTS chunks")
+                            # fallback to sending whole audio as one base64 frame
+                            try:
+                                b64 = base64.b64encode(tts_audio).decode()
+                                logger.debug("Sending fallback tts_audio_base64, size=%s", len(b64))
+                                await websocket.send_json({"type": "tts_audio_base64", "data": b64})
+                            except Exception:
+                                logger.exception("Failed fallback TTS send")
+                    else:
+                        # If TTS not available, send final text explicitly
+                        await websocket.send_json({"type": "final_text", "text": full_text})
+
+                    # Reset buffer for next utterance
+                    audio_buffer = bytearray()
+                    continue
+
                 audio_buffer.extend(msg["bytes"])
                 # acknowledge
                 await websocket.send_json({"type": "ack_audio"})
@@ -180,9 +275,22 @@ async def websocket_voice(user_id: str, websocket: WebSocket):
 
             if "text" in msg and msg["text"]:
                 try:
-                    payload = websocket.json_decoder(msg["text"]) if hasattr(websocket, "json_decoder") else None
+                    if hasattr(websocket, "json_decoder"):
+                        payload = websocket.json_decoder(msg["text"])
+                    else:
+                        import json as _json
+                        payload = _json.loads(msg["text"]) if msg.get("text") else None
                 except Exception:
-                    payload = None
+                    # Best-effort fallback: if the text contains a simple control like 'final',
+                    # accept it as a final marker. This helps clients that send plain strings.
+                    raw = msg.get("text")
+                    try:
+                        if raw and isinstance(raw, str) and raw.strip().lower() == "final":
+                            payload = {"type": "final"}
+                        else:
+                            payload = None
+                    except Exception:
+                        payload = None
 
                 # If the client sends a JSON control frame
                 if payload and isinstance(payload, dict):

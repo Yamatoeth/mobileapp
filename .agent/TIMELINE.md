@@ -87,7 +87,6 @@ Solo development, full-time commitment. Three phases, twelve months. The rule is
 ### Month 3 — Memory System
 
 **Week 9: Working Memory (Redis)**
-**Week 9: Working Memory (Redis)**
 - [x] Store every conversation summary in Redis after each session
 - [x] 30-conversation sliding window (TTL: 30 days)
 - [x] Load last 30 summaries into Layer 3 of prompt on every call
@@ -103,18 +102,18 @@ Solo development, full-time commitment. Three phases, twelve months. The rule is
 
 **Week 11: Fact Extraction Pipeline**
 - [x] Celery worker runs after every conversation
-- [ ] Sends transcript to GPT-4o with structured extraction prompt
-- [ ] Receives JSON list of Knowledge Base updates
-- [ ] Conflict resolution: higher confidence + more recent wins
+- [x] Sends transcript to GPT-4o with structured extraction prompt
+- [X] Receives JSON list of Knowledge Base updates
+- [X] Conflict resolution: higher confidence + more recent wins
 - [ ] All changes logged to `knowledge_updates` table
 - [ ] Test: tell JARVIS you changed a goal → Knowledge Base updates automatically
 
 **Week 12: Iron Man UI Polish**
-- [ ] Arc-reactor pulse animation on VoiceScreen (Reanimated)
-- [ ] Full colour system applied: `#0A0A0A` / `#00B4D8` / `#FFB703`
-- [ ] Voice state transitions: Idle → Recording → Processing → Speaking
-- [ ] Conversation history with JARVIS left (cyan) / user right (white)
-- [ ] App icon and splash screen
+- [X] Arc-reactor pulse animation on VoiceScreen (Reanimated)
+- [X] Full colour system applied: `#0A0A0A` / `#00B4D8` / `#FFB703`
+- [X] Voice state transitions: Idle → Recording → Processing → Speaking
+- [X] Conversation history with JARVIS left (cyan) / user right (white)
+- [X] App icon and splash screen
 
 **Validation — Phase 1 complete when:**
 - [ ] Voice latency under 2 seconds (p95)
@@ -123,6 +122,7 @@ Solo development, full-time commitment. Three phases, twelve months. The rule is
 - [ ] Fact extraction updates Knowledge Base after conversation
 - [ ] UI looks and feels like Iron Man, not a generic chatbot
 - [ ] Zero crashes over 7-day continuous use
+
 **Validation — Phase 1 complete when:**
 - [ ] Voice latency under 2 seconds (p95)
 - [ ] Knowledge Base accurate after onboarding
@@ -153,9 +153,9 @@ _Updated: 2026-02-18 — items marked done reflect current repo status (backend 
 - [ ] Weekly goal review prompt initiated by JARVIS (push notification)
 
 **Week 15: Wake Word**
-- [ ] Wake word detection ("Hey JARVIS") using on-device model
-- [ ] App listens in background when enabled (user opt-in)
-- [ ] Immediate voice activation without touching phone
+- [X] Wake word detection ("Hey JARVIS") using on-device model
+- [X] App listens in background when enabled (user opt-in)
+- [X] Immediate voice activation without touching phone
 
 **Week 16: Notification System**
 - [ ] Push notification infrastructure (expo-notifications)

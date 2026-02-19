@@ -54,3 +54,5 @@ __pycache__/
 /.scripts
 /node_modules
 .github/
+me.json
+_test.db

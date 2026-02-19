@@ -5,19 +5,31 @@ import './src/utils/skiaSafe'
 
 import { StatusBar } from 'expo-status-bar'
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native'
+import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { View } from 'react-native'
-import { TabNavigator } from './src/navigation/TabNavigator'
-import { VoiceScreen } from './src/screens/VoiceScreen'
+import JarvisVoiceScreen from './components/JarvisVoiceScreen'
+import { ProfileScreen } from './src/screens/ProfileScreen'
 import { ThemeProvider, useTheme } from './src/hooks/useTheme'
 import { OnboardingScreen } from './src/screens/OnboardingScreen'
 import { useOnboarding } from './src/hooks/useOnboarding'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { addNotificationActionListener } from './src/services/notificationService'
+
+const Stack = createNativeStackNavigator()
 
 function AppContent() {
   const { isDark, theme } = useTheme()
   const { hasSeenOnboarding, isLoading, completeOnboarding } = useOnboarding()
+  
+  const navigationTheme = isDark ? {
+    ...DarkTheme,
+    colors: {
+      ...DarkTheme.colors,
+      background: '#111827',
+      card: '#1f2937',
+    },
+  } : DefaultTheme
   // notification triggers hook removed in pivot
   useEffect(() => {
     const subscription = addNotificationActionListener((response: { actionIdentifier: string }) => {
@@ -49,21 +61,19 @@ function AppContent() {
     )
   }
 
-  const navigationTheme = isDark ? {
-    ...DarkTheme,
-    colors: {
-      ...DarkTheme.colors,
-      background: '#111827',
-      card: '#1f2937',
-    },
-  } : DefaultTheme
-
   return (
     <View className={`flex-1 ${isDark ? 'dark' : ''}`}>
       <NavigationContainer theme={navigationTheme}>
-        {process.env.EXPO_PUBLIC_FORCE_VOICE === '1' ? <VoiceScreen /> : <TabNavigator />}
-        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Home">
+            {(props) => <JarvisVoiceScreen onNavigate={() => props.navigation.navigate('Profile')} />}
+          </Stack.Screen>
+          <Stack.Screen name="Profile">
+            {(props) => <ProfileScreen onNavigate={() => props.navigation.navigate('Home')} />}
+          </Stack.Screen>
+        </Stack.Navigator>
       </NavigationContainer>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
     </View>
   )
 }

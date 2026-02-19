@@ -1,6 +1,16 @@
 import { toUint8Array } from './binary'
 import { Skia } from '@shopify/react-native-skia'
 
+function arrayBufferForUint8(u8?: Uint8Array | null): ArrayBuffer | null {
+  if (!u8) return null
+  // If view covers full buffer, return underlying buffer directly
+  if (u8.byteOffset === 0 && u8.byteLength === u8.buffer.byteLength) return u8.buffer instanceof ArrayBuffer ? u8.buffer : null
+  // Otherwise return a compacted slice matching the view's bytes
+  return u8.buffer instanceof ArrayBuffer
+    ? u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength)
+    : null
+}
+
 function wrapMakePicture() {
   try {
     const Picture: any = (Skia as any)?.Picture
@@ -14,7 +24,15 @@ function wrapMakePicture() {
     const wrapped = function (this: any, data: any, ...args: any[]) {
       // Ensure first arg is an ArrayBuffer (Skia JSI expects ArrayBuffer)
       const u8 = toUint8Array(data)
-      const ab = u8 && u8.buffer ? u8.buffer : u8
+      const ab = arrayBufferForUint8(u8) ?? (u8 as any)
+      // Debug: log shape of incoming buffer/view
+      // eslint-disable-next-line no-console
+      console.log('[skiaSafe] MakePicture input', {
+        isView: !!(u8 && u8.buffer),
+        byteOffset: u8?.byteOffset,
+        byteLength: u8?.byteLength,
+        bufferByteLength: u8?.buffer?.byteLength,
+      })
       return orig.call(this, ab, ...args)
     }
     ;(wrapped as any).__wrapped_by_skiaSafe = true
@@ -36,7 +54,12 @@ function wrapDataMakeFromBytes() {
     if ((orig as any).__wrapped_by_skiaSafe) return
     const wrapped = function (this: any, data: any, ...args: any[]) {
       const u8 = toUint8Array(data)
-      const ab = u8 && u8.buffer ? u8.buffer : u8
+      const ab = arrayBufferForUint8(u8) ?? (u8 as any)
+      // eslint-disable-next-line no-console
+      console.log('[skiaSafe] Data.MakeFromBytes input', {
+        byteOffset: u8?.byteOffset,
+        byteLength: u8?.byteLength,
+      })
       return orig.call(this, ab, ...args)
     }
     ;(wrapped as any).__wrapped_by_skiaSafe = true
@@ -58,7 +81,12 @@ function wrapImageMakeFromEncoded() {
     if ((orig1 as any).__wrapped_by_skiaSafe) return
     const wrapped = function (this: any, data: any, ...args: any[]) {
       const u8 = toUint8Array(data)
-      const ab = u8 && u8.buffer ? u8.buffer : u8
+      const ab = arrayBufferForUint8(u8) ?? (u8 as any)
+      // eslint-disable-next-line no-console
+      console.log('[skiaSafe] Image.MakeFromEncoded input', {
+        byteOffset: u8?.byteOffset,
+        byteLength: u8?.byteLength,
+      })
       return orig1.call(this, ab, ...args)
     }
     ;(wrapped as any).__wrapped_by_skiaSafe = true
