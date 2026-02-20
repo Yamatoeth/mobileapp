@@ -12,7 +12,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import ParticleSphere from '../components/ParticleSphere'
+import VoiceOrb from '../components/VoiceOrb/VoiceOrb'
 import * as Haptics from 'expo-haptics'
 import { useFonts as useOrbitron, Orbitron_700Bold } from '@expo-google-fonts/orbitron'
 import { useFonts as useRajdhani, Rajdhani_300Light } from '@expo-google-fonts/rajdhani'
@@ -174,7 +174,10 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
 
       <View style={styles.center}>
         <View style={{ width: SPHERE_SIZE, height: SPHERE_SIZE, alignItems: 'center', justifyContent: 'center' }}>
-          <ParticleSphere listening={listening} />
+          <VoiceOrb
+            state={listening ? 'listening' : 'idle'}
+            style={{ width: SPHERE_SIZE, height: SPHERE_SIZE, borderRadius: SPHERE_SIZE / 2 }}
+          />
 
           <Pressable
             onPressIn={onPressIn}
@@ -206,7 +209,7 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#002832',
     paddingTop: Platform.OS === 'ios' ? 56 : 24,
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
   },
@@ -243,14 +246,15 @@ const styles = StyleSheet.create({
   },
   hint: {
     marginTop: 8,
-    color: 'rgba(255,255,255,0.22)',
+    color: '#ffffff',
     fontFamily: 'Rajdhani_300Light',
     fontSize: 13,
     letterSpacing: 4,
     textTransform: 'uppercase',
   },
   hintActive: {
-    color: 'rgba(0,212,255,0.8)',
+    color: '#ffffff',
+    
   },
   iconButton: {
     padding: 8,

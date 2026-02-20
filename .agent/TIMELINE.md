@@ -194,10 +194,10 @@ Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all o
 - [~] Immediate voice activation without touching the phone
 
 **Week 16: Notification System**
-- [ ] Push notification infrastructure (expo-notifications)
-- [ ] JARVIS-initiated check-ins: "You said you'd finish X last week — update?"
-- [ ] Optional morning briefing: daily summary of active projects + goals
-- [ ] Maximum 3 proactive notifications per day (configurable)
+- [X] Push notification infrastructure (expo-notifications)
+- [X] JARVIS-initiated check-ins: "You said you'd finish X last week — update?"
+- [X] Optional morning briefing: daily summary of active projects + goals
+- [X] Maximum 3 proactive notifications per day (configurable)
 
 **✅ Months 4–5 validation — complete when:**
 - [ ] JARVIS identifies at least 3 behavioural patterns from conversation history

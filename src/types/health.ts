@@ -104,3 +104,21 @@ export const HEALTH_CATEGORIES: CategoryConfig[] = [
   { id: 'exercise', label: 'Exercise', icon: 'fitness-outline', color: '#f97316' },
   { id: 'mood', label: 'Mood', icon: 'happy-outline', color: '#eab308' },
 ]
+
+// Context shape used to provide summarized health data to helpers
+export type HealthContext = {
+  recentSymptoms: string[]
+  avgSleep: number | null
+  avgMood: number | null
+  recentExercise: string[]
+  recentVitals:
+    | {
+        heartRate?: number
+        bloodPressure?: string
+        temperature?: number
+        weight?: number
+      }
+    | null
+  totalEntries: number
+  streak: number
+}

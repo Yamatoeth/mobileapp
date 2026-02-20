@@ -1,6 +1,8 @@
 import 'react-native-gesture-handler'
 import 'react-native-reanimated'
 import './global.css'
+// Ensure Skia JSI wrappers are applied early to accept various binary shapes
+import './src/utils/skiaSafe'
 
 
 import { StatusBar } from 'expo-status-bar'
@@ -26,10 +28,17 @@ function AppContent() {
     ...DarkTheme,
     colors: {
       ...DarkTheme.colors,
-      background: '#111827',
-      card: '#1f2937',
+      background: '#002832',
+      card: '#002832',
     },
-  } : DefaultTheme
+  } : {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      background: '#002832',
+      card: '#002832',
+    },
+  }
   // notification triggers hook removed in pivot
   useEffect(() => {
     const subscription = addNotificationActionListener((response: { actionIdentifier: string }) => {
@@ -64,7 +73,7 @@ function AppContent() {
 
   if (!hasSeenOnboarding) {
     return (
-      <View className={`flex-1 ${isDark ? 'dark bg-gray-900' : 'bg-white'}`}>
+      <View style={{ flex: 1, backgroundColor: '#002832' }}>
         <OnboardingScreen onComplete={completeOnboarding} />
         <StatusBar style={isDark ? 'light' : 'dark'} />
       </View>
@@ -72,9 +81,9 @@ function AppContent() {
   }
 
   return (
-    <View className={`flex-1 ${isDark ? 'dark' : ''}`}>
+    <View style={{ flex: 1, backgroundColor: '#002832' }}>
       <NavigationContainer theme={navigationTheme}>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#002832' } }}>
           <Stack.Screen name="Home">
             {(props) => <JarvisVoiceScreen onNavigate={() => props.navigation.navigate('Profile')} />}
           </Stack.Screen>

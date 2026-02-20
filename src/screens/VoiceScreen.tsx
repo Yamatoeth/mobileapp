@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Animated, Dimensions, Pressable, StyleSheet, Text, Vibration, View, Platform, AccessibilityInfo } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import VoiceOrb from '../components/VoiceOrb/VoiceOrb'
 import { useVoiceAssistant } from '../hooks/useVoiceAssistant'
 import { useTheme } from '../hooks/useTheme'
 import { voiceColors, voiceGradient } from '../styles/voiceTheme'
@@ -75,8 +76,7 @@ export function VoiceScreen() {
       : '#FF3B30'
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: voiceGradient[0] }]}> 
-      <Animated.View style={[styles.backgroundGlow, { transform: [{ scale: pulseAnim }], opacity: glowAnim.interpolate({ inputRange: [0,1], outputRange: [0.45, 0.95] }) }]} />
+    <SafeAreaView style={[styles.container, { backgroundColor: '#002832' }]}> 
 
       {/* Arc-reactor rings behind the mic button */}
       <View style={styles.ringsWrap} pointerEvents="none">
@@ -96,6 +96,11 @@ export function VoiceScreen() {
 
         <View style={styles.waveContainer} pointerEvents="none">
         </View>
+        <VoiceOrb
+          state={state === 'listening' ? 'listening' : state === 'speaking' ? 'speaking' : state === 'thinking' ? 'thinking' : 'idle'}
+          audioLevel={audioLevel}
+          style={{ width: BUTTON_SIZE * 2, height: BUTTON_SIZE * 2, position: 'absolute', alignItems: 'center', justifyContent: 'center' }}
+        />
         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
           <Pressable
             onPressIn={handlePressIn}
@@ -143,17 +148,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  backgroundGlow: {
-    position: 'absolute',
-    width: width * 1.5,
-    height: width * 1.5,
-    borderRadius: (width * 1.5) / 2,
     backgroundColor: '#002832',
-    top: -height * 0.25,
-    left: -width * 0.25,
-    opacity: 0.6,
   },
+  // backgroundGlow removed to avoid large halo; keep inner rings for liveliness
   header: {
     width: '100%',
     paddingHorizontal: 20,
