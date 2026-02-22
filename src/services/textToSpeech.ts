@@ -213,6 +213,7 @@ class ElevenLabsService {
 
   async synthesize(options: SynthesizeOptions): Promise<SynthesizeResult> {
     const startTime = Date.now();
+    console.log('[textToSpeech] ElevenLabs.synthesize called', { textSnippet: options.text?.slice(0, 120) });
     const voiceId = options.voiceId || this.defaultVoiceId;
 
     const url = `${ELEVENLABS_API_URL}/text-to-speech/${voiceId}`
@@ -239,6 +240,7 @@ class ElevenLabsService {
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('[textToSpeech] ElevenLabs API error', { status: response.status, body: errorText });
       throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`);
     }
 
@@ -252,7 +254,7 @@ class ElevenLabsService {
     });
 
     const durationMs = Date.now() - startTime;
-
+    console.log('[textToSpeech] ElevenLabs.synthesize completed', { audioUri, durationMs });
     return {
       audioUri,
       durationMs,
@@ -295,6 +297,7 @@ class OpenAITTSService {
 
   async synthesize(options: SynthesizeOptions): Promise<SynthesizeResult> {
     const startTime = Date.now();
+    console.log('[textToSpeech] OpenAI.synthesize called', { textSnippet: options.text?.slice(0, 120) });
     const voice = options.voiceId || this.defaultVoice;
 
     const url = OPENAI_TTS_URL
@@ -318,6 +321,7 @@ class OpenAITTSService {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      console.error('[textToSpeech] OpenAI TTS error', { status: response.status, body: errorData });
       throw new Error(
         `OpenAI TTS error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`
       );
@@ -332,7 +336,7 @@ class OpenAITTSService {
     });
 
     const durationMs = Date.now() - startTime;
-
+    console.log('[textToSpeech] OpenAI.synthesize completed', { audioUri, durationMs });
     return {
       audioUri,
       durationMs,
@@ -467,7 +471,7 @@ class AudioPlaybackService {
       await this.stop();
 
       // Create and load new sound
-      console.log('[audioPlayback] play:', audioUri);
+      console.log('[audioPlayback] play start:', audioUri, { ts: Date.now() });
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUri },
         { shouldPlay: true },
@@ -475,7 +479,7 @@ class AudioPlaybackService {
           if (status.isLoaded) {
             if (status.didJustFinish) {
               this.isPlaying = false;
-              console.log('[audioPlayback] didJustFinish', audioUri);
+              console.log('[audioPlayback] didJustFinish', audioUri, { ts: Date.now() });
               onComplete?.();
             }
           }
@@ -517,10 +521,20 @@ class AudioPlaybackService {
    */
   async stop(): Promise<void> {
     if (this.sound) {
-      await this.sound.stopAsync();
-      await this.sound.unloadAsync();
+      console.log('[audioPlayback] stop called', { ts: Date.now() });
+      try {
+        await this.sound.stopAsync();
+      } catch (e) {
+        // ignore
+      }
+      try {
+        await this.sound.unloadAsync();
+      } catch (e) {
+        // ignore
+      }
       this.sound = null;
       this.isPlaying = false;
+      console.log('[audioPlayback] stop completed', { ts: Date.now() });
     }
   }
 

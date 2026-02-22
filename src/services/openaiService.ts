@@ -201,6 +201,8 @@ class OpenAIService {
       { role: 'user', content: prompt },
     ];
 
+    console.log('[openAIService] generateResponse called', { promptLength: prompt.length, messagesCount: messages.length, stream });
+
     // Add user message to history
     this.addToHistory({ role: 'user', content: prompt });
 
@@ -227,6 +229,8 @@ class OpenAIService {
     temperature: number,
     maxTokens: number
   ): Promise<GenerateResponseResult> {
+    const requestStart = Date.now();
+    console.log('[openAIService] generateNonStreamingResponse: sending request', { messagesCount: messages.length });
     const response = await fetch(OPENAI_API_URL, {
       method: 'POST',
       headers: {
@@ -247,6 +251,8 @@ class OpenAIService {
     }
 
     const data = await response.json();
+    const requestTime = Date.now() - requestStart;
+    console.log('[openAIService] generateNonStreamingResponse: response received', { requestTime });
     const content = data.choices?.[0]?.message?.content || '';
     const finishReason = data.choices?.[0]?.finish_reason === 'stop' ? 'stop' : 'length';
 
@@ -275,6 +281,8 @@ class OpenAIService {
     maxTokens: number,
     onChunk: (chunk: string) => void
   ): Promise<GenerateResponseResult> {
+    const requestStart = Date.now();
+    console.log('[openAIService] generateStreamingResponse: sending streaming request', { messagesCount: messages.length });
     const response = await fetch(OPENAI_API_URL, {
       method: 'POST',
       headers: {
@@ -325,6 +333,7 @@ class OpenAIService {
                 if (delta) {
                   fullContent += delta;
                   onChunk(delta);
+                  console.log('[openAIService] streaming chunk', { deltaLength: delta.length });
                 }
                 if (parsed.choices?.[0]?.finish_reason) {
                   finishReason = parsed.choices[0].finish_reason === 'stop' ? 'stop' : 'length';
@@ -364,12 +373,14 @@ class OpenAIService {
       }
     } catch (streamError) {
       // If streaming fails completely, fall back to non-streaming
-      console.warn('Streaming failed, falling back to non-streaming:', streamError);
+      console.warn('[openAIService] Streaming failed, falling back to non-streaming:', streamError);
       const result = await this.generateNonStreamingResponse(messages, temperature, maxTokens);
       onChunk(result.content);
       return result;
     }
 
+    const totalRequestTime = Date.now() - requestStart;
+    console.log('[openAIService] generateStreamingResponse complete', { totalRequestTime, finishReason });
     // Add assistant response to history
     this.addToHistory({ role: 'assistant', content: fullContent });
 

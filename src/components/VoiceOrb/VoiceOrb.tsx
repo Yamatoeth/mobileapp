@@ -4,6 +4,7 @@ import WebView, { WebViewMessageEvent } from 'react-native-webview'
 import { Audio } from 'expo-av'
 import { Asset } from 'expo-asset'
 import { useState } from 'react'
+import { audioRecordingService } from '../../services/audioRecording'
 
 export type OrbState = 'idle' | 'listening' | 'thinking' | 'speaking'
 
@@ -23,7 +24,7 @@ const STATE_MAP: Record<OrbState, number> = {
 
 export default function VoiceOrb({ state, audioLevel, style, onMicReady }: VoiceOrbProps) {
   const webRef = useRef<WebView>(null)
-  const recordingRef = useRef<Audio.Recording | null>(null)
+  const recordingRef = useRef<any>(null)
   const [htmlUri, setHtmlUri] = useState<string | null>(null)
 
   useEffect(() => {
@@ -66,22 +67,15 @@ export default function VoiceOrb({ state, audioLevel, style, onMicReady }: Voice
 
   async function startNativeMic() {
     try {
-      const p = await Audio.requestPermissionsAsync()
-      if (!p.granted) {
-        console.warn('[VoiceOrb] microphone permission not granted')
-        return
-      }
-
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true })
-
-      const recording = new Audio.Recording()
-      await recording.prepareToRecordAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY)
-
-      recording.setOnRecordingStatusUpdate((status: any) => {
+      // Delegate permission request and recording lifecycle to audioRecordingService.
+      const started = await audioRecordingService.startRecording((statusOrLevel: any) => {
         try {
           let level = 0
-          if (typeof status?.metering === 'number') {
-            level = Math.min(1, Math.max(0, (status.metering + 100) / 100))
+          // service may pass normalized level object or raw status
+          if (typeof statusOrLevel === 'number') {
+            level = Math.min(1, Math.max(0, statusOrLevel))
+          } else if (statusOrLevel && typeof statusOrLevel.level === 'number') {
+            level = Math.min(1, Math.max(0, statusOrLevel.level))
           }
           webRef.current?.injectJavaScript(`window.setAudioLevel(${level}); true;`)
         } catch (err) {
@@ -89,9 +83,10 @@ export default function VoiceOrb({ state, audioLevel, style, onMicReady }: Voice
         }
       })
 
-      await recording.startAsync()
-      recordingRef.current = recording
-      onMicReady?.()
+      if (started) {
+        recordingRef.current = true
+        onMicReady?.()
+      }
     } catch (err) {
       console.warn('[VoiceOrb] Native mic start error', err)
     }
@@ -99,12 +94,16 @@ export default function VoiceOrb({ state, audioLevel, style, onMicReady }: Voice
 
   async function stopNativeMic() {
     try {
-      const rec = recordingRef.current
-      if (rec) {
-        try { rec.setOnRecordingStatusUpdate(null) } catch (_) {}
-        try { await rec.stopAndUnloadAsync() } catch (_) {}
-        recordingRef.current = null
+      if (audioRecordingService.isRecording()) {
+        try {
+          await audioRecordingService.stopRecording()
+        } catch (_) {}
+      } else {
+        try {
+          await audioRecordingService.cancelRecording()
+        } catch (_) {}
       }
+      recordingRef.current = null
       try {
         webRef.current?.injectJavaScript(
           `window.setAudioLevel(0); window.stopMicInternal && window.stopMicInternal(); true;`

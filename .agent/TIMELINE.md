@@ -117,7 +117,7 @@ Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all o
 - [X] Manual editing of any field from the dashboard
 
 **Week 8: Context Builder v1**
-- [~] `ContextBuilder` class in the backend
+- [X] `ContextBuilder` class in the backend
 - [~] Query KB on every voice call
 - [~] Inject user identity summary into system prompt Layer 2
 - [ ] **Critical validation:** JARVIS responses mention your goals and situation without being told
@@ -232,14 +232,37 @@ Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all o
 **Goal:** JARVIS does things, not just says things.
 
 > ⚠️ Do not start Phase 3 until all 4 Phase 2 validation criteria are marked `[X]`.
+Months 8-9: Reminders & Calendar (Light)
 
-### Months 8–9: Calendar Integration
-- [ ] iOS Calendar read access (`expo-calendar`)
-- [ ] JARVIS aware of your schedule in every response
-- [ ] "What do I have today?" — full schedule summary
-- [ ] Scheduling conflicts surfaced automatically
-- [ ] Focus block suggestions based on projects + calendar gaps
-- [ ] Calendar write access (with explicit user confirmation for every action)
+**Internal reminder system (high priority — universal)**
+- [ ] JARVIS extracts dates/deadlines mentioned in conversation 
+      and stores them in a `reminders` table (PostgreSQL)
+- [ ] Celery beat job checks upcoming reminders every hour
+- [ ] Push notification sent by JARVIS at the right time
+- [ ] “Remind me about X in 3 days” → works without any 
+      external calendar
+- [ ] JARVIS proactively mentions deadlines in its responses
+      (“You told me that Y was due on Friday”)
+
+**Validation:** tell JARVIS "remind me to cancel Netflix in 
+2 weeks" → you receive a notification at the right time, without having 
+to touch your calendar.
+
+---
+
+**External calendar integration (low priority — opt-in)**
+- [ ] Optional connection to Apple Calendar or Google Calendar
+- [ ] Read-only — JARVIS consults but never modifies 
+      without explicit confirmation
+- [ ] Write on demand only: “put this in my calendar” 
+      → JARVIS suggests, you confirm verbally
+- [ ] If the user does not have a calendar → no degradation, 
+      the internal reminder system covers the essentials
+
+**Validation:** works identically whether the user has a 
+full or empty calendar.
+
+Translated with DeepL.com (free version)
 
 ### Month 10: Financial Monitoring
 - [ ] Manual financial data entry by voice ("I spent €200 on X today")

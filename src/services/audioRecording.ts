@@ -64,6 +64,7 @@ const RECORDING_OPTIONS: ExpoRecordingOptions =
 class AudioRecordingService {
   private recording: ExpoRecording | null = null;
   private state: RecordingState = 'idle';
+  private starting: boolean = false;
   private startTime: number = 0;
   private levelUpdateCallback: ((level: AudioLevel) => void) | null = null;
   private levelInterval: ReturnType<typeof setInterval> | null = null;
@@ -116,11 +117,34 @@ class AudioRecordingService {
    * Start recording audio
    */
   async startRecording(
-    onLevelUpdate?: (level: AudioLevel) => void
+    onLevelUpdate?: (level: AudioLevel) => void,
+    options?: { traceId?: string }
   ): Promise<boolean> {
-    if (this.state !== 'idle') {
-      console.warn('Recording already in progress');
-      return false;
+    const traceId = options?.traceId || 'no-trace'
+    // Prevent concurrent starts
+    if (this.starting) {
+      console.warn('[audioRecording] startRecording already in progress (starting)', { traceId });
+      // Treat repeated start requests during preparation as successful/no-op
+      return true;
+    }
+
+    // If already recording, treat as idempotent success
+    if (this.state === 'recording') {
+      console.log('[audioRecording] startRecording called but already recording');
+      return true;
+    }
+
+    // If there's a leftover recording instance, ensure it's stopped/unloaded first
+    if (this.recording) {
+      try {
+        console.log('[audioRecording] stop/unload leftover recording before starting new one');
+        await this.recording.stopAndUnloadAsync();
+      } catch (err) {
+        console.warn('[audioRecording] Error stopping leftover recording', err);
+      } finally {
+        this.recording = null;
+        this.state = 'idle';
+      }
     }
 
     // Check permissions
@@ -134,8 +158,10 @@ class AudioRecordingService {
     }
 
     try {
+      this.starting = true;
       this.state = 'preparing';
       this.levelUpdateCallback = onLevelUpdate || null;
+      console.log('[audioRecording] startRecording prepare', { traceId });
 
       // Configure audio mode
       console.log('[audioRecording] configuring audio mode');
@@ -143,26 +169,32 @@ class AudioRecordingService {
 
       // Create and prepare recording
       const recording = new Audio.Recording();
+      console.log('[audioRecording] prepareToRecordAsync start', { traceId });
       await recording.prepareToRecordAsync(RECORDING_OPTIONS);
+      console.log('[audioRecording] prepareToRecordAsync done', { traceId });
 
       // Start recording
+      console.log('[audioRecording] startAsync start', { traceId });
       await recording.startAsync();
+      console.log('[audioRecording] startAsync done', { traceId });
 
       this.recording = recording;
       this.state = 'recording';
       this.startTime = Date.now();
+      this.starting = false;
 
       // Start level monitoring if callback provided
       if (onLevelUpdate) {
         this.startLevelMonitoring();
       }
 
-      console.log('[audioRecording] Recording started');
+      console.log('[audioRecording] Recording started', { traceId });
       return true;
     } catch (error) {
       console.error('Failed to start recording:', error);
       this.state = 'idle';
       this.recording = null;
+      this.starting = false;
       return false;
     }
   }

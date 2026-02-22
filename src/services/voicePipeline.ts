@@ -96,6 +96,7 @@ class VoicePipelineService {
   private callbacks: PipelineCallbacks = {};
   private isInitialized: boolean = false;
   private currentRecordingUri: string | null = null;
+  private currentTraceId: string | null = null;
 
   constructor() {
     this.conversationHistory = new ConversationHistory();
@@ -170,10 +171,22 @@ class VoicePipelineService {
     this.setState('listening');
 
     try {
-      // Start recording with audio level callback
-      await audioRecordingService.startRecording((level) => {
-        this.callbacks.onAudioLevel?.(level.level);
-      });
+      // generate a trace id for this listening session
+      const traceId = Math.random().toString(36).slice(2, 10)
+      this.currentTraceId = traceId
+      console.log('[voicePipeline] startListening: starting recording', { ts: Date.now(), traceId });
+      // Start recording with audio level callback and pass traceId for correlation
+      await audioRecordingService.startRecording(
+        (level) => {
+          try {
+            this.callbacks.onAudioLevel?.(level.level);
+          } catch (e) {
+            console.warn('[voicePipeline] onAudioLevel callback error', e, { traceId });
+          }
+        },
+        { traceId }
+      );
+      console.log('[voicePipeline] startListening: recording started', { traceId });
     } catch (error) {
       this.setState('error');
       this.callbacks.onError?.(error instanceof Error ? error : new Error(String(error)));
@@ -196,7 +209,10 @@ class VoicePipelineService {
 
     try {
       // Stop recording
+      const traceId = this.currentTraceId ?? 'no-trace'
+      console.log('[voicePipeline] stopListening: stopping recording', { ts: Date.now(), traceId });
       const recording = await audioRecordingService.stopRecording();
+      console.log('[voicePipeline] stopListening: stopRecording returned', { recordingUri: recording?.uri, durationMs: recording?.durationMs, traceId });
       if (!recording) {
         throw new Error('No recording available');
       }
@@ -212,9 +228,11 @@ class VoicePipelineService {
 
       // Transcribe
       this.setState('transcribing');
+      console.log('[voicePipeline] transcribing: start transcribe', { ts: Date.now(), uri: recording.uri, traceId });
       const transcribeStart = Date.now();
       const transcription = await speechToTextService.transcribeAuto(recording.uri);
       transcriptionTime = Date.now() - transcribeStart;
+      console.log('[voicePipeline] transcribing: finished', { transcription: transcription.text, transcriptionTime, traceId });
 
       if (!transcription.text || transcription.text.trim() === '') {
         this.setState('idle');
@@ -226,6 +244,7 @@ class VoicePipelineService {
 
       // Generate LLM response
       this.setState('thinking');
+      console.log('[voicePipeline] thinking: sending to LLM', { ts: Date.now(), traceId });
       const llmStart = Date.now();
 
       let assistantResponse = '';
@@ -249,6 +268,7 @@ class VoicePipelineService {
       }
 
       llmTime = Date.now() - llmStart;
+      console.log('[voicePipeline] thinking: LLM finished', { llmTime, traceId });
 
       if (!assistantResponse) {
         throw new Error('No response from LLM');
@@ -260,22 +280,29 @@ class VoicePipelineService {
       // Text-to-Speech
       if (options.playAudio !== false) {
         this.setState('speaking');
+        console.log('[voicePipeline] tts: synthesizing and playing audio', { ts: Date.now(), traceId });
         const ttsStart = Date.now();
 
         await voiceOutputService.speak(assistantResponse, {
+          onStart: () => console.log('[voicePipeline] tts: playback started', { traceId }),
           onComplete: () => {
+            console.log('[voicePipeline] tts: playback complete', { traceId });
             this.setState('idle');
           },
           onError: (error) => {
-            console.error('TTS error:', error);
+            console.error('TTS error:', error, { traceId });
             this.setState('idle');
           },
         });
 
         ttsTime = Date.now() - ttsStart;
+        console.log('[voicePipeline] tts: finished', { ttsTime, traceId });
       } else {
         this.setState('idle');
       }
+
+      // clear trace id for this session
+      this.currentTraceId = null
 
       const totalTime = Date.now() - startTime;
 

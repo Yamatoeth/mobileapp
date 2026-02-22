@@ -1,0 +1,3 @@
+idea brainstorm
+
+must implement a module for jarvis to be able to analyse voice conversations and give feedbacks about conversation honesty, if the person may be lying with a confidence rate, if the person may be hiding something, like he doesn't tell everything. 

@@ -54,8 +54,11 @@ class DeepgramService {
     language: string = 'en'
   ): Promise<TranscriptionResult> {
     const startTime = Date.now();
+    console.log('[speechToText] transcribe called', { audioUri, language, ts: startTime });
 
     // Read audio file as base64
+    const fileInfo = await FileSystem.getInfoAsync(audioUri);
+    console.log('[speechToText] file info', { exists: fileInfo.exists, size: fileInfo.size, uri: audioUri });
     const base64Audio = await FileSystem.readAsStringAsync(audioUri, {
       encoding: FileSystem.EncodingType.Base64,
     });
@@ -86,11 +89,13 @@ class DeepgramService {
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('[speechToText] Deepgram API error', { status: response.status, body: errorText });
       throw new Error(`Deepgram API error: ${response.status} - ${errorText}`);
     }
 
     const result = await response.json();
     const durationMs = Date.now() - startTime;
+    console.log('[speechToText] Deepgram transcribe completed', { durationMs });
 
     // Extract transcription from Deepgram response
     const alternative = result.results?.channels?.[0]?.alternatives?.[0];
@@ -138,9 +143,11 @@ class WhisperService {
     language: string = 'en'
   ): Promise<TranscriptionResult> {
     const startTime = Date.now();
+    console.log('[speechToText] Whisper transcribe called', { audioUri, language, ts: startTime });
 
     // Read file info
     const fileInfo = await FileSystem.getInfoAsync(audioUri);
+    console.log('[speechToText] file info', { exists: fileInfo.exists, size: fileInfo.size, uri: audioUri });
     if (!fileInfo.exists) {
       throw new Error('Audio file not found');
     }
@@ -176,11 +183,13 @@ class WhisperService {
     });
 
     if (response.status !== 200) {
+      console.error('[speechToText] Whisper API error', { status: response.status, body: response.body });
       throw new Error(`Whisper API error: ${response.status} - ${response.body}`);
     }
 
     const result = JSON.parse(response.body);
     const durationMs = Date.now() - startTime;
+    console.log('[speechToText] Whisper transcribe completed', { durationMs });
 
     // Extract words if available (verbose_json format)
     const words: TranscriptionWord[] = (result.words || []).map(

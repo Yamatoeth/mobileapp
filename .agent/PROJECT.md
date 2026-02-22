@@ -246,7 +246,8 @@ To stay focused, be explicit about what JARVIS does not do in v1:
 
 - ❌ Biometric monitoring (future Phase 4+)
 - ❌ Proactive interruptions (future Phase 2)
-- ❌ Calendar modifications (future Phase 3)
+✅ Système de rappels interne — universel, indépendant de tout calendrier externe
+✅ Intégration calendrier externe — opt-in, lecture seule par défaut
 - ❌ Sending messages or emails autonomously (future Phase 3)
 - ❌ Financial account connections (future Phase 3)
 - ❌ Android support (future after iOS is stable)
