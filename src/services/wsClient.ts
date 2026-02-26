@@ -62,7 +62,12 @@ export class WSClient {
 
   sendAudioBase64(b64: string): void {
     // send as a JSON control frame
-    this.sendJson({ type: 'audio_chunk', data: b64 });
+    try {
+      this.sendJson({ type: 'audio_chunk', data: b64 });
+      console.log('[PIPELINE 2/7] 📡 Audio chunk sent to backend via WebSocket — bytes:', b64.length);
+    } catch (err) {
+      console.warn('[PIPELINE ERROR ❌] Failed at step 2 — sending audio chunk', err);
+    }
   }
 
   sendFinal(): void {
@@ -70,7 +75,15 @@ export class WSClient {
   }
 
   onMessage(handler: MessageHandler): void {
-    this.handlers.push(handler);
+    const wrappedHandler: MessageHandler = (msg) => {
+      try {
+        console.log('[PIPELINE] 📨 Message received from backend:', JSON.stringify(msg).slice(0, 200));
+      } catch (err) {
+        console.warn('[PIPELINE ERROR ❌] Failed at message receive', err);
+      }
+      handler(msg);
+    };
+    this.handlers.push(wrappedHandler);
   }
 
   offMessage(handler: MessageHandler): void {

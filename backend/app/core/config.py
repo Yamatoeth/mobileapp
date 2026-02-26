@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     
     # API Keys
     openai_api_key: Optional[str] = None
+    groq_api_key: Optional[str] = None
     deepgram_api_key: Optional[str] = None
     elevenlabs_api_key: Optional[str] = None
     pinecone_api_key: Optional[str] = None
@@ -46,6 +47,9 @@ class Settings(BaseSettings):
     max_proactive_notifications_per_day: int = 3
     # Test helpers
     test_mode: bool = False  # When true, use local stubs for external services
+
+    # ElevenLabs voice
+    elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
 
 
 @lru_cache

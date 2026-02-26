@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react'
-import { StyleSheet, View, ViewStyle } from 'react-native'
+import { StyleSheet, View, ViewStyle, Platform } from 'react-native'
 import WebView, { WebViewMessageEvent } from 'react-native-webview'
-import { Audio } from 'expo-av'
 import { Asset } from 'expo-asset'
+import * as FileSystem from 'expo-file-system/legacy'
 import { useState } from 'react'
 import { audioRecordingService } from '../../services/audioRecording'
 
@@ -12,7 +12,6 @@ interface VoiceOrbProps {
   state: OrbState
   audioLevel?: number
   style?: ViewStyle
-  onMicReady?: () => void
 }
 
 const STATE_MAP: Record<OrbState, number> = {
@@ -22,19 +21,13 @@ const STATE_MAP: Record<OrbState, number> = {
   speaking: 3,
 }
 
-export default function VoiceOrb({ state, audioLevel, style, onMicReady }: VoiceOrbProps) {
+export default function VoiceOrb({ state, audioLevel, style }: VoiceOrbProps) {
   const webRef = useRef<WebView>(null)
-  const recordingRef = useRef<any>(null)
-  const [htmlUri, setHtmlUri] = useState<string | null>(null)
+  const [htmlContent, setHtmlContent] = useState<string | null>(null)
 
   useEffect(() => {
     const n = STATE_MAP[state]
     webRef.current?.injectJavaScript(`window.setOrbState(${n}); true;`)
-    if (state === 'listening') {
-      startNativeMic()
-    } else {
-      stopNativeMic()
-    }
   }, [state])
 
   useEffect(() => {
@@ -51,79 +44,47 @@ export default function VoiceOrb({ state, audioLevel, style, onMicReady }: Voice
           `window.setOrbState(0); window.stopMicInternal && window.stopMicInternal(); true;`
         )
       } catch (_) {}
-      try { stopNativeMic() } catch (_) {}
     }
   }, [])
 
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      const asset = Asset.fromModule(require('./voiceorb.html'))
-      await asset.downloadAsync()
-      if (mounted) setHtmlUri(asset.localUri || null)
+      try {
+        const asset = Asset.fromModule(require('./voiceorb.html'))
+        await asset.downloadAsync()
+        if (asset.localUri) {
+          const html = await FileSystem.readAsStringAsync(asset.localUri)
+          if (mounted) setHtmlContent(html)
+        } else {
+          if (mounted) setHtmlContent(null)
+        }
+      } catch (err) {
+        if (mounted) setHtmlContent(null)
+        console.warn('[VoiceOrb] Failed to load HTML asset', err)
+      }
     })()
     return () => { mounted = false }
   }, [])
 
-  async function startNativeMic() {
-    try {
-      // Delegate permission request and recording lifecycle to audioRecordingService.
-      const started = await audioRecordingService.startRecording((statusOrLevel: any) => {
-        try {
-          let level = 0
-          // service may pass normalized level object or raw status
-          if (typeof statusOrLevel === 'number') {
-            level = Math.min(1, Math.max(0, statusOrLevel))
-          } else if (statusOrLevel && typeof statusOrLevel.level === 'number') {
-            level = Math.min(1, Math.max(0, statusOrLevel.level))
-          }
-          webRef.current?.injectJavaScript(`window.setAudioLevel(${level}); true;`)
-        } catch (err) {
-          console.warn('[VoiceOrb] recording status handler error', err)
-        }
-      })
 
-      if (started) {
-        recordingRef.current = true
-        onMicReady?.()
-      }
-    } catch (err) {
-      console.warn('[VoiceOrb] Native mic start error', err)
-    }
-  }
 
-  async function stopNativeMic() {
-    try {
-      if (audioRecordingService.isRecording()) {
-        try {
-          await audioRecordingService.stopRecording()
-        } catch (_) {}
-      } else {
-        try {
-          await audioRecordingService.cancelRecording()
-        } catch (_) {}
-      }
-      recordingRef.current = null
-      try {
-        webRef.current?.injectJavaScript(
-          `window.setAudioLevel(0); window.stopMicInternal && window.stopMicInternal(); true;`
-        )
-      } catch (_) {}
-    } catch (err) {
-      console.warn('[VoiceOrb] Native mic stop error', err)
-    }
-  }
 
   function handleMessage(e: WebViewMessageEvent) {
     try {
       const data = JSON.parse(e.nativeEvent.data)
       if (!data) return
-      if (data.type === 'mic-ready') {
-        onMicReady?.()
-      }
       if (data.type === 'log') console.log('[VoiceOrb]', data.message)
-      if (data.type === 'warn') console.warn('[VoiceOrb]', data.message)
-      if (data.type === 'error') console.error('[VoiceOrb]', data.message)
+      if (data.type === 'warn') {
+        if (typeof data.message === 'string' && 
+            (data.message.includes('getUserMedia') || data.message.includes('mediaDevices'))) return
+        console.warn('[VoiceOrb]', data.message)
+      }
+      if (data.type === 'error') {
+        if (typeof data.message === 'string' && 
+            (data.message.includes('getUserMedia') || data.message.includes('mediaDevices'))) return
+        console.error('[VoiceOrb]', data.message)
+      }
     } catch (_) {}
   }
 
@@ -137,8 +98,29 @@ export default function VoiceOrb({ state, audioLevel, style, onMicReady }: Voice
         javaScriptEnabled
         domStorageEnabled
         mixedContentMode="always"
-        // Load the HTML file as a local asset — no CDN, no network dependency
-        source={htmlUri ? { uri: htmlUri } : undefined}
+        injectedJavaScriptBeforeContentLoaded={`
+          (function() {
+            var noop = function() { return new Promise(function() {}); };
+            if (typeof navigator !== 'undefined') {
+              try {
+                Object.defineProperty(navigator, 'mediaDevices', {
+                  value: { getUserMedia: noop, enumerateDevices: function() { return Promise.resolve([]); } },
+                  writable: false,
+                  configurable: false
+                });
+              } catch(e) {}
+            }
+            if (typeof window !== 'undefined') {
+              window.getUserMedia = noop;
+              window.webkitGetUserMedia = noop;
+              navigator.getUserMedia = noop;
+              navigator.webkitGetUserMedia = noop;
+            }
+          })();
+          true;
+        `}
+        // Load the HTML file as a string for both iOS and Android
+        source={htmlContent ? { html: htmlContent } : undefined}
         onMessage={handleMessage}
         style={styles.web}
       />

@@ -84,6 +84,7 @@ export interface CalendarEvent {
 
 export interface Message {
   id: string;
+  conversation_id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
@@ -92,9 +93,9 @@ export interface Message {
 
 export interface Conversation {
   id: string;
-  messages: Message[];
-  createdAt: string;
-  updatedAt: string;
+  user_id: string;
+  created_at: string;
+  // Add other fields as backend returns
 }
 
 // ============================================

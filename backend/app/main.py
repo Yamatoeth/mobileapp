@@ -13,7 +13,6 @@ from app.db.redis_client import redis_client
 from app.db.pinecone_client import pinecone_client
 from fastapi import APIRouter
 
-# import routers
 from app.api.conversations import router as conversations_router
 from app.api.voice import router as voice_router
 from app.api.knowledge import router as knowledge_router
@@ -21,6 +20,9 @@ from app.api.onboarding import router as onboarding_router
 from app.api.auth import router as auth_router
 from app.api.memory import router as memory_router
 from app.api.notifications import router as notifications_router
+from app.api.users import router as users_router
+from app.api.conversations_rest import router as conversations_rest_router
+from app.api.messages import router as messages_router
 
 settings = get_settings()
 
@@ -55,20 +57,14 @@ async def lifespan(app: FastAPI):
     await redis_client.close()
 
 
+
+
 app = FastAPI(
     title="J.A.R.V.I.S. API",
     description="Proactive AI Executive Assistant Backend",
     version=settings.app_version,
     lifespan=lifespan,
 )
-
-# Optionally attach ASGI middleware for Sentry if available in the runtime.
-try:
-    from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
-    app.add_middleware(SentryAsgiMiddleware)
-except Exception:
-    # integration not available or failed — ignore
-    pass
 
 # Register API routers
 app.include_router(conversations_router, prefix="/api/v1", tags=["conversations"])
@@ -78,6 +74,9 @@ app.include_router(onboarding_router, prefix="/api/v1", tags=["onboarding"])
 app.include_router(auth_router, prefix="/api/v1", tags=["auth"])
 app.include_router(memory_router, prefix="/api/v1", tags=["memory"])
 app.include_router(notifications_router, prefix="/api/v1", tags=["notifications"])
+app.include_router(users_router, prefix="/api/v1", tags=["users"])
+app.include_router(conversations_rest_router, prefix="/api/v1", tags=["conversations_rest"])
+app.include_router(messages_router, prefix="/api/v1", tags=["messages"])
 
 # CORS middleware for mobile app
 app.add_middleware(
@@ -87,6 +86,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Route definitions remain unchanged ---
+
+# Optionally attach ASGI middleware for Sentry if available in the runtime.
+try:
+    from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
+    asgi_app = SentryAsgiMiddleware(app)
+except Exception:
+    asgi_app = app
+    # integration not available or failed — ignore
+    pass
 
 
 @app.get("/health")

@@ -158,30 +158,42 @@ export function HoldToTalkButton({
     }).start();
 
     // Start recording
-    const success = await audioRecordingService.startRecording(handleLevelUpdate);
+    try {
+      const success = await audioRecordingService.startRecording(handleLevelUpdate);
+      if (success) {
+        console.log('[PIPELINE 1/7] 🎙️ Recording started — expo-av capturing audio');
+        setIsRecording(true);
+        startTime.current = Date.now();
+        onRecordingStart?.();
 
-    if (success) {
-      setIsRecording(true);
-      startTime.current = Date.now();
-      onRecordingStart?.();
+        // Start duration counter
+        durationInterval.current = setInterval(() => {
+          setDuration(Date.now() - startTime.current);
+        }, 100);
 
-      // Start duration counter
-      durationInterval.current = setInterval(() => {
-        setDuration(Date.now() - startTime.current);
-      }, 100);
-
-      // Set max duration timeout
-      maxDurationTimeout.current = setTimeout(() => {
-        handlePressOut();
-      }, maxDurationMs);
-    } else {
+        // Set max duration timeout
+        maxDurationTimeout.current = setTimeout(() => {
+          handlePressOut();
+        }, maxDurationMs);
+      } else {
+        setIsPressing(false);
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 8,
+          useNativeDriver: true,
+        }).start();
+        console.warn('[PIPELINE ERROR ❌] Failed at step 1 — Failed to start recording. Check microphone permissions.');
+        onError?.('Failed to start recording. Check microphone permissions.');
+      }
+    } catch (err) {
       setIsPressing(false);
       Animated.spring(scaleAnim, {
         toValue: 1,
         friction: 8,
         useNativeDriver: true,
       }).start();
-      onError?.('Failed to start recording. Check microphone permissions.');
+      console.warn('[PIPELINE ERROR ❌] Failed at step 1', err);
+      onError?.('Failed to start recording.');
     }
   }, [disabled, isRecording, handleLevelUpdate, onRecordingStart, onError, scaleAnim, maxDurationMs]);
 
@@ -230,12 +242,19 @@ export function HoldToTalkButton({
     }
 
     // Stop and get result
-    const result = await audioRecordingService.stopRecording();
-    setDuration(0);
-
-    if (result) {
-      onRecordingComplete(result);
-    } else {
+    try {
+      const result = await audioRecordingService.stopRecording();
+      setDuration(0);
+      console.log('[PIPELINE 2/7] 📡 Recording stopped — final audio sent to backend');
+      if (result) {
+        onRecordingComplete(result);
+      } else {
+        console.warn('[PIPELINE ERROR ❌] Failed at step 2 — Failed to save recording');
+        onError?.('Failed to save recording');
+      }
+    } catch (err) {
+      setDuration(0);
+      console.warn('[PIPELINE ERROR ❌] Failed at step 2', err);
       onError?.('Failed to save recording');
     }
   }, [isRecording, minDurationMs, onRecordingComplete, onRecordingCancel, onError, scaleAnim]);

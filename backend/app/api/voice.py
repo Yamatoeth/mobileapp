@@ -30,6 +30,19 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+async def _safe_send_json(ws: WebSocket, payload: dict) -> bool:
+    """Send JSON to websocket but swallow errors if socket closed.
+
+    Returns True if send succeeded, False otherwise.
+    """
+    try:
+        await ws.send_json(payload)
+        return True
+    except Exception:
+        logger.debug("WebSocket closed or send failed for type=%s", payload.get("type"))
+        return False
+
+
 async def transcribe_audio_deepgram(audio_bytes: bytes) -> Optional[str]:
     """Try Deepgram transcription if key is configured."""
     # Test-mode stub
@@ -39,13 +52,20 @@ async def transcribe_audio_deepgram(audio_bytes: bytes) -> Optional[str]:
     if not settings.deepgram_api_key:
         return None
 
-    url = "https://api.deepgram.com/v1/listen"
-    headers = {"Authorization": f"Token {settings.deepgram_api_key}"}
+    url = "https://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1&punctuate=true"
+    headers = {
+        "Authorization": f"Token {settings.deepgram_api_key}",
+        "Content-Type": "audio/wav",
+    }
 
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             r = await client.post(url, content=audio_bytes, headers=headers)
-            r.raise_for_status()
+            try:
+                r.raise_for_status()
+            except Exception:
+                logger.error(f"Deepgram error response: {r.text}")
+                raise
             data = r.json()
             return data.get("results", {}).get("channels", [])[0].get("alternatives", [])[0].get("transcript")
     except Exception:
@@ -62,11 +82,12 @@ async def transcribe_audio_openai_whisper(audio_bytes: bytes) -> Optional[str]:
     if not settings.openai_api_key:
         return None
 
-    url = "https://api.openai.com/v1/audio/transcriptions"
-    headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
+
+    url = "https://api.groq.com/openai/v1/audio/transcriptions"
+    headers = {"Authorization": f"Bearer {settings.groq_api_key}"}
 
     files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
-    data = {"model": "whisper-1"}
+    data = {"model": "whisper-large-v3-turbo"}
 
     try:
         async with httpx.AsyncClient(timeout=60) as client:
@@ -91,18 +112,18 @@ async def stream_openai_chat(messages, websocket: WebSocket) -> str:
         await websocket.send_json({"type": "llm_done", "content": full_text})
         return full_text
 
-    if not settings.openai_api_key:
-        await websocket.send_json({"type": "error", "message": "OpenAI API key not configured"})
+    if not settings.groq_api_key:
+        await _safe_send_json(websocket, {"type": "error", "message": "Groq API key not configured"})
         return ""
 
-    url = "https://api.openai.com/v1/chat/completions"
+    url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {settings.openai_api_key}",
+        "Authorization": f"Bearer {settings.groq_api_key}",
         "Content-Type": "application/json",
     }
 
     payload = {
-        "model": "gpt-4o",
+        "model": "llama-3.3-70b-versatile",
         "messages": messages,
         "temperature": 0.7,
         "stream": True,
@@ -142,13 +163,12 @@ async def stream_openai_chat(messages, websocket: WebSocket) -> str:
 
                     if delta:
                         full_text += delta
-                        await websocket.send_json({"type": "llm_chunk", "data": delta})
+                        await _safe_send_json(websocket, {"type": "llm_chunk", "data": delta})
 
     except Exception:
         logger.exception("OpenAI streaming failed")
-        await websocket.send_json({"type": "error", "message": "LLM streaming failed"})
-
-    await websocket.send_json({"type": "llm_done", "content": full_text})
+        await _safe_send_json(websocket, {"type": "error", "message": "LLM streaming failed"})
+    await _safe_send_json(websocket, {"type": "llm_done", "content": full_text})
     return full_text
 
 
@@ -194,6 +214,7 @@ async def synthesize_elevenlabs(text: str) -> Optional[bytes]:
 async def websocket_voice(user_id: str, websocket: WebSocket):
     await websocket.accept()
     audio_buffer = bytearray()
+    print('[PIPELINE] ✅ WebSocket connected — client ready to stream audio')
 
     try:
         await websocket.send_json({"type": "ready"})
@@ -206,64 +227,58 @@ async def websocket_voice(user_id: str, websocket: WebSocket):
 
             # Support binary frames (append) or JSON text frames
             if "bytes" in msg and msg["bytes"]:
+                print(f'[PIPELINE 2/7] 📥 Audio chunk received — size: {len(msg["bytes"])} bytes')
                 # Special-case: client can send a single-frame b"__FINAL__" to indicate end-of-utterance
                 if msg["bytes"] == b"__FINAL__":
                     await websocket.send_json({"type": "stt_start"})
-
-                    # STT: try Deepgram then OpenAI Whisper
+                    print('[PIPELINE 3/7] 🎯 Sending audio to Deepgram STT...')
                     transcript = await transcribe_audio_deepgram(bytes(audio_buffer))
+                    print(f'[PIPELINE 3/7] ✅ Deepgram transcript received: "{transcript}"')
                     if not transcript:
+                        print('[PIPELINE 3/7] 🎯 Sending audio to OpenAI Whisper...')
                         transcript = await transcribe_audio_openai_whisper(bytes(audio_buffer))
+                        print(f'[PIPELINE 3/7] ✅ OpenAI Whisper transcript received: "{transcript}"')
 
                     await websocket.send_json({"type": "stt_done", "transcript": transcript})
 
-                    # Build server-side context and measure latency
+                    print('[PIPELINE 4/7] 🧠 Building context prompt...')
                     import time
                     start = time.perf_counter()
                     context = await build_context(user_id, transcript)
                     elapsed_ms = int((time.perf_counter() - start) * 1000)
                     await websocket.send_json({"type": "context_built", "ms": elapsed_ms})
-
-                    logger.debug(
-                        "Context assembled",
-                        extra={
-                            "user_id": user_id,
-                            "has_kb": bool(context.get("knowledge_summary")),
-                            "has_memory": bool(context.get("working_memory")),
-                            "episodic_count": len(context.get("episodic", [])),
-                            "context_ms": elapsed_ms,
-                        }
-                    )
+                    print(f'[PIPELINE 5/7] 🤖 Sending to GPT-4o — prompt length: {len(str(context))} chars')
 
                     messages = build_messages(user_input=transcript or "", context=context)
                     full_text = await stream_openai_chat(messages, websocket)
+                    print(f'[PIPELINE 5/7] ✅ GPT-4o full response: "{full_text[:100]}..."')
 
                     # Optionally synthesize TTS and stream/send audio back in chunks
+                    print(f'[PIPELINE 6/7] 🗣️ Sending to ElevenLabs TTS — text: "{full_text[:80]}..."')
                     tts_audio = await synthesize_elevenlabs(full_text)
                     if tts_audio:
+                        print('[PIPELINE 6/7] ✅ ElevenLabs audio stream started')
                         try:
                             chunk_size = 32 * 1024
                             # send in base64-encoded chunks to avoid huge single frames
                             for i in range(0, len(tts_audio), chunk_size):
                                 chunk = tts_audio[i : i + chunk_size]
                                 b64chunk = base64.b64encode(chunk).decode()
-                                logger.debug(
-                                    "Sending tts chunk %s/%s",
-                                    (i // chunk_size) + 1,
-                                    (len(tts_audio) + chunk_size - 1) // chunk_size,
-                                )
+                                print(f'[PIPELINE 7/7] 📤 Sending TTS audio chunk to client — size: {len(chunk)} bytes')
                                 await websocket.send_json({"type": "tts_audio_chunk", "data": b64chunk})
 
                             await websocket.send_json({"type": "tts_audio_done"})
-                            logger.debug("Sent tts_audio_done to websocket for user %s", user_id)
-                        except Exception:
+                            print('[PIPELINE ✅] Full pipeline complete — response delivered to client')
+                        except Exception as e:
+                            print(f'[PIPELINE ERROR ❌] Failed at step 7 — {str(e)}')
                             logger.exception("Failed streaming TTS chunks")
                             # fallback to sending whole audio as one base64 frame
                             try:
                                 b64 = base64.b64encode(tts_audio).decode()
-                                logger.debug("Sending fallback tts_audio_base64, size=%s", len(b64))
+                                print(f'[PIPELINE 7/7] 📤 Sending fallback TTS audio to client — size: {len(b64)} bytes')
                                 await websocket.send_json({"type": "tts_audio_base64", "data": b64})
-                            except Exception:
+                            except Exception as e:
+                                print(f'[PIPELINE ERROR ❌] Failed fallback TTS send — {str(e)}')
                                 logger.exception("Failed fallback TTS send")
                     else:
                         # If TTS not available, send final text explicitly

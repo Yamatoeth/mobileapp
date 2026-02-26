@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "916197322099",
+    "project_id": "jarvis-24e70",
+    "storage_bucket": "jarvis-24e70.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:916197322099:android:2b0cfff62a36725f3ea906",
+        "android_client_info": {
+          "package_name": "com.anonymous.medicus"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBrvi29csi32HqbC6Qih6EvSkgP-l-p7Cs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
