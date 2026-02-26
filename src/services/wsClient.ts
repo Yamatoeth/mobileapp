@@ -13,18 +13,26 @@ export class WSClient {
 
   constructor(baseUrl?: string) {
     this.url = baseUrl || (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000');
+    try {
+      console.log('[WSClient] init baseUrl=', this.url);
+    } catch (e) {}
   }
 
   connect(userId: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const wsUrl = this.url.replace(/^http/, 'ws') + `/ws/voice/${encodeURIComponent(userId)}`;
+      try {
+        console.log('[WSClient] connecting to', wsUrl);
+      } catch (e) {}
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
+        try { console.log('[WSClient] onopen -> connected to', wsUrl); } catch (e) {}
         resolve();
       };
 
       this.ws.onerror = (e) => {
+        try { console.error('[WSClient] onerror', e); } catch (err) {}
         reject(e);
       };
 
@@ -40,6 +48,7 @@ export class WSClient {
       };
 
       this.ws.onclose = () => {
+        try { console.log('[WSClient] onclose -> websocket closed'); } catch (e) {}
         // notify handlers about close
         this.handlers.forEach((h) => h({ type: 'closed' }));
       };
@@ -57,21 +66,33 @@ export class WSClient {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket not connected');
     }
-    this.ws.send(JSON.stringify(obj));
+    try {
+      const txt = JSON.stringify(obj);
+      this.ws.send(txt);
+      try { console.log('[WSClient] sendJson ->', obj.type || 'json', 'len=', txt.length); } catch (e) {}
+    } catch (err) {
+      try { console.error('[WSClient] sendJson error', err); } catch (e) {}
+      throw err;
+    }
   }
 
   sendAudioBase64(b64: string): void {
     // send as a JSON control frame
     try {
       this.sendJson({ type: 'audio_chunk', data: b64 });
-      console.log('[PIPELINE 2/7] 📡 Audio chunk sent to backend via WebSocket — bytes:', b64.length);
+      try { console.log('[WSClient] sendAudioBase64 sent, bytes=', b64.length); } catch (e) {}
     } catch (err) {
-      console.warn('[PIPELINE ERROR ❌] Failed at step 2 — sending audio chunk', err);
+      try { console.warn('[WSClient] Failed sending audio chunk', err); } catch (e) {}
     }
   }
 
   sendFinal(): void {
-    this.sendJson({ type: 'final' });
+    try {
+      try { console.log('[WSClient] sendFinal -> sending final marker'); } catch (e) {}
+      this.sendJson({ type: 'final' });
+    } catch (err) {
+      try { console.error('[WSClient] sendFinal error', err); } catch (e) {}
+    }
   }
 
   onMessage(handler: MessageHandler): void {

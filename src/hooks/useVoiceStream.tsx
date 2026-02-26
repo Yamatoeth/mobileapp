@@ -242,6 +242,7 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
     if (!wsRef.current) {
       await connect();
     }
+    try { console.log('[useVoiceStream] startRecording -> invoking audioRecordingService.startRecording'); } catch (e) {}
     const started = await audioRecordingService.startRecording((lvl) => {
       setLevel(lvl.level);
     });
@@ -270,17 +271,18 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
       for (let i = 0; i < b64.length; i += chunkSize) {
         const chunk = b64.slice(i, i + chunkSize);
         try {
-          console.debug('[useVoiceStream] Sending audio chunk', idx, 'len=', chunk.length);
+          try { console.log('[useVoiceStream] sending chunk', idx, 'len=', chunk.length); } catch (e) {}
           wsRef.current?.sendAudioBase64(chunk);
           // small pause to avoid flooding
           await new Promise((r) => setTimeout(r, 50));
         } catch (err) {
-          console.warn('Failed sending audio chunk', err);
+          try { console.warn('[useVoiceStream] Failed sending audio chunk', err); } catch (e) {}
         }
         idx += 1;
       }
 
       // signal final
+      try { console.log('[useVoiceStream] sending final marker'); } catch (e) {}
       wsRef.current?.sendFinal();
 
       if (deleteAfterSend) {

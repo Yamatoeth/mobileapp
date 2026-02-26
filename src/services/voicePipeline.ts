@@ -203,6 +203,7 @@ class VoicePipelineService {
     }
 
     const startTime = Date.now();
+    const traceId = this.currentTraceId;
     let transcriptionTime = 0;
     let llmTime = 0;
     let ttsTime = 0;
