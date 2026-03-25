@@ -2,6 +2,7 @@
 Application configuration using Pydantic Settings
 """
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from pydantic import field_validator
@@ -28,9 +29,13 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
     deepgram_api_key: Optional[str] = None
-    elevenlabs_api_key: Optional[str] = None
     pinecone_api_key: Optional[str] = None
     pinecone_environment: str = "us-east-1-aws"
+    kokoro_model_path: str = str(Path(__file__).resolve().parents[2] / "models" / "kokoro" / "kokoro-v1.0.int8.onnx")
+    kokoro_voices_path: str = str(Path(__file__).resolve().parents[2] / "models" / "kokoro" / "voices-v1.0.bin")
+    kokoro_default_voice: str = "af_sarah"
+    kokoro_default_language: str = "en-us"
+    kokoro_default_speed: float = 1.0
     
     # Security
     secret_key: str = "development-secret-key-change-in-production"
@@ -52,9 +57,6 @@ class Settings(BaseSettings):
     test_mode: bool = False  # When true, use local stubs for external services
     allow_insecure_dev_auth: bool = False
     dev_auth_secret: Optional[str] = None
-
-    # ElevenLabs voice
-    elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
 
     @field_validator("debug", mode="before")
     @classmethod

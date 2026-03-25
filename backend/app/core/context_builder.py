@@ -35,20 +35,27 @@ logger = logging.getLogger(__name__)
 
 async def _fetch_character(user_id: str) -> Dict[str, Any]:
     """Fetch lightweight character/profile for a user from the database."""
-    async with async_session_maker() as session:
-        user = await session.get(User, user_id)
-        if user is None:
-            return {}
-        return {
-            "user_id": user.id,
-            "full_name": user.full_name,
-            "email": user.email,
-            "trust_level": getattr(user, "trust_level", None),
-        }
+    try:
+        async with async_session_maker() as session:
+            user = await session.get(User, user_id)
+            if user is None:
+                return {}
+            return {
+                "user_id": user.id,
+                "full_name": user.full_name,
+                "email": user.email,
+                "trust_level": getattr(user, "trust_level", None),
+            }
+    except Exception as exc:
+        logger.warning("Character lookup unavailable: %s", exc)
+        return {}
 
 
 async def _fetch_working_memory(user_id: str) -> Dict[str, Any]:
     """Retrieve recent working memory items and cached user state from Redis."""
+    if redis_client._pool is None:
+        return {"messages": [], "state": None}
+
     try:
         messages = await redis_client.get_messages(user_id, limit=20)
         state = await redis_client.get_user_state(user_id)
@@ -57,7 +64,7 @@ async def _fetch_working_memory(user_id: str) -> Dict[str, Any]:
             "state": state,
         }
     except Exception as e:
-        logger.exception("Error fetching working memory: %s", e)
+        logger.warning("Working memory unavailable: %s", e)
         return {"messages": [], "state": None}
 
 
@@ -66,9 +73,10 @@ async def _fetch_knowledge_summary(user_id: str) -> Dict[str, Any]:
     query the Knowledge Base tables and synthesize a short summary string.
     """
     try:
-        cached = await redis_client.get_working_memory(user_id, "kb_summary")
-        if cached:
-            return {"summary": cached}
+        if redis_client._pool is not None:
+            cached = await redis_client.get_working_memory(user_id, "kb_summary")
+            if cached:
+                return {"summary": cached}
 
         # Query DB concurrently for each domain and build a short summary
         async with async_session_maker() as session:
@@ -127,13 +135,14 @@ async def _fetch_knowledge_summary(user_id: str) -> Dict[str, Any]:
 
         # Cache for 1 hour
         try:
-            await redis_client.set_working_memory(user_id, "kb_summary", summary, ttl_seconds=3600)
+            if redis_client._pool is not None:
+                await redis_client.set_working_memory(user_id, "kb_summary", summary, ttl_seconds=3600)
         except Exception:
-            logger.exception("Failed to cache kb_summary")
+            logger.warning("Failed to cache kb_summary")
 
         return {"summary": summary}
     except Exception as e:
-        logger.exception("Error fetching knowledge summary: %s", e)
+        logger.warning("Knowledge summary unavailable: %s", e)
         return {"summary": ""}
 
 
@@ -189,19 +198,39 @@ async def build_context(user_id: str, query: Optional[str] = None) -> Dict[str, 
       "episodic": [...],
     }
     """
+    async def with_timeout(coro, timeout_seconds: float, fallback: Any, label: str):
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout_seconds)
+        except Exception as exc:
+            logger.warning("Context layer %s timed out or failed: %s", label, exc)
+            return fallback
+
     tasks = [
-        asyncio.create_task(_fetch_character(user_id)),
-        asyncio.create_task(_fetch_knowledge_summary(user_id)),
-        asyncio.create_task(_fetch_working_memory(user_id)),
-        asyncio.create_task(_fetch_episodic(user_id, query)),
+        asyncio.create_task(with_timeout(_fetch_character(user_id), 1.0, {}, "character")),
+        asyncio.create_task(with_timeout(_fetch_knowledge_summary(user_id), 1.0, {}, "knowledge_summary")),
+        asyncio.create_task(with_timeout(_fetch_working_memory(user_id), 0.5, {"messages": [], "state": None}, "working_memory")),
+        asyncio.create_task(with_timeout(_fetch_episodic(user_id, query), 1.0, [], "episodic")),
     ]
 
     done = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # default empty values
-    character, knowledge_summary, working_memory, episodic = ({},) * 4
+    character: Dict[str, Any] = {}
+    knowledge_summary: Dict[str, Any] = {}
+    working_memory: Dict[str, Any] = {}
+    episodic: List[Dict[str, Any]] = []
+
+    def _coerce(value: Any, fallback: Any, label: str) -> Any:
+        if isinstance(value, Exception):
+            logger.warning("Context layer %s unavailable: %s", label, value)
+            return fallback
+        return value if value is not None else fallback
+
     try:
-        character, knowledge_summary, working_memory, episodic = done
+        raw_character, raw_knowledge, raw_working, raw_episodic = done
+        character = _coerce(raw_character, {}, "character")
+        knowledge_summary = _coerce(raw_knowledge, {}, "knowledge_summary")
+        working_memory = _coerce(raw_working, {}, "working_memory")
+        episodic = _coerce(raw_episodic, [], "episodic")
     except Exception:
         logger.exception("Error assembling context layers")
 

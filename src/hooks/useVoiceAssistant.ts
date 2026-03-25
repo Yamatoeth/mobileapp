@@ -60,7 +60,6 @@ export function useVoiceAssistant(
   const {
     streamLLM = false,
     playAudio = true,
-    includeContext = true,
     onTranscript,
     onResponse,
     onComplete,

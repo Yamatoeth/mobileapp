@@ -109,7 +109,7 @@ function inferAudioMetadata(uri: string): { fileName: string; mimeType: string }
 }
 
 async function writeAudioToCache(chunks: Buffer[]): Promise<string> {
-  const output = `${FileSystem.cacheDirectory}jarvis_tts_${Date.now()}.mp3`
+  const output = `${FileSystem.cacheDirectory}jarvis_tts_${Date.now()}.wav`
   const bytes = Buffer.concat(chunks)
   await FileSystem.writeAsStringAsync(output, bytes.toString('base64'), {
     encoding: FileSystem.EncodingType.Base64,
@@ -227,17 +227,33 @@ export class VoicePipelineService {
 
       const result = await apiClient.processQuery(options.userId, text)
       const assistantResponse = result.response || ''
+      let ttsTimeMs = 0
 
       this.callbacks.onResponse?.(assistantResponse)
       this.conversationHistory.add('user', text)
       this.conversationHistory.add('assistant', assistantResponse)
 
+      if (options.playAudio !== false && assistantResponse) {
+        this.setState('speaking')
+        const playbackStartedAt = Date.now()
+        const audioBuffer = await apiClient.synthesizeSpeech(assistantResponse)
+        const audioPath = await writeAudioToCache([Buffer.from(audioBuffer)])
+        await new Promise<void>((resolve, reject) => {
+          audioPlaybackService.play(
+            audioPath,
+            () => resolve(),
+            (error) => reject(error)
+          )
+        })
+        ttsTimeMs = Date.now() - playbackStartedAt
+      }
+
       const response: PipelineResponse = {
         userTranscript: text,
         assistantResponse,
         transcriptionTimeMs: 0,
-        llmTimeMs: Date.now() - startTime,
-        ttsTimeMs: 0,
+        llmTimeMs: Date.now() - startTime - ttsTimeMs,
+        ttsTimeMs,
         totalTimeMs: Date.now() - startTime,
       }
 

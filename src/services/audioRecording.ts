@@ -30,31 +30,33 @@ export type RecordingState = 'idle' | 'preparing' | 'recording' | 'stopping';
 // Recording Options
 // ============================================
 
-// High quality recording for speech recognition
-const RECORDING_OPTIONS: ExpoRecordingOptions =
-  // Prefer built-in preset when available
-  (Audio && Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY) || {
-    isMeteringEnabled: true,
-    android: {
-      extension: '.wav',
-      sampleRate: 16000,
-      numberOfChannels: 1,
-      bitRate: 256000,
-    },
-    ios: {
-      extension: '.wav',
-      sampleRate: 16000,
-      numberOfChannels: 1,
-      bitRate: 256000,
-      linearPCMBitDepth: 16,
-      linearPCMIsBigEndian: false,
-      linearPCMIsFloat: false,
-    },
-    web: {
-      mimeType: 'audio/wav',
-      bitsPerSecond: 256000,
-    },
-  };
+// Capture in the mobile-native container so Groq STT receives a valid file.
+const RECORDING_OPTIONS: ExpoRecordingOptions = {
+  isMeteringEnabled: true,
+  android: Audio?.RECORDING_OPTIONS_PRESET_HIGH_QUALITY?.android || {
+    extension: '.m4a',
+    outputFormat: Audio?.AndroidOutputFormat?.MPEG_4 ?? 2,
+    audioEncoder: Audio?.AndroidAudioEncoder?.AAC ?? 3,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 128000,
+  },
+  ios: Audio?.RECORDING_OPTIONS_PRESET_HIGH_QUALITY?.ios || {
+    extension: '.m4a',
+    outputFormat: Audio?.IOSOutputFormat?.MPEG4AAC ?? 'aac ',
+    audioQuality: Audio?.IOSAudioQuality?.HIGH ?? 96,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 128000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: {
+    mimeType: 'audio/webm',
+    bitsPerSecond: 128000,
+  },
+};
 
 // ============================================
 // Audio Recording Service Class

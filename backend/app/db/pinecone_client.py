@@ -59,7 +59,7 @@ class PineconeClient:
     @property
     def is_configured(self) -> bool:
         """Check if Pinecone is configured."""
-        return settings.pinecone_api_key is not None
+        return bool(settings.pinecone_api_key)
     
     async def upsert_memory(
         self,

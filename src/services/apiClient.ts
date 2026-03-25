@@ -142,6 +142,25 @@ async function request<T>(
   }
 }
 
+async function requestArrayBuffer(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<ArrayBuffer> {
+  const url = `${API_BASE_URL}${endpoint}`
+  const response = await fetchWithTimeout(url, options)
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}))
+    throw new ApiError(
+      response.status,
+      errorBody.detail || `Request failed with status ${response.status}`,
+      errorBody
+    )
+  }
+
+  return response.arrayBuffer()
+}
+
 // ============================================
 // Health Check
 // ============================================
@@ -285,6 +304,19 @@ export async function processQuery(
   })
 }
 
+export async function synthesizeSpeech(
+  text: string,
+  voice?: string
+): Promise<ArrayBuffer> {
+  return requestArrayBuffer('/api/v1/tts', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ text, voice }),
+  })
+}
+
 export async function get<T>(endpoint: string): Promise<T> {
   return request<T>(endpoint)
 }
@@ -318,4 +350,5 @@ export default {
   getWorkingMemory,
   // AI
   processQuery,
+  synthesizeSpeech,
 }

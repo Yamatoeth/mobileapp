@@ -10,7 +10,6 @@ from sentry_sdk.integrations.logging import LoggingIntegration
 
 from app.core.config import get_settings
 from app.db.redis_client import redis_client
-from app.db.pinecone_client import pinecone_client
 from fastapi import APIRouter
 
 from app.api.conversations import router as conversations_router
@@ -48,13 +47,11 @@ except Exception:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
-    # Startup
-    await redis_client.connect()
-    if pinecone_client.is_configured:
-        pinecone_client.connect()
     yield
-    # Shutdown
-    await redis_client.close()
+    try:
+        await redis_client.close()
+    except Exception:
+        pass
 
 
 
