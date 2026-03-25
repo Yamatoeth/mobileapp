@@ -47,6 +47,11 @@ type HealthResponse = {
   debug: boolean
 }
 
+type TtsVoicesResponse = {
+  voices: string[]
+  default: string
+}
+
 /**
  * Generic API response wrapper
  */
@@ -317,6 +322,10 @@ export async function synthesizeSpeech(
   })
 }
 
+export async function getTtsVoices(): Promise<TtsVoicesResponse> {
+  return request<TtsVoicesResponse>('/api/v1/tts/voices')
+}
+
 export async function get<T>(endpoint: string): Promise<T> {
   return request<T>(endpoint)
 }
@@ -351,4 +360,5 @@ export default {
   // AI
   processQuery,
   synthesizeSpeech,
+  getTtsVoices,
 }

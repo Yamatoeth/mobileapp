@@ -10,6 +10,7 @@ export class WSClient {
   private ws: WebSocket | null = null;
   private url: string;
   private handlers: MessageHandler[] = [];
+  private connectTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(baseUrl?: string) {
     this.url = baseUrl || (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000');
@@ -25,15 +26,35 @@ export class WSClient {
         console.log('[WSClient] connecting to', wsUrl);
       } catch (e) {}
       this.ws = new WebSocket(wsUrl);
+      let settled = false;
+
+      this.connectTimeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        try { this.ws?.close(); } catch (e) {}
+        reject(new Error('Voice backend connection timed out'));
+      }, 5000);
 
       this.ws.onopen = () => {
+        if (this.connectTimeout) {
+          clearTimeout(this.connectTimeout);
+          this.connectTimeout = null;
+        }
+        settled = true;
         try { console.log('[WSClient] onopen -> connected to', wsUrl); } catch (e) {}
         resolve();
       };
 
       this.ws.onerror = (e) => {
+        if (this.connectTimeout) {
+          clearTimeout(this.connectTimeout);
+          this.connectTimeout = null;
+        }
         try { console.error('[WSClient] onerror', e); } catch (err) {}
-        reject(e);
+        if (!settled) {
+          settled = true;
+          reject(new Error('Unable to connect to the voice backend'));
+        }
       };
 
       this.ws.onmessage = (event) => {
@@ -48,6 +69,10 @@ export class WSClient {
       };
 
       this.ws.onclose = () => {
+        if (this.connectTimeout) {
+          clearTimeout(this.connectTimeout);
+          this.connectTimeout = null;
+        }
         try { console.log('[WSClient] onclose -> websocket closed'); } catch (e) {}
         // notify handlers about close
         this.handlers.forEach((h) => h({ type: 'closed' }));
@@ -56,6 +81,10 @@ export class WSClient {
   }
 
   disconnect(): void {
+    if (this.connectTimeout) {
+      clearTimeout(this.connectTimeout);
+      this.connectTimeout = null;
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;

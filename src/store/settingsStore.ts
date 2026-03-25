@@ -22,6 +22,7 @@ interface UserSettings {
   // Display preferences
   darkModeEnabled: boolean;
   hapticFeedbackEnabled: boolean;
+  preferredTtsVoice: string;
 }
 
 interface SettingsState {
@@ -62,6 +63,7 @@ const defaultSettings: UserSettings = {
   calendarAccessEnabled: false,
   darkModeEnabled: false,
   hapticFeedbackEnabled: true,
+  preferredTtsVoice: 'af_sarah',
 };
 
 const initialState = {

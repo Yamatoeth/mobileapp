@@ -4,6 +4,7 @@ Server-side Context Builder
 Assembles layered context for LLM calls concurrently:
  - character (user profile)
  - knowledge summary (cached or DB-derived)
+ - recent conversation turns (DB with Redis/local fallback)
  - working memory (Redis)
  - episodic memory (Pinecone search)
 
@@ -28,6 +29,8 @@ from app.db.models import (
 from sqlalchemy import select, desc
 from app.core.config import get_settings
 import httpx
+
+from app.services.conversation_memory import get_recent_turns
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -66,6 +69,25 @@ async def _fetch_working_memory(user_id: str) -> Dict[str, Any]:
     except Exception as e:
         logger.warning("Working memory unavailable: %s", e)
         return {"messages": [], "state": None}
+
+
+async def _fetch_recent_conversation(user_id: str, limit: int = 8) -> Dict[str, Any]:
+    turns = await get_recent_turns(user_id, limit=limit)
+    summary_parts = []
+    for turn in turns[-6:]:
+        role = "User" if turn.get("role") == "user" else "Assistant"
+        content = (turn.get("content") or "").strip()
+        if not content:
+            continue
+        compact = " ".join(content.split())
+        if len(compact) > 180:
+            compact = compact[:177].rstrip() + "..."
+        summary_parts.append(f"{role}: {compact}")
+
+    return {
+        "turns": turns,
+        "summary": "\n".join(summary_parts),
+    }
 
 
 async def _fetch_knowledge_summary(user_id: str) -> Dict[str, Any]:
@@ -194,6 +216,7 @@ async def build_context(user_id: str, query: Optional[str] = None) -> Dict[str, 
     {
       "character": {...},
       "knowledge_summary": {...},
+      "recent_conversation": {...},
       "working_memory": {...},
       "episodic": [...],
     }
@@ -208,6 +231,7 @@ async def build_context(user_id: str, query: Optional[str] = None) -> Dict[str, 
     tasks = [
         asyncio.create_task(with_timeout(_fetch_character(user_id), 1.0, {}, "character")),
         asyncio.create_task(with_timeout(_fetch_knowledge_summary(user_id), 1.0, {}, "knowledge_summary")),
+        asyncio.create_task(with_timeout(_fetch_recent_conversation(user_id), 0.8, {"turns": [], "summary": ""}, "recent_conversation")),
         asyncio.create_task(with_timeout(_fetch_working_memory(user_id), 0.5, {"messages": [], "state": None}, "working_memory")),
         asyncio.create_task(with_timeout(_fetch_episodic(user_id, query), 1.0, [], "episodic")),
     ]
@@ -216,6 +240,7 @@ async def build_context(user_id: str, query: Optional[str] = None) -> Dict[str, 
 
     character: Dict[str, Any] = {}
     knowledge_summary: Dict[str, Any] = {}
+    recent_conversation: Dict[str, Any] = {}
     working_memory: Dict[str, Any] = {}
     episodic: List[Dict[str, Any]] = []
 
@@ -226,9 +251,10 @@ async def build_context(user_id: str, query: Optional[str] = None) -> Dict[str, 
         return value if value is not None else fallback
 
     try:
-        raw_character, raw_knowledge, raw_working, raw_episodic = done
+        raw_character, raw_knowledge, raw_recent_conversation, raw_working, raw_episodic = done
         character = _coerce(raw_character, {}, "character")
         knowledge_summary = _coerce(raw_knowledge, {}, "knowledge_summary")
+        recent_conversation = _coerce(raw_recent_conversation, {}, "recent_conversation")
         working_memory = _coerce(raw_working, {}, "working_memory")
         episodic = _coerce(raw_episodic, [], "episodic")
     except Exception:
@@ -237,6 +263,7 @@ async def build_context(user_id: str, query: Optional[str] = None) -> Dict[str, 
     return {
         "character": character or {},
         "knowledge_summary": knowledge_summary or {},
+        "recent_conversation": recent_conversation or {},
         "working_memory": working_memory or {},
         "episodic": episodic or [],
     }

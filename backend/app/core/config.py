@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     kokoro_default_voice: str = "af_sarah"
     kokoro_default_language: str = "en-us"
     kokoro_default_speed: float = 1.0
+    local_memory_path: str = str(Path(__file__).resolve().parents[2] / "data" / "conversation_memory")
     
     # Security
     secret_key: str = "development-secret-key-change-in-production"

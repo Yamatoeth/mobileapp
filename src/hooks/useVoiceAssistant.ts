@@ -78,6 +78,7 @@ export function useVoiceAssistant(
 
   // User id from settings (used to request server context)
   const userId = useSettingsStore((s) => s.userId);
+  const preferredTtsVoice = useSettingsStore((s) => s.settings.preferredTtsVoice);
 
   // Refs for callbacks to avoid stale closures
   const onTranscriptRef = useRef(onTranscript);
@@ -164,6 +165,7 @@ export function useVoiceAssistant(
       userId: userId ?? undefined,
       streamLLM,
       playAudio,
+      voice: preferredTtsVoice || undefined,
     };
 
     return await voicePipelineService.stopListening(pipelineOptions);
@@ -187,11 +189,12 @@ export function useVoiceAssistant(
         userId: userId ?? undefined,
         streamLLM,
         playAudio,
+        voice: preferredTtsVoice || undefined,
       };
 
       return await voicePipelineService.processText(text, pipelineOptions);
     },
-    [userId, streamLLM, playAudio]
+    [userId, streamLLM, playAudio, preferredTtsVoice]
   );
 
   // Clear history

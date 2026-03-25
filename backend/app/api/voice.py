@@ -26,6 +26,7 @@ from app.core.config import get_settings
 from app.core.context_builder import build_context
 from app.core.prompt_engine import build_messages
 from app.services.kokoro_service import kokoro_tts_service
+from app.services.conversation_memory import append_turn
 
 settings = get_settings()
 router = APIRouter()
@@ -41,6 +42,9 @@ class TextQueryRequest(BaseModel):
 class AudioPayloadMetadata(BaseModel):
     file_name: str = "audio.m4a"
     mime_type: str = "audio/mp4"
+    voice: str | None = None
+    speed: float | None = None
+    lang: str | None = None
 
 
 class TTSRequest(BaseModel):
@@ -333,6 +337,13 @@ async def run_voice_pipeline(
         transcript = await transcribe_audio_deepgram(audio_bytes, metadata)
 
     await _safe_send_json(websocket, {"type": "stt_done", "transcript": transcript})
+    conversation_id: str | None = None
+    if transcript:
+        conversation_id = await append_turn(
+            user_id=user_id,
+            role="user",
+            content=transcript,
+        )
 
     start = asyncio.get_running_loop().time()
     context = await build_context(user_id, transcript)
@@ -340,8 +351,20 @@ async def run_voice_pipeline(
     await _safe_send_json(websocket, {"type": "context_built", "ms": elapsed_ms})
     messages = build_messages(user_input=transcript or "", context=context)
     full_text = await stream_openai_chat(messages, websocket)
+    if full_text:
+        conversation_id = await append_turn(
+            user_id=user_id,
+            role="assistant",
+            content=full_text,
+            conversation_id=conversation_id,
+        )
 
-    tts_audio = await synthesize_kokoro_tts(full_text)
+    tts_audio = await synthesize_kokoro_tts(
+        full_text,
+        voice=metadata.voice,
+        speed=metadata.speed,
+        lang=metadata.lang,
+    )
     try:
         chunk_size = 32 * 1024
         for i in range(0, len(tts_audio), chunk_size):
@@ -370,6 +393,13 @@ async def process_text_query(payload: TextQueryRequest):
         }
     messages = build_messages(user_input=query, context=context)
     response_text = await generate_chat_response(messages, user_input=query, context=context)
+    conversation_id = await append_turn(user_id=payload.user_id, role="user", content=query)
+    await append_turn(
+        user_id=payload.user_id,
+        role="assistant",
+        content=response_text,
+        conversation_id=conversation_id,
+    )
 
     return {
         "response": response_text,
@@ -437,10 +467,19 @@ async def websocket_voice(user_id: str, websocket: WebSocket):
                 if payload and isinstance(payload, dict):
                     if payload.get("type") == "audio_chunk":
                         data_b64 = payload.get("data")
-                        if payload.get("file_name") or payload.get("mime_type"):
+                        if (
+                            payload.get("file_name")
+                            or payload.get("mime_type")
+                            or payload.get("voice")
+                            or payload.get("speed") is not None
+                            or payload.get("lang")
+                        ):
                             audio_metadata = AudioPayloadMetadata(
                                 file_name=payload.get("file_name") or audio_metadata.file_name,
                                 mime_type=payload.get("mime_type") or audio_metadata.mime_type,
+                                voice=payload.get("voice") or audio_metadata.voice,
+                                speed=payload.get("speed") if payload.get("speed") is not None else audio_metadata.speed,
+                                lang=payload.get("lang") or audio_metadata.lang,
                             )
                         if data_b64:
                             audio_buffer.extend(base64.b64decode(data_b64))
@@ -448,10 +487,19 @@ async def websocket_voice(user_id: str, websocket: WebSocket):
                         continue
 
                     if payload.get("type") == "final":
-                        if payload.get("file_name") or payload.get("mime_type"):
+                        if (
+                            payload.get("file_name")
+                            or payload.get("mime_type")
+                            or payload.get("voice")
+                            or payload.get("speed") is not None
+                            or payload.get("lang")
+                        ):
                             audio_metadata = AudioPayloadMetadata(
                                 file_name=payload.get("file_name") or audio_metadata.file_name,
                                 mime_type=payload.get("mime_type") or audio_metadata.mime_type,
+                                voice=payload.get("voice") or audio_metadata.voice,
+                                speed=payload.get("speed") if payload.get("speed") is not None else audio_metadata.speed,
+                                lang=payload.get("lang") or audio_metadata.lang,
                             )
 
                         await run_voice_pipeline(

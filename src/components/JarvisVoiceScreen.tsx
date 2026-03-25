@@ -94,10 +94,14 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
   const [wakeEnabled, setWakeEnabled] = useState(false)
   const [draft, setDraft] = useState('')
   const [isBootstrapping, setIsBootstrapping] = useState(true)
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'offline'>('checking')
+  const [ttsVoices, setTtsVoices] = useState<string[]>([])
   const pressTimeout = useRef<number | null>(null)
   const wake = useWakeWord()
   const userId = useSettingsStore((s) => s.userId)
   const setUser = useSettingsStore((s) => s.setUser)
+  const preferredTtsVoice = useSettingsStore((s) => s.settings.preferredTtsVoice)
+  const updateSettings = useSettingsStore((s) => s.updateSettings)
 
   const {
     state,
@@ -109,9 +113,11 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
     transcript,
     response,
     streamingResponse,
+    lastLatency,
     startListening,
     stopListening,
     sendText,
+    cancel,
   } = useVoiceAssistant({
     streamLLM: true,
     playAudio: true,
@@ -146,13 +152,51 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
     }
   }, [setUser, userId])
 
+  useEffect(() => {
+    let active = true
+
+    const checkBackend = async () => {
+      try {
+        await apiClient.checkHealth()
+        if (active) setBackendStatus('connected')
+      } catch {
+        if (active) setBackendStatus('offline')
+      }
+    }
+
+    const loadVoices = async () => {
+      try {
+        const payload = await apiClient.getTtsVoices()
+        if (!active) return
+        setTtsVoices(payload.voices || [])
+        if (!preferredTtsVoice && payload.default) {
+          updateSettings({ preferredTtsVoice: payload.default })
+        }
+      } catch {
+        if (active) setTtsVoices([])
+      }
+    }
+
+    void checkBackend()
+    void loadVoices()
+    const intervalId = setInterval(() => {
+      void checkBackend()
+    }, 10000)
+
+    return () => {
+      active = false
+      clearInterval(intervalId)
+    }
+  }, [preferredTtsVoice, updateSettings])
+
   const onPressIn = useCallback(() => {
     if (pressTimeout.current) clearTimeout(pressTimeout.current)
     pressTimeout.current = setTimeout(() => {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+      void cancel()
       void startListening()
     }, 60) as unknown as number
-  }, [startListening])
+  }, [cancel, startListening])
 
   const onPressOut = useCallback(() => {
     if (pressTimeout.current) {
@@ -234,6 +278,17 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
     return 'Ready'
   }, [isBootstrapping, isListening, isProcessing, isReady, isSpeaking])
 
+  const backendLabel = useMemo(() => {
+    if (backendStatus === 'checking') return 'Backend: checking'
+    if (backendStatus === 'connected') return 'Backend: online'
+    return 'Backend: offline'
+  }, [backendStatus])
+
+  const latencyLabel = useMemo(() => {
+    if (lastLatency == null) return 'No reply yet'
+    return `Last reply ${lastLatency} ms`
+  }, [lastLatency])
+
   const handleSendText = useCallback(async () => {
     const trimmed = draft.trim()
     if (!trimmed || isProcessing || isBootstrapping) {
@@ -276,6 +331,10 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
           )}
           <Text style={styles.statusText}>{statusLabel}</Text>
         </View>
+        <Text style={[styles.backendStatus, backendStatus === 'offline' && styles.backendStatusOffline]}>
+          {backendLabel}
+        </Text>
+        <Text style={styles.latencyStatus}>{latencyLabel}</Text>
 
         <View style={{ width: SPHERE_SIZE, height: SPHERE_SIZE, alignItems: 'center', justifyContent: 'center' }}>
           <VoiceOrb
@@ -307,6 +366,29 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
 
       <View style={styles.outputPanel}>
         <Text style={styles.panelTitle}>Conversation</Text>
+        {ttsVoices.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.voiceSelectorScroll}
+            contentContainerStyle={styles.voiceSelectorContent}
+          >
+            {ttsVoices.slice(0, 12).map((voice) => {
+              const selected = voice === preferredTtsVoice
+              return (
+                <Pressable
+                  key={voice}
+                  onPress={() => updateSettings({ preferredTtsVoice: voice })}
+                  style={[styles.voiceChip, selected && styles.voiceChipSelected]}
+                >
+                  <Text style={[styles.voiceChipText, selected && styles.voiceChipTextSelected]}>
+                    {voice}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+        ) : null}
         <ScrollView style={styles.outputScroll} contentContainerStyle={styles.outputScrollContent}>
           {transcript ? (
             <View style={styles.messageCard}>
@@ -333,6 +415,11 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
             <View style={[styles.messageCard, styles.errorCard]}>
               <Text style={styles.messageLabel}>Issue</Text>
               <Text style={styles.messageText}>{error}</Text>
+              {backendStatus === 'offline' ? (
+                <Text style={styles.errorHint}>
+                  Start the FastAPI backend and verify `EXPO_PUBLIC_API_URL` points to it.
+                </Text>
+              ) : null}
             </View>
           ) : null}
         </ScrollView>
@@ -432,6 +519,25 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
+  backendStatus: {
+    color: 'rgba(201, 247, 255, 0.7)',
+    fontFamily: 'Rajdhani_500Medium',
+    fontSize: 14,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  latencyStatus: {
+    color: 'rgba(201, 247, 255, 0.54)',
+    fontFamily: 'Rajdhani_500Medium',
+    fontSize: 12,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 16,
+  },
+  backendStatusOffline: {
+    color: '#ff8f8f',
+  },
   hint: {
     marginTop: 8,
     color: '#ffffff',
@@ -472,6 +578,35 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 10,
   },
+  voiceSelectorScroll: {
+    maxHeight: 42,
+    marginBottom: 10,
+  },
+  voiceSelectorContent: {
+    gap: 8,
+    paddingBottom: 2,
+  },
+  voiceChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  voiceChipSelected: {
+    borderColor: 'rgba(0, 212, 255, 0.55)',
+    backgroundColor: 'rgba(0, 212, 255, 0.16)',
+  },
+  voiceChipText: {
+    color: 'rgba(255,255,255,0.78)',
+    fontFamily: 'Rajdhani_500Medium',
+    fontSize: 14,
+    letterSpacing: 0.6,
+  },
+  voiceChipTextSelected: {
+    color: '#dffbff',
+  },
   outputScroll: {
     maxHeight: 210,
   },
@@ -509,6 +644,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Rajdhani_300Light',
     fontSize: 18,
     lineHeight: 24,
+  },
+  errorHint: {
+    color: 'rgba(255,255,255,0.72)',
+    fontFamily: 'Rajdhani_300Light',
+    fontSize: 15,
+    lineHeight: 20,
+    marginTop: 8,
   },
   composer: {
     marginTop: 12,

@@ -20,6 +20,7 @@ import { audioRecordingService } from './audioRecording'
 import { audioPlaybackService } from './textToSpeech'
 import WSClient from './wsClient'
 import apiClient from './apiClient'
+import { ApiError } from './apiClient'
 
 export type PipelineState =
   | 'idle'
@@ -54,6 +55,7 @@ export interface PipelineOptions {
   playAudio?: boolean
   minRecordingMs?: number
   maxRecordingMs?: number
+  voice?: string
 }
 
 interface ConversationTurn {
@@ -162,7 +164,36 @@ export class VoicePipelineService {
     this.callbacks.onStateChange?.(state)
   }
 
+  private toUserFacingError(error: unknown): Error {
+    if (error instanceof ApiError) {
+      if (error.status === 0 || error.status === 408) {
+        return new Error('Backend unreachable. Check that the server is running and EXPO_PUBLIC_API_URL is correct.')
+      }
+      return new Error(error.message)
+    }
+
+    if (error instanceof Error) {
+      if (/microphone permission/i.test(error.message)) {
+        return new Error('Microphone permission denied. Enable microphone access and try again.')
+      }
+      if (/timed out/i.test(error.message)) {
+        return new Error('The request timed out. Please try again.')
+      }
+      if (/websocket closed/i.test(error.message) || /voice backend/i.test(error.message)) {
+        return new Error('Voice backend unavailable. Check that the backend is running and reachable.')
+      }
+      return error
+    }
+
+    return new Error(String(error))
+  }
+
   async startListening(): Promise<void> {
+    if (this.state === 'speaking') {
+      await audioPlaybackService.stop()
+      this.setState('idle')
+    }
+
     if (this.state !== 'idle') {
       console.warn('Pipeline is not idle, cannot start listening')
       return
@@ -201,13 +232,14 @@ export class VoicePipelineService {
       const minMs = options.minRecordingMs ?? 500
       if (recording.durationMs < minMs) {
         this.setState('idle')
+        this.callbacks.onError?.(new Error('Recording too short. Hold to talk a little longer.'))
         return null
       }
 
       return await this.sendRecordingToBackend(recording.uri, options)
     } catch (error) {
       this.setState('error')
-      this.callbacks.onError?.(error instanceof Error ? error : new Error(String(error)))
+      this.callbacks.onError?.(this.toUserFacingError(error))
       return null
     }
   }
@@ -236,7 +268,7 @@ export class VoicePipelineService {
       if (options.playAudio !== false && assistantResponse) {
         this.setState('speaking')
         const playbackStartedAt = Date.now()
-        const audioBuffer = await apiClient.synthesizeSpeech(assistantResponse)
+        const audioBuffer = await apiClient.synthesizeSpeech(assistantResponse, options.voice)
         const audioPath = await writeAudioToCache([Buffer.from(audioBuffer)])
         await new Promise<void>((resolve, reject) => {
           audioPlaybackService.play(
@@ -262,7 +294,7 @@ export class VoicePipelineService {
       return response
     } catch (error) {
       this.setState('error')
-      this.callbacks.onError?.(error instanceof Error ? error : new Error(String(error)))
+      this.callbacks.onError?.(this.toUserFacingError(error))
       return null
     }
   }
@@ -347,7 +379,7 @@ export class VoicePipelineService {
 
       const fail = (error: Error) => {
         this.setState('error')
-        this.callbacks.onError?.(error)
+        this.callbacks.onError?.(this.toUserFacingError(error))
         ws.disconnect()
         unsubscribe()
         reject(error)
@@ -366,6 +398,10 @@ export class VoicePipelineService {
               break
             case 'stt_done':
               transcript = message.transcript || ''
+              if (!transcript.trim()) {
+                fail(new Error('Transcription failed. Please speak more clearly and try again.'))
+                return
+              }
               this.callbacks.onTranscript?.(transcript)
               this.setState('thinking')
               ctx.llmStartedAt = Date.now()
@@ -437,11 +473,13 @@ export class VoicePipelineService {
           data: base64Audio,
           file_name: metadata.fileName,
           mime_type: metadata.mimeType,
+          voice: options.voice,
         })
         ws.sendJson({
           type: 'final',
           file_name: metadata.fileName,
           mime_type: metadata.mimeType,
+          voice: options.voice,
         })
       } catch (error) {
         fail(error instanceof Error ? error : new Error(String(error)))
