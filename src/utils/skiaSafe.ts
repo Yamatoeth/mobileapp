@@ -26,7 +26,6 @@ function wrapMakePicture() {
       const u8 = toUint8Array(data)
       const ab = arrayBufferForUint8(u8) ?? (u8 as any)
       // Debug: log shape of incoming buffer/view
-      // eslint-disable-next-line no-console
       console.log('[skiaSafe] MakePicture input', {
         isView: !!(u8 && u8.buffer),
         byteOffset: u8?.byteOffset,
@@ -39,7 +38,6 @@ function wrapMakePicture() {
     Picture[name] = wrapped
   } catch (e) {
     // Do nothing if Skia internals aren't present or API differs
-    // eslint-disable-next-line no-console
     console.warn('[skiaSafe] failed to wrap MakePicture', e)
   }
 }
@@ -55,7 +53,6 @@ function wrapDataMakeFromBytes() {
     const wrapped = function (this: any, data: any, ...args: any[]) {
       const u8 = toUint8Array(data)
       const ab = arrayBufferForUint8(u8) ?? (u8 as any)
-      // eslint-disable-next-line no-console
       console.log('[skiaSafe] Data.MakeFromBytes input', {
         byteOffset: u8?.byteOffset,
         byteLength: u8?.byteLength,
@@ -66,7 +63,6 @@ function wrapDataMakeFromBytes() {
     if (Data.MakeFromBytes) Data.MakeFromBytes = wrapped
     else if (Data.Make) Data.Make = wrapped
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.warn('[skiaSafe] failed to wrap Data.MakeFromBytes', e)
   }
 }
@@ -82,7 +78,6 @@ function wrapImageMakeFromEncoded() {
     const wrapped = function (this: any, data: any, ...args: any[]) {
       const u8 = toUint8Array(data)
       const ab = arrayBufferForUint8(u8) ?? (u8 as any)
-      // eslint-disable-next-line no-console
       console.log('[skiaSafe] Image.MakeFromEncoded input', {
         byteOffset: u8?.byteOffset,
         byteLength: u8?.byteLength,
@@ -94,7 +89,6 @@ function wrapImageMakeFromEncoded() {
     else if (Image.MakeFromEncoded) Image.MakeFromEncoded = wrapped
     else if (Image.Make) Image.Make = wrapped
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.warn('[skiaSafe] failed to wrap Image.MakeImageFromEncoded', e)
   }
 }

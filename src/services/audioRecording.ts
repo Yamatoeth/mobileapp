@@ -3,7 +3,6 @@
  * Uses expo-av for recording and file management
  */
 // Import `Audio` from `expo-av` at runtime to avoid type/export mismatches across SDKs
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Audio }: any = require('expo-av')
 // Expo types may vary across SDK versions; use flexible aliases here
 type ExpoRecordingOptions = any

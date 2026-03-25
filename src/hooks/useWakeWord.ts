@@ -76,7 +76,6 @@ export function useWakeWord() {
         // manager.start((keywordIndex) => { callbackRef.current?.(); });
         // Save manager to engineRef.current.manager
         const accessKey = process.env.PICOVOICE_ACCESS_KEY || '';
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const manager: any = await porcupine.PorcupineManager.fromKeywordPaths(accessKey, [], []);
         // store manager
         engineRef.current.manager = manager;
