@@ -22,7 +22,7 @@ class DeepgramService:
         self.api_key = api_key or settings.deepgram_api_key
         self._client: Optional[httpx.AsyncClient] = None
 
-    async def _client(self) -> httpx.AsyncClient:
+    async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=60)
         return self._client

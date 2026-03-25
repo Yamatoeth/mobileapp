@@ -65,12 +65,14 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       id: generateId(),
       timestamp: new Date(),
     };
+    console.log('[conversationStore] addMessage', { role: newMessage.role, snippet: newMessage.content?.slice(0,120) });
     set((state) => ({
       messages: [...state.messages, newMessage],
     }));
   },
 
   updateMessage: (id, updates) => {
+    console.log('[conversationStore] updateMessage', { id, updates });
     set((state) => ({
       messages: state.messages.map((msg) =>
         msg.id === id ? { ...msg, ...updates } : msg
@@ -80,15 +82,33 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
   clearMessages: () => set({ messages: [] }),
 
-  setRecording: (recording) => set({ isRecording: recording }),
+  setRecording: (recording) => {
+    console.log('[conversationStore] setRecording', { recording });
+    set({ isRecording: recording });
+  },
   
-  setTranscribing: (transcribing) => set({ isTranscribing: transcribing }),
+  setTranscribing: (transcribing) => {
+    console.log('[conversationStore] setTranscribing', { transcribing });
+    set({ isTranscribing: transcribing });
+  },
   
-  setGenerating: (generating) => set({ isGenerating: generating }),
+  setGenerating: (generating) => {
+    console.log('[conversationStore] setGenerating', { generating });
+    set({ isGenerating: generating });
+  },
   
-  setSpeaking: (speaking) => set({ isSpeaking: speaking }),
+  setSpeaking: (speaking) => {
+    console.log('[conversationStore] setSpeaking', { speaking });
+    set({ isSpeaking: speaking });
+  },
   
-  setCurrentTranscription: (text) => set({ currentTranscription: text }),
+  setCurrentTranscription: (text) => {
+    console.log('[conversationStore] setCurrentTranscription', { snippet: text?.slice(0,120) });
+    set({ currentTranscription: text });
+  },
   
-  setError: (error) => set({ error }),
+  setError: (error) => {
+    console.log('[conversationStore] setError', { error });
+    set({ error });
+  },
 }));

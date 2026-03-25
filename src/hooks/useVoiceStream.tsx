@@ -239,6 +239,7 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
   }
 
   async function startRecording() {
+    try { console.log('[useVoiceStream] startRecording invoked', { state }); } catch (e) {}
     if (!wsRef.current) {
       await connect();
     }
@@ -251,6 +252,7 @@ export default function useVoiceStream(opts: UseVoiceStreamOptions) {
   }
 
   async function stopRecording({ deleteAfterSend = true } = {}) {
+    try { console.log('[useVoiceStream] stopRecording invoked', { state, wsExists: !!wsRef.current }); } catch (e) {}
     if (state !== 'recording') return;
     setState('sending');
     try {

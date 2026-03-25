@@ -143,6 +143,7 @@ export function HoldToTalkButton({
 
   // Start recording
   const handlePressIn = useCallback(async () => {
+    console.log('[HoldToTalkButton] handlePressIn invoked', { disabled, isRecording });
     if (disabled || isRecording) return;
 
 
@@ -199,6 +200,7 @@ export function HoldToTalkButton({
 
   // Stop recording
   const handlePressOut = useCallback(async () => {
+    console.log('[HoldToTalkButton] handlePressOut invoked', { isRecording });
     if (!isRecording) {
       setIsPressing(false);
       Animated.spring(scaleAnim, {

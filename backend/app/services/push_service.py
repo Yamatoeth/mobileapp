@@ -48,6 +48,7 @@ async def _post_with_retries(session: aiohttp.ClientSession, payload: List[Dict]
                 return {'status': 'error', 'error': str(e)}
             await asyncio.sleep(backoff)
             backoff *= 2
+    return {'status': 'error', 'error': 'max retries exceeded'}
 
 
 async def send_pending_for_user(user_id: str | int, batch_size: int = 50, concurrency: int = 4) -> Dict[str, Any]:
@@ -61,14 +62,14 @@ async def send_pending_for_user(user_id: str | int, batch_size: int = 50, concur
     await redis_client.connect()
     pending_key = f"pending_push:{user_id}"
     tokens_key = f"push_tokens:{user_id}"
-    tokens = await redis_client.client.smembers(tokens_key) or []
+    tokens = redis_client.client.smembers(tokens_key) or []
     if not tokens:
         return {'sent': 0, 'reason': 'no_tokens'}
 
     # Drain pending messages into a list (pop all)
     messages = []
     while True:
-        item = await redis_client.client.lpop(pending_key)
+        item = redis_client.client.lpop(pending_key)
         if not item:
             break
         try:

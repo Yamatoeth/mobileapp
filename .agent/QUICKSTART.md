@@ -17,7 +17,7 @@ docker compose up -d postgres redis
 
 ## 2. Backend
 
-**First time only:**
+**First time only:**ui
 ```bash
 cd backend
 python -m venv .venv

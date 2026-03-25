@@ -43,9 +43,9 @@ services:
       - "8000:8000"
 
   celery_worker:
-    image: python:3.11-slim
+    build: ./backend
     container_name: jarvis-celery-worker
-    command: bash -c "cd backend && celery -A app.tasks.fact_extraction.celery_app worker --loglevel=info"
+    command: bash -c "celery -A app.tasks.fact_extraction.celery_app worker --loglevel=info"
     depends_on:
       - backend
       - redis
@@ -55,9 +55,9 @@ services:
       - ./backend:/app/backend
 
   celery_beat:
-    image: python:3.11-slim
+    build: ./backend
     container_name: jarvis-celery-beat
-    command: bash -c "cd backend && celery -A app.tasks.fact_extraction.celery_app beat --loglevel=info"
+    command: bash -c "celery -A app.tasks.fact_extraction.celery_app beat --loglevel=info"
     depends_on:
       - backend
       - redis

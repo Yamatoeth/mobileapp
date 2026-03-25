@@ -79,6 +79,7 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
   const WAKE_KEY = 'wakeEnabled_v1'
 
   const onPressIn = useCallback(() => {
+    console.log('[JarvisVoiceScreen] onPressIn invoked');
     if (pressTimeout.current) clearTimeout(pressTimeout.current)
     pressTimeout.current = (setTimeout(() => {
       setListening(true)
@@ -87,6 +88,7 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
   }, [])
 
   const onPressOut = useCallback(() => {
+    console.log('[JarvisVoiceScreen] onPressOut invoked');
     if (pressTimeout.current) {
       clearTimeout(pressTimeout.current)
       pressTimeout.current = null

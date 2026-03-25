@@ -471,7 +471,12 @@ class AudioPlaybackService {
       await this.stop();
 
       // Create and load new sound
-      console.log('[audioPlayback] play start:', audioUri, { ts: Date.now() });
+      try {
+        const info = await FileSystem.getInfoAsync(audioUri);
+        console.log('[audioPlayback] play start:', audioUri, { ts: Date.now(), size: info.exists ? info.size : null });
+      } catch (e) {
+        console.log('[audioPlayback] play start (no file info):', audioUri, { ts: Date.now() });
+      }
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUri },
         { shouldPlay: true },

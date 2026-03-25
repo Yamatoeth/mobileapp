@@ -33,6 +33,7 @@ def _ensure_jwt():
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     _ensure_jwt()
+    assert jwt is not None
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=60))
     to_encode.update({"exp": expire})
@@ -45,6 +46,7 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
 
 def decode_token(token: str) -> Dict[str, Any]:
     _ensure_jwt()
+    assert jwt is not None
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
         return payload

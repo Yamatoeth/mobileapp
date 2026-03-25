@@ -98,6 +98,7 @@ export function useSpeechRecognition(
 
   // Start listening
   const startListening = useCallback(async (): Promise<void> => {
+    console.log('[useSpeechRecognition] startListening invoked', { isListening, isTranscribing });
     if (isListening || isTranscribing) {
       return;
     }
@@ -119,6 +120,7 @@ export function useSpeechRecognition(
     }
 
     // Start recording
+    console.log('[useSpeechRecognition] invoking audioRecordingService.startRecording');
     const success = await audioRecordingService.startRecording(handleAudioLevel);
 
     if (!success) {
@@ -144,6 +146,7 @@ export function useSpeechRecognition(
 
   // Stop listening and transcribe
   const stopListening = useCallback(async (): Promise<TranscriptionResult | null> => {
+    console.log('[useSpeechRecognition] stopListening invoked', { isListening });
     if (!isListening) {
       return null;
     }
@@ -159,6 +162,7 @@ export function useSpeechRecognition(
     }
 
     // Stop recording
+    console.log('[useSpeechRecognition] invoking audioRecordingService.stopRecording');
     const result = await audioRecordingService.stopRecording();
 
     if (!result) {
