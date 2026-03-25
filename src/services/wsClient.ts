@@ -20,7 +20,7 @@ export class WSClient {
 
   connect(userId: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const wsUrl = this.url.replace(/^http/, 'ws') + `/ws/voice/${encodeURIComponent(userId)}`;
+      const wsUrl = this.url.replace(/^http/, 'ws') + `/api/v1/ws/voice/${encodeURIComponent(userId)}`;
       try {
         console.log('[WSClient] connecting to', wsUrl);
       } catch (e) {}
@@ -95,7 +95,7 @@ export class WSClient {
     }
   }
 
-  onMessage(handler: MessageHandler): void {
+  onMessage(handler: MessageHandler): () => void {
     const wrappedHandler: MessageHandler = (msg) => {
       try {
         console.log('[PIPELINE] 📨 Message received from backend:', JSON.stringify(msg).slice(0, 200));
@@ -105,6 +105,9 @@ export class WSClient {
       handler(msg);
     };
     this.handlers.push(wrappedHandler);
+    return () => {
+      this.handlers = this.handlers.filter((h) => h !== wrappedHandler);
+    }
   }
 
   offMessage(handler: MessageHandler): void {

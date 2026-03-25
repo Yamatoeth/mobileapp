@@ -17,6 +17,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type WakeCallback = () => void;
 
+const runtimeImport = new Function(
+  'moduleName',
+  'return import(moduleName)'
+) as (moduleName: string) => Promise<any>;
+
 export function useWakeWord() {
   const [available, setAvailable] = useState(false);
   const [listening, setListening] = useState(false);
@@ -30,8 +35,7 @@ export function useWakeWord() {
       try {
         // Try to dynamically import the native Porcupine module if present.
         // This keeps the JS bundle runnable even without the native dependency.
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const mod = await import('@picovoice/porcupine-react-native');
+        const mod = await runtimeImport('@picovoice/porcupine-react-native');
         if (!mounted) return;
         engineRef.current = mod;
         setAvailable(true);

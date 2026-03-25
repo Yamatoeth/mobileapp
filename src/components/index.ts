@@ -8,7 +8,6 @@
 
 // Voice Components
 export { HoldToTalkButton } from './HoldToTalkButton';
-export { VoiceInput, VoiceInputCompact } from './VoiceInput';
 export { default as JarvisVoiceScreen } from './JarvisVoiceScreen';
 export { default as ParticleSphere } from './ParticleSphere';
 

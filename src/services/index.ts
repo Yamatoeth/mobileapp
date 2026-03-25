@@ -6,7 +6,7 @@
 // API & Backend
 export { default as apiClient, ApiError } from './apiClient';
 
-// Audio & Voice
+// Audio
 export {
   audioRecordingService,
   AudioRecordingService,
@@ -15,52 +15,19 @@ export {
   type RecordingState,
 } from './audioRecording';
 
-export {
-  speechToTextService,
-  DeepgramService,
-  WhisperService,
-  SpeechToTextService,
-  type TranscriptionResult,
-  type TranscriptionWord,
-  type STTProvider,
-} from './speechToText';
-
 // Health
 // HealthKit removed in Phase 1 pivot — health service omitted
 
-// Storage & AI
+// Storage
 export * from './storage';
-export * from './ai';
 
-// OpenAI / J.A.R.V.I.S.
+// Playback
 export {
-  openAIService,
-  OpenAIService,
-  JARVIS_SYSTEM_PROMPT,
-  type Message as OpenAIMessage,
-  type GenerateResponseOptions,
-  type GenerateResponseResult,
-} from './openaiService';
-
-// Text-to-Speech
-export {
-  textToSpeechService,
   audioPlaybackService,
-  voiceOutputService,
-  TextToSpeechService,
-  ElevenLabsService,
-  OpenAITTSService,
   AudioPlaybackService,
-  VoiceOutputService,
-  ELEVENLABS_VOICES,
-  OPENAI_VOICES,
-  type TTSProvider,
-  type TTSConfig,
-  type SynthesizeOptions,
-  type SynthesizeResult,
 } from './textToSpeech';
 
-// Voice Pipeline (STT → LLM → TTS)
+// Voice Pipeline (backend-owned STT → LLM → TTS)
 export {
   voicePipelineService,
   VoicePipelineService,
@@ -90,5 +57,5 @@ export {
 // Context Aggregation (server-backed)
 export { default as contextService, getServerContext } from './contextService';
 
-// WebSocket client for voice streaming
+// WebSocket client for backend voice transport
 export { default as WSClient } from './wsClient';

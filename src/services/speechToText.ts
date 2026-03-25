@@ -58,7 +58,11 @@ class DeepgramService {
 
     // Read audio file as base64
     const fileInfo = await FileSystem.getInfoAsync(audioUri);
-    console.log('[speechToText] file info', { exists: fileInfo.exists, size: fileInfo.size, uri: audioUri });
+    console.log('[speechToText] file info', {
+      exists: fileInfo.exists,
+      size: fileInfo.exists ? fileInfo.size : null,
+      uri: audioUri,
+    });
     const base64Audio = await FileSystem.readAsStringAsync(audioUri, {
       encoding: FileSystem.EncodingType.Base64,
     });
@@ -147,7 +151,11 @@ class WhisperService {
 
     // Read file info
     const fileInfo = await FileSystem.getInfoAsync(audioUri);
-    console.log('[speechToText] file info', { exists: fileInfo.exists, size: fileInfo.size, uri: audioUri });
+    console.log('[speechToText] file info', {
+      exists: fileInfo.exists,
+      size: fileInfo.exists ? fileInfo.size : null,
+      uri: audioUri,
+    });
     if (!fileInfo.exists) {
       throw new Error('Audio file not found');
     }

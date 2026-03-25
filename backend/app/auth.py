@@ -11,12 +11,14 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
 from fastapi import Depends, HTTPException, status
+from passlib.context import CryptContext
 
 from app.core.config import get_settings
 from app.db.database import async_session_maker
 from app.db.models import User
 
 settings = get_settings()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 try:
     import jwt
@@ -35,7 +37,9 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     _ensure_jwt()
     assert jwt is not None
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=60))
+    expire = datetime.utcnow() + (
+        expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
+    )
     to_encode.update({"exp": expire})
     token = jwt.encode(to_encode, settings.secret_key, algorithm=settings.jwt_algorithm)
     # PyJWT may return bytes on some versions
@@ -72,4 +76,17 @@ async def get_user_by_id(user_id: str) -> Optional[User]:
         return user
 
 
-__all__ = ["create_access_token", "decode_token", "get_current_user", "get_user_by_id"]
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
+        return False
+
+
+__all__ = [
+    "create_access_token",
+    "decode_token",
+    "get_current_user",
+    "get_user_by_id",
+    "verify_password",
+]

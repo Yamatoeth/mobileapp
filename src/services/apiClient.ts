@@ -161,7 +161,7 @@ export async function getStatus(): Promise<{
   redis: string
   pinecone: string
 }> {
-  return request('/status')
+  return request('/api/v1/status')
 }
 
 // ============================================
@@ -265,35 +265,6 @@ export async function getWorkingMemory(
 }
 
 // ============================================
-// Voice Processing
-// ============================================
-
-/**
- * Transcribe audio using Deepgram
- */
-export async function transcribeAudio(
-  audioBase64: string
-): Promise<{ text: string; confidence: number }> {
-  return request('/api/v1/voice/transcribe', {
-    method: 'POST',
-    body: JSON.stringify({ audio: audioBase64 }),
-  })
-}
-
-/**
- * Synthesize speech using ElevenLabs
- */
-export async function synthesizeSpeech(
-  text: string,
-  voiceId?: string
-): Promise<{ audioUrl: string }> {
-  return request('/api/v1/voice/synthesize', {
-    method: 'POST',
-    body: JSON.stringify({ text, voice_id: voiceId }),
-  })
-}
-
-// ============================================
 // AI Processing
 // ============================================
 
@@ -314,8 +285,21 @@ export async function processQuery(
   })
 }
 
+export async function get<T>(endpoint: string): Promise<T> {
+  return request<T>(endpoint)
+}
+
+export async function post<T>(endpoint: string, body?: unknown): Promise<T> {
+  return request<T>(endpoint, {
+    method: 'POST',
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+
 // Default export for convenience
 export default {
+  get,
+  post,
   // Health
   checkHealth,
   getStatus,
@@ -332,9 +316,6 @@ export default {
   // Memory
   searchMemory,
   getWorkingMemory,
-  // Voice
-  transcribeAudio,
-  synthesizeSpeech,
   // AI
   processQuery,
 }

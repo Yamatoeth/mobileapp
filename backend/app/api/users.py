@@ -11,7 +11,12 @@ router = APIRouter()
 async def get_or_create_user(user_id: str, db: AsyncSession = Depends(get_db)):
     user = await db.get(models.User, user_id)
     if user is None:
-        user = models.User(id=user_id)
+        user = models.User(
+            id=user_id,
+            email=f"user-{user_id}@local.invalid",
+            hashed_password="!",
+            full_name=f"User {user_id[:8]}",
+        )
         db.add(user)
         await db.flush()
     return UserResponse(id=user.id, email=getattr(user, "email", None))

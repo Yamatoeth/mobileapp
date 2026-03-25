@@ -1,15 +1,25 @@
 /**
  * Voice Pipeline Service
- * End-to-end STT → LLM → TTS pipeline for J.A.R.V.I.S.
+ * Thin mobile client around the backend-owned voice pipeline.
+ *
+ * Client responsibilities:
+ * - record microphone input
+ * - stream recorded audio to backend over WebSocket
+ * - play returned audio
+ *
+ * Backend responsibilities:
+ * - STT
+ * - context assembly
+ * - LLM generation
+ * - TTS synthesis
  */
-import { audioRecordingService, RecordingResult } from './audioRecording';
-import { speechToTextService, TranscriptionResult } from './speechToText';
-import { openAIService, JarvisContext, GenerateResponseResult } from './openaiService';
-import { voiceOutputService } from './textToSpeech';
+import * as FileSystem from 'expo-file-system/legacy'
+import { Buffer } from 'buffer'
 
-// ============================================
-// Types
-// ============================================
+import { audioRecordingService } from './audioRecording'
+import { audioPlaybackService } from './textToSpeech'
+import WSClient from './wsClient'
+import apiClient from './apiClient'
 
 export type PipelineState =
   | 'idle'
@@ -17,478 +27,413 @@ export type PipelineState =
   | 'transcribing'
   | 'thinking'
   | 'speaking'
-  | 'error';
+  | 'error'
 
 export interface PipelineResponse {
-  userTranscript: string;
-  assistantResponse: string;
-  transcriptionTimeMs: number;
-  llmTimeMs: number;
-  ttsTimeMs: number;
-  totalTimeMs: number;
+  userTranscript: string
+  assistantResponse: string
+  transcriptionTimeMs: number
+  llmTimeMs: number
+  ttsTimeMs: number
+  totalTimeMs: number
 }
 
 export interface PipelineCallbacks {
-  onStateChange?: (state: PipelineState) => void;
-  onTranscript?: (transcript: string) => void;
-  onResponse?: (response: string) => void;
-  onAudioLevel?: (level: number) => void;
-  onError?: (error: Error) => void;
-  onComplete?: (result: PipelineResponse) => void;
-  onStreamChunk?: (chunk: string) => void;
+  onStateChange?: (state: PipelineState) => void
+  onTranscript?: (transcript: string) => void
+  onResponse?: (response: string) => void
+  onAudioLevel?: (level: number) => void
+  onError?: (error: Error) => void
+  onComplete?: (result: PipelineResponse) => void
+  onStreamChunk?: (chunk: string) => void
 }
 
 export interface PipelineOptions {
-  context?: JarvisContext;
-  streamLLM?: boolean;
-  playAudio?: boolean;
-  minRecordingMs?: number;
-  maxRecordingMs?: number;
+  userId?: string
+  streamLLM?: boolean
+  playAudio?: boolean
+  minRecordingMs?: number
+  maxRecordingMs?: number
 }
-
-// ============================================
-// Conversation History
-// ============================================
 
 interface ConversationTurn {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: Date
 }
 
-class ConversationHistory {
-  private turns: ConversationTurn[] = [];
-  private maxTurns: number = 10; // 5 exchanges = 10 turns
+export class ConversationHistory {
+  private turns: ConversationTurn[] = []
+  private maxTurns = 10
 
   add(role: 'user' | 'assistant', content: string): void {
-    this.turns.push({
-      role,
-      content,
-      timestamp: new Date(),
-    });
-
-    // Trim to max turns
+    this.turns.push({ role, content, timestamp: new Date() })
     if (this.turns.length > this.maxTurns) {
-      this.turns = this.turns.slice(-this.maxTurns);
+      this.turns = this.turns.slice(-this.maxTurns)
     }
   }
 
   getHistory(): { role: 'user' | 'assistant'; content: string }[] {
-    return this.turns.map(({ role, content }) => ({ role, content }));
+    return this.turns.map(({ role, content }) => ({ role, content }))
   }
 
   clear(): void {
-    this.turns = [];
-  }
-
-  get length(): number {
-    return this.turns.length;
+    this.turns = []
   }
 }
 
-// ============================================
-// Voice Pipeline Service
-// ============================================
+type FinalizeContext = {
+  startTime: number
+  transcriptStartedAt: number | null
+  llmStartedAt: number | null
+}
 
-class VoicePipelineService {
-  private state: PipelineState = 'idle';
-  private conversationHistory: ConversationHistory;
-  private callbacks: PipelineCallbacks = {};
-  private isInitialized: boolean = false;
-  private currentRecordingUri: string | null = null;
-  private currentTraceId: string | null = null;
+function inferAudioMetadata(uri: string): { fileName: string; mimeType: string } {
+  const fileName = uri.split('/').pop() || 'audio.m4a'
+  const normalized = fileName.toLowerCase()
 
-  constructor() {
-    this.conversationHistory = new ConversationHistory();
+  if (normalized.endsWith('.wav')) {
+    return { fileName, mimeType: 'audio/wav' }
+  }
+  if (normalized.endsWith('.caf')) {
+    return { fileName, mimeType: 'audio/x-caf' }
+  }
+  if (normalized.endsWith('.mp3')) {
+    return { fileName, mimeType: 'audio/mpeg' }
+  }
+  if (normalized.endsWith('.m4a')) {
+    return { fileName, mimeType: 'audio/mp4' }
   }
 
-  /**
-   * Initialize the pipeline
-   */
+  return { fileName, mimeType: 'application/octet-stream' }
+}
+
+async function writeAudioToCache(chunks: Buffer[]): Promise<string> {
+  const output = `${FileSystem.cacheDirectory}jarvis_tts_${Date.now()}.mp3`
+  const bytes = Buffer.concat(chunks)
+  await FileSystem.writeAsStringAsync(output, bytes.toString('base64'), {
+    encoding: FileSystem.EncodingType.Base64,
+  })
+  return output
+}
+
+export class VoicePipelineService {
+  private state: PipelineState = 'idle'
+  private callbacks: PipelineCallbacks = {}
+  private conversationHistory = new ConversationHistory()
+  private isInitialized = false
+
   async initialize(): Promise<boolean> {
-    if (this.isInitialized) return true;
+    if (this.isInitialized) return true
 
     try {
-      // Initialize voice output
-      await voiceOutputService.initialize();
+      await audioPlaybackService.initialize()
 
-      // Request audio permissions
-      const hasPermission = await audioRecordingService.requestPermissions();
+      const hasPermission = await audioRecordingService.requestPermissions()
       if (!hasPermission) {
-        throw new Error('Microphone permission denied');
+        throw new Error('Microphone permission denied')
       }
 
-      this.isInitialized = true;
-      return true;
+      this.isInitialized = true
+      return true
     } catch (error) {
-      console.error('Failed to initialize voice pipeline:', error);
-      return false;
+      console.error('Failed to initialize voice pipeline:', error)
+      return false
     }
   }
 
-  /**
-   * Set callbacks for pipeline events
-   */
   setCallbacks(callbacks: PipelineCallbacks): void {
-    this.callbacks = callbacks;
+    this.callbacks = callbacks
   }
 
-  /**
-   * Update a single callback
-   */
   setCallback<K extends keyof PipelineCallbacks>(
     key: K,
     callback: PipelineCallbacks[K]
   ): void {
-    this.callbacks[key] = callback;
+    this.callbacks[key] = callback
   }
 
-  /**
-   * Get current state
-   */
   getState(): PipelineState {
-    return this.state;
+    return this.state
   }
 
-  /**
-   * Update state and notify
-   */
   private setState(state: PipelineState): void {
-    this.state = state;
-    this.callbacks.onStateChange?.(state);
+    this.state = state
+    this.callbacks.onStateChange?.(state)
   }
 
-  /**
-   * Start listening for voice input
-   */
   async startListening(): Promise<void> {
     if (this.state !== 'idle') {
-      console.warn('Pipeline is not idle, cannot start listening');
-      return;
+      console.warn('Pipeline is not idle, cannot start listening')
+      return
     }
 
-    await this.initialize();
-    this.setState('listening');
+    const initialized = await this.initialize()
+    if (!initialized) {
+      this.setState('error')
+      this.callbacks.onError?.(new Error('Voice pipeline failed to initialize'))
+      return
+    }
 
-    try {
-      // generate a trace id for this listening session
-      const traceId = Math.random().toString(36).slice(2, 10)
-      this.currentTraceId = traceId
-      console.log('[voicePipeline] startListening: starting recording', { ts: Date.now(), traceId });
-      // Start recording with audio level callback and pass traceId for correlation
-      await audioRecordingService.startRecording(
-        (level) => {
-          try {
-            this.callbacks.onAudioLevel?.(level.level);
-          } catch (e) {
-            console.warn('[voicePipeline] onAudioLevel callback error', e, { traceId });
-          }
-        },
-        { traceId }
-      );
-      console.log('[voicePipeline] startListening: recording started', { traceId });
-    } catch (error) {
-      this.setState('error');
-      this.callbacks.onError?.(error instanceof Error ? error : new Error(String(error)));
+    this.setState('listening')
+    const ok = await audioRecordingService.startRecording((level) => {
+      this.callbacks.onAudioLevel?.(level.level)
+    })
+
+    if (!ok) {
+      this.setState('error')
+      this.callbacks.onError?.(new Error('Failed to start recording'))
     }
   }
 
-  /**
-   * Stop listening and process the voice input
-   */
   async stopListening(options: PipelineOptions = {}): Promise<PipelineResponse | null> {
     if (this.state !== 'listening') {
-      console.warn('Pipeline is not listening');
-      return null;
+      console.warn('Pipeline is not listening')
+      return null
     }
 
-    const startTime = Date.now();
-    const traceId = this.currentTraceId;
-    let transcriptionTime = 0;
-    let llmTime = 0;
-    let ttsTime = 0;
-
     try {
-      // Stop recording
-      console.log('[VoicePipeline] Stopping recording...');
-      const recording = await audioRecordingService.stopRecording();
-      console.log('[voicePipeline] stopListening: stopRecording returned', { recordingUri: recording?.uri, durationMs: recording?.durationMs, traceId });
+      const recording = await audioRecordingService.stopRecording()
       if (!recording) {
-        console.error('[VoicePipeline] No recording available');
-        throw new Error('No recording available');
+        throw new Error('No recording available')
       }
-      console.log('[VoicePipeline] Recording stopped:', recording);
 
-      this.currentRecordingUri = recording.uri;
-
-      // Check minimum duration
-      const minMs = options.minRecordingMs ?? 500;
+      const minMs = options.minRecordingMs ?? 500
       if (recording.durationMs < minMs) {
-        console.warn('[VoicePipeline] Recording too short:', recording.durationMs, 'ms');
-        this.setState('idle');
-        return null;
+        this.setState('idle')
+        return null
       }
 
-      // Transcribe
-      this.setState('transcribing');
-      console.log('[voicePipeline] transcribing: start transcribe', { ts: Date.now(), uri: recording.uri, traceId });
-      const transcribeStart = Date.now();
-      console.log('[VoicePipeline] Transcribing audio:', recording.uri);
-      const transcription = await speechToTextService.transcribeAuto(recording.uri);
-      transcriptionTime = Date.now() - transcribeStart;
-      console.log('[VoicePipeline] Transcription result:', transcription);
-
-      if (!transcription.text || transcription.text.trim() === '') {
-        console.warn('[VoicePipeline] Empty transcription');
-        this.setState('idle');
-        return null;
-      }
-
-      this.callbacks.onTranscript?.(transcription.text);
-      this.conversationHistory.add('user', transcription.text);
-
-      // Generate LLM response
-      this.setState('thinking');
-      console.log('[voicePipeline] thinking: sending to LLM', { ts: Date.now(), traceId });
-      const llmStart = Date.now();
-      console.log('[VoicePipeline] Sending transcript to LLM:', transcription.text);
-
-      let assistantResponse = '';
-
-      if (options.streamLLM && this.callbacks.onStreamChunk) {
-        // Streaming mode
-        assistantResponse = await openAIService.stream(
-          transcription.text,
-          (chunk) => {
-            this.callbacks.onStreamChunk?.(chunk);
-            console.log('[VoicePipeline] LLM stream chunk:', chunk);
-          },
-          this.buildContext(options.context)
-        );
-      } else {
-        // Non-streaming mode
-        const result = await openAIService.generateResponse({
-          prompt: transcription.text,
-          context: this.buildContext(options.context),
-        });
-        assistantResponse = result.content;
-        console.log('[VoicePipeline] LLM response:', assistantResponse);
-      }
-
-      llmTime = Date.now() - llmStart;
-      console.log('[voicePipeline] thinking: LLM finished', { llmTime, traceId });
-
-      if (!assistantResponse) {
-        console.error('[VoicePipeline] No response from LLM');
-        throw new Error('No response from LLM');
-      }
-
-      this.callbacks.onResponse?.(assistantResponse);
-      this.conversationHistory.add('assistant', assistantResponse);
-
-      // Text-to-Speech
-      if (options.playAudio !== false) {
-        this.setState('speaking');
-        console.log('[voicePipeline] tts: synthesizing and playing audio', { ts: Date.now(), traceId });
-        const ttsStart = Date.now();
-        console.log('[VoicePipeline] Synthesizing speech...');
-
-        await voiceOutputService.speak(assistantResponse, {
-          onStart: () => {
-            console.log('[PIPELINE 7/7] 🔊 TTS audio received — starting playback');
-          },
-          onComplete: () => {
-            console.log('[VoicePipeline] TTS playback complete');
-            this.setState('idle');
-          },
-          onError: (error) => {
-            console.warn('[PIPELINE ERROR ❌] Failed at step 7', error);
-            this.setState('idle');
-          },
-        });
-
-        ttsTime = Date.now() - ttsStart;
-        console.log('[VoicePipeline] TTS done in', ttsTime, 'ms');
-      } else {
-        this.setState('idle');
-      }
-
-      // clear trace id for this session
-      this.currentTraceId = null
-
-      const totalTime = Date.now() - startTime;
-
-      const result: PipelineResponse = {
-        userTranscript: transcription.text,
-        assistantResponse,
-        transcriptionTimeMs: transcriptionTime,
-        llmTimeMs: llmTime,
-        ttsTimeMs: ttsTime,
-        totalTimeMs: totalTime,
-      };
-
-      this.callbacks.onComplete?.(result);
-      return result;
+      return await this.sendRecordingToBackend(recording.uri, options)
     } catch (error) {
-      this.setState('error');
-      this.callbacks.onError?.(error instanceof Error ? error : new Error(String(error)));
-      
-      // Reset to idle after error
-      setTimeout(() => {
-        if (this.state === 'error') {
-          this.setState('idle');
-        }
-      }, 2000);
-
-      return null;
+      this.setState('error')
+      this.callbacks.onError?.(error instanceof Error ? error : new Error(String(error)))
+      return null
     }
   }
 
-  /**
-   * Cancel current operation
-   */
-  async cancel(): Promise<void> {
-    if (this.state === 'listening') {
-      await audioRecordingService.cancelRecording();
+  async processText(text: string, options: PipelineOptions = {}): Promise<PipelineResponse | null> {
+    if (!options.userId) {
+      const error = new Error('userId is required for backend-owned text processing')
+      this.setState('error')
+      this.callbacks.onError?.(error)
+      return null
     }
-
-    if (this.state === 'speaking') {
-      await voiceOutputService.stop();
-    }
-
-    this.setState('idle');
-  }
-
-  /**
-   * Process text input directly (skip STT)
-   */
-  async processText(
-    text: string,
-    options: PipelineOptions = {}
-  ): Promise<PipelineResponse | null> {
-    if (this.state !== 'idle') {
-      console.warn('Pipeline is not idle');
-      return null;
-    }
-
-    const startTime = Date.now();
-    let llmTime = 0;
-    let ttsTime = 0;
 
     try {
-      this.conversationHistory.add('user', text);
+      const startTime = Date.now()
+      this.callbacks.onTranscript?.(text)
+      this.setState('thinking')
 
-      // Generate LLM response
-      this.setState('thinking');
-      const llmStart = Date.now();
+      const result = await apiClient.processQuery(options.userId, text)
+      const assistantResponse = result.response || ''
 
-      let assistantResponse = '';
+      this.callbacks.onResponse?.(assistantResponse)
+      this.conversationHistory.add('user', text)
+      this.conversationHistory.add('assistant', assistantResponse)
 
-      if (options.streamLLM && this.callbacks.onStreamChunk) {
-        assistantResponse = await openAIService.stream(
-          text,
-          (chunk) => {
-            this.callbacks.onStreamChunk?.(chunk);
-          },
-          this.buildContext(options.context)
-        );
-      } else {
-        const result = await openAIService.generateResponse({
-          prompt: text,
-          context: this.buildContext(options.context),
-        });
-        assistantResponse = result.content;
-      }
-
-      llmTime = Date.now() - llmStart;
-
-      if (!assistantResponse) {
-        throw new Error('No response from LLM');
-      }
-
-      this.callbacks.onResponse?.(assistantResponse);
-      this.conversationHistory.add('assistant', assistantResponse);
-
-      // Text-to-Speech
-      if (options.playAudio !== false) {
-        this.setState('speaking');
-        const ttsStart = Date.now();
-
-        await voiceOutputService.speak(assistantResponse, {
-          onComplete: () => {
-            this.setState('idle');
-          },
-          onError: (error) => {
-            console.error('TTS error:', error);
-            this.setState('idle');
-          },
-        });
-
-        ttsTime = Date.now() - ttsStart;
-      } else {
-        this.setState('idle');
-      }
-
-      const totalTime = Date.now() - startTime;
-
-      const result: PipelineResponse = {
+      const response: PipelineResponse = {
         userTranscript: text,
         assistantResponse,
         transcriptionTimeMs: 0,
-        llmTimeMs: llmTime,
-        ttsTimeMs: ttsTime,
-        totalTimeMs: totalTime,
-      };
+        llmTimeMs: Date.now() - startTime,
+        ttsTimeMs: 0,
+        totalTimeMs: Date.now() - startTime,
+      }
 
-      this.callbacks.onComplete?.(result);
-      return result;
+      this.setState('idle')
+      this.callbacks.onComplete?.(response)
+      return response
     } catch (error) {
-      this.setState('error');
-      this.callbacks.onError?.(error instanceof Error ? error : new Error(String(error)));
-      return null;
+      this.setState('error')
+      this.callbacks.onError?.(error instanceof Error ? error : new Error(String(error)))
+      return null
     }
   }
 
-  /**
-   * Build context with conversation history
-   */
-  private buildContext(additionalContext?: JarvisContext): JarvisContext {
-    return {
-      ...additionalContext,
-      conversationHistory: this.conversationHistory.getHistory().map((turn) => ({
-        role: turn.role,
-        content: turn.content,
-      })),
-    };
+  async cancel(): Promise<void> {
+    await audioPlaybackService.stop()
+    this.setState('idle')
   }
 
-  /**
-   * Clear conversation history
-   */
   clearHistory(): void {
-    this.conversationHistory.clear();
-    openAIService.clearHistory();
+    this.conversationHistory.clear()
   }
 
-  /**
-   * Get conversation history length
-   */
-  getHistoryLength(): number {
-    return this.conversationHistory.length;
-  }
+  private async sendRecordingToBackend(
+    audioUri: string,
+    options: PipelineOptions
+  ): Promise<PipelineResponse> {
+    const userId = options.userId
+    if (!userId) {
+      throw new Error('userId is required for backend-owned voice processing')
+    }
 
-  /**
-   * Check if pipeline is ready
-   */
-  isReady(): boolean {
-    return this.isInitialized && this.state === 'idle';
+    const ws = new WSClient()
+    const base64Audio = await FileSystem.readAsStringAsync(audioUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    })
+    const metadata = inferAudioMetadata(audioUri)
+    const audioChunks: Buffer[] = []
+    let transcript = ''
+    let assistantResponse = ''
+
+    const ctx: FinalizeContext = {
+      startTime: Date.now(),
+      transcriptStartedAt: null,
+      llmStartedAt: null,
+    }
+
+    return new Promise<PipelineResponse>(async (resolve, reject) => {
+      const finalize = async (shouldPlayAudio: boolean) => {
+        try {
+          let ttsTimeMs = 0
+
+          if (shouldPlayAudio && audioChunks.length > 0) {
+            this.setState('speaking')
+            const playbackStartedAt = Date.now()
+            const audioPath = await writeAudioToCache(audioChunks)
+            await new Promise<void>((playResolve, playReject) => {
+              audioPlaybackService.play(
+                audioPath,
+                () => playResolve(),
+                (error) => playReject(error)
+              )
+            })
+            ttsTimeMs = Date.now() - playbackStartedAt
+          }
+
+          this.conversationHistory.add('user', transcript)
+          this.conversationHistory.add('assistant', assistantResponse)
+
+          const response: PipelineResponse = {
+            userTranscript: transcript,
+            assistantResponse,
+            transcriptionTimeMs: ctx.transcriptStartedAt
+              ? (ctx.llmStartedAt || Date.now()) - ctx.transcriptStartedAt
+              : 0,
+            llmTimeMs: ctx.llmStartedAt ? Date.now() - ctx.llmStartedAt - ttsTimeMs : 0,
+            ttsTimeMs,
+            totalTimeMs: Date.now() - ctx.startTime,
+          }
+
+          this.setState('idle')
+          this.callbacks.onComplete?.(response)
+          ws.disconnect()
+          unsubscribe()
+          resolve(response)
+        } catch (error) {
+          ws.disconnect()
+          unsubscribe()
+          reject(error)
+        }
+      }
+
+      const fail = (error: Error) => {
+        this.setState('error')
+        this.callbacks.onError?.(error)
+        ws.disconnect()
+        unsubscribe()
+        reject(error)
+      }
+
+      const unsubscribe = ws.onMessage((message) => {
+        try {
+          switch (message?.type) {
+            case 'ready':
+            case 'ack_audio':
+            case 'ignored':
+              break
+            case 'stt_start':
+              this.setState('transcribing')
+              ctx.transcriptStartedAt = Date.now()
+              break
+            case 'stt_done':
+              transcript = message.transcript || ''
+              this.callbacks.onTranscript?.(transcript)
+              this.setState('thinking')
+              ctx.llmStartedAt = Date.now()
+              break
+            case 'context_built':
+              this.setState('thinking')
+              if (!ctx.llmStartedAt) {
+                ctx.llmStartedAt = Date.now()
+              }
+              break
+            case 'llm_chunk':
+              this.setState('thinking')
+              if (!ctx.llmStartedAt) {
+                ctx.llmStartedAt = Date.now()
+              }
+              if (typeof message.data === 'string') {
+                assistantResponse += message.data
+                this.callbacks.onStreamChunk?.(message.data)
+              }
+              break
+            case 'llm_done':
+              if (typeof message.content === 'string') {
+                assistantResponse = message.content
+                this.callbacks.onResponse?.(assistantResponse)
+              }
+              break
+            case 'tts_audio_chunk':
+              if (typeof message.data === 'string') {
+                audioChunks.push(Buffer.from(message.data, 'base64'))
+              }
+              break
+            case 'tts_audio_base64':
+              if (typeof message.data === 'string') {
+                audioChunks.length = 0
+                audioChunks.push(Buffer.from(message.data, 'base64'))
+              }
+              void finalize(options.playAudio !== false)
+              break
+            case 'tts_audio_done':
+              void finalize(options.playAudio !== false)
+              break
+            case 'final_text':
+              if (typeof message.text === 'string') {
+                assistantResponse = message.text
+                this.callbacks.onResponse?.(assistantResponse)
+              }
+              void finalize(false)
+              break
+            case 'error':
+              fail(new Error(message.message || 'Voice backend error'))
+              break
+            case 'closed':
+              if (this.state !== 'idle') {
+                fail(new Error('Voice WebSocket closed before completion'))
+              }
+              break
+            default:
+              break
+          }
+        } catch (error) {
+          fail(error instanceof Error ? error : new Error(String(error)))
+        }
+      })
+
+      try {
+        await ws.connect(userId)
+        ws.sendJson({
+          type: 'audio_chunk',
+          data: base64Audio,
+          file_name: metadata.fileName,
+          mime_type: metadata.mimeType,
+        })
+        ws.sendJson({
+          type: 'final',
+          file_name: metadata.fileName,
+          mime_type: metadata.mimeType,
+        })
+      } catch (error) {
+        fail(error instanceof Error ? error : new Error(String(error)))
+      }
+    })
   }
 }
 
-// ============================================
-// Export
-// ============================================
+export const voicePipelineService = new VoicePipelineService()
 
-export const voicePipelineService = new VoicePipelineService();
-
-export { VoicePipelineService, ConversationHistory };
+export default voicePipelineService

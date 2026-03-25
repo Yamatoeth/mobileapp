@@ -10,8 +10,6 @@ import {
   PipelineResponse,
   PipelineOptions,
 } from '../services/voicePipeline';
-import type { JarvisContext } from '../services/openaiService';
-import { getServerContext } from '../services/contextService';
 
 // ============================================
 // Types
@@ -95,23 +93,6 @@ export function useVoiceAssistant(
     onErrorRef.current = onError;
   }, [onTranscript, onResponse, onComplete, onError]);
 
-  // Fetch server-side context (Layer 2-4). Returns null when disabled or unavailable.
-  const fetchServerContext = useCallback(
-    async (query?: string): Promise<JarvisContext | undefined> => {
-      if (!includeContext) return undefined;
-      if (!userId) return undefined;
-
-      try {
-        const ctx = await getServerContext(userId, query ?? '');
-        return ctx as unknown as JarvisContext;
-      } catch (e) {
-        console.warn('[useVoiceAssistant] getServerContext failed', e);
-        return undefined;
-      }
-    },
-    [includeContext, userId]
-  );
-
   // Initialize
   const initialize = useCallback(async (): Promise<boolean> => {
     if (isInitialized) return true;
@@ -180,15 +161,14 @@ export function useVoiceAssistant(
 
   // Stop listening and process
   const stopListening = useCallback(async (): Promise<PipelineResponse | null> => {
-    const ctx = await fetchServerContext();
     const pipelineOptions: PipelineOptions = {
-      context: ctx,
+      userId: userId ?? undefined,
       streamLLM,
       playAudio,
     };
 
     return await voicePipelineService.stopListening(pipelineOptions);
-  }, [fetchServerContext, streamLLM, playAudio]);
+  }, [userId, streamLLM, playAudio]);
 
   // Cancel
   const cancel = useCallback(async (): Promise<void> => {
@@ -204,16 +184,15 @@ export function useVoiceAssistant(
       setResponse('');
       setStreamingResponse('');
 
-      const ctx = await fetchServerContext(text);
       const pipelineOptions: PipelineOptions = {
-        context: ctx,
+        userId: userId ?? undefined,
         streamLLM,
         playAudio,
       };
 
       return await voicePipelineService.processText(text, pipelineOptions);
     },
-    [fetchServerContext, streamLLM, playAudio]
+    [userId, streamLLM, playAudio]
   );
 
   // Clear history

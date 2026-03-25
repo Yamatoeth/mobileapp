@@ -81,8 +81,8 @@ app.include_router(messages_router, prefix="/api/v1", tags=["messages"])
 # CORS middleware for mobile app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
-    allow_credentials=True,
+    allow_origins=settings.cors_allowed_origins,
+    allow_credentials="*" not in settings.cors_allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

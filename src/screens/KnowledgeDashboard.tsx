@@ -18,7 +18,7 @@ export default function KnowledgeDashboard() {
     setLoading(true)
     try {
       const resp = await knowledgeService.listDomainItems(DOMAIN, USER_ID)
-      setItems(resp?.data?.items ?? [])
+      setItems(resp?.items ?? [])
     } catch (e) {
       Alert.alert('Error', String(e))
     } finally {
@@ -56,7 +56,7 @@ export default function KnowledgeDashboard() {
         })
         try{
           const resp = await knowledgeService.applyKBUpdates(updates)
-          Alert.alert('Saved', `Applied: ${resp?.data?.applied ?? 0}`)
+          Alert.alert('Saved', `Applied: ${resp?.applied ?? 0}`)
           load()
         }catch(e){
           Alert.alert('Error', String(e))

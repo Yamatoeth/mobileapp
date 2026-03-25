@@ -1,19 +1,16 @@
-import { View, Text, ScrollView, Switch, TouchableOpacity, Alert, Pressable } from 'react-native'
+import { View, Text, ScrollView, TouchableOpacity, Alert, Pressable } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme } from '../hooks/useTheme'
 import { useHealthLogs } from '../hooks/useHealthLogs'
 import { useChatHistory } from '../hooks/useChatHistory'
 import { useOnboarding } from '../hooks/useOnboarding'
-import { useApiKey } from '../hooks/useApiKey'
-import * as Clipboard from 'expo-clipboard'
 
 export function ProfileScreen({ onNavigate }: { onNavigate?: (route: 'home'|'profile') => void }) {
   const { isDark, themeMode, setThemeMode } = useTheme()
   const { logs, clearAllLogs } = useHealthLogs()
   const { clearHistory: clearChatHistory } = useChatHistory()
   const { resetOnboarding } = useOnboarding()
-  const { apiKey, clearApiKey } = useApiKey()
 
   const handleThemeChange = async () => {
     // Cycle through: system -> light -> dark -> system
@@ -46,7 +43,6 @@ export function ProfileScreen({ onNavigate }: { onNavigate?: (route: 'home'|'pro
           onPress: async () => {
             await clearAllLogs?.()
             await clearChatHistory()
-            await clearApiKey?.()
             Alert.alert('Done', 'All data has been deleted.')
           },
         },
@@ -102,9 +98,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate?: (route: 'home'|'pro
               <Text className={isDark ? 'text-gray-400' : 'text-gray-500'}>Days Logged</Text>
             </View>
             <View className={`flex-1 p-4 rounded-xl items-center ${isDark ? 'bg-gray-800' : 'bg-white shadow'}`}>
-              <Ionicons name="shield-checkmark-outline" size={22} color="#8b5cf6" />
-              <Text className={`text-xl font-bold mt-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>{apiKey ? '✓' : '–'}</Text>
-              <Text className={isDark ? 'text-gray-400' : 'text-gray-500'}>API Key</Text>
+              <Ionicons name="server-outline" size={22} color="#8b5cf6" />
+              <Text className={`text-xl font-bold mt-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>BE</Text>
+              <Text className={isDark ? 'text-gray-400' : 'text-gray-500'}>Backend Voice</Text>
             </View>
           </View>
 
@@ -123,22 +119,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate?: (route: 'home'|'pro
             </TouchableOpacity>
           </View>
 
-          {/* API Key Actions */}
+          {/* Architecture Summary */}
           <View className={`p-4 border rounded-xl ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <Text className={`text-lg font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>API</Text>
-            <View className="flex-row items-center justify-between">
-              <Text className={isDark ? 'text-gray-300' : 'text-gray-700'}>{apiKey ? 'Configured' : 'Not configured'}</Text>
-              <View className="flex-row gap-2">
-                {apiKey ? (
-                  <Pressable onPress={async () => { await Clipboard.setStringAsync(apiKey); Alert.alert('Copied', 'API key copied to clipboard') }} className="p-2 rounded">
-                    <Ionicons name="copy-outline" size={18} color={isDark ? '#9ca3af' : '#374151'} />
-                  </Pressable>
-                ) : null}
-                <Pressable onPress={async () => { await clearApiKey?.(); Alert.alert('Cleared', 'API key removed') }} className="p-2 rounded">
-                  <Ionicons name="trash-outline" size={18} color="#ef4444" />
-                </Pressable>
-              </View>
-            </View>
+            <Text className={`text-lg font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Voice Runtime</Text>
+            <Text className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+              Voice requests are processed by the backend. This app no longer expects provider API keys in the client UI.
+            </Text>
           </View>
 
           {/* Actions */}

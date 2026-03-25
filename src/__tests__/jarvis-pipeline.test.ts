@@ -3,12 +3,14 @@ import apiClient from '../services/apiClient';
 import { v4 as uuidv4 } from 'uuid';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8000';
+const RUN_BACKEND_E2E = process.env.RUN_BACKEND_E2E === '1';
+const describeBackendE2E = RUN_BACKEND_E2E ? describe : describe.skip;
 
 function logStep(type: string, ...args: any[]) {
   console.log(`[JARVIS][${type}]`, ...args);
 }
 
-describe('Jarvis Backend Pipeline E2E', () => {
+describeBackendE2E('Jarvis Backend Pipeline E2E', () => {
   let userId: string;
   let conversationId: string;
 

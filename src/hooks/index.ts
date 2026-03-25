@@ -4,7 +4,6 @@
  */
 
 // App state
-export { useApiKey } from './useApiKey';
 export { useChatHistory } from './useChatHistory';
 export { useOnboarding } from './useOnboarding';
 export { useTheme } from './useTheme';
@@ -13,16 +12,12 @@ export { useTheme } from './useTheme';
 // `useHealthKit` removed during pivot; keep storage-backed health logs
 export { useHealthLogs } from './useHealthLogs';
 
-// Voice & Speech
-export { useSpeechRecognition } from './useSpeechRecognition';
+// Voice
 export {
   useVoiceAssistant,
   type UseVoiceAssistantResult,
   type UseVoiceAssistantOptions,
 } from './useVoiceAssistant';
-
-// Voice streaming
-export { default as useVoiceStream } from './useVoiceStream';
 
 // State Machine
 // state machine hook removed in pivot
