@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -58,6 +58,24 @@ class Settings(BaseSettings):
     test_mode: bool = False  # When true, use local stubs for external services
     allow_insecure_dev_auth: bool = False
     dev_auth_secret: Optional[str] = None
+
+    # Context builder per-layer timeouts (seconds)
+    ctx_timeout_character: float = 1.0
+    ctx_timeout_knowledge: float = 1.0
+    ctx_timeout_conversation: float = 0.8
+    ctx_timeout_working_memory: float = 0.5
+    ctx_timeout_episodic: float = 1.0
+
+    @model_validator(mode="after")
+    def _validate_production_secret(self) -> "Settings":
+        """Prevent starting in production with the default insecure secret key."""
+        _default = "development-secret-key-change-in-production"
+        if self.app_env in {"production", "prod"} and self.secret_key == _default:
+            raise ValueError(
+                "secret_key must be explicitly set to a strong value in production. "
+                "Set the SECRET_KEY environment variable."
+            )
+        return self
 
     @field_validator("debug", mode="before")
     @classmethod

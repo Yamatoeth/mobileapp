@@ -17,12 +17,14 @@ import { OnboardingScreen } from './src/screens/OnboardingScreen'
 import { useOnboarding } from './src/hooks/useOnboarding'
 import { useEffect, useState } from 'react'
 import { addNotificationActionListener, registerForPushNotificationsAsync } from './src/services/notificationService'
+import { useSettingsStore } from './src/store/settingsStore'
 
 const Stack = createNativeStackNavigator()
 
 function AppContent() {
   const { isDark, theme } = useTheme()
   const { hasSeenOnboarding, isLoading, completeOnboarding } = useOnboarding()
+  const userId = useSettingsStore((state) => state.userId)
   
   const navigationTheme = isDark ? {
     ...DarkTheme,
@@ -59,13 +61,12 @@ function AppContent() {
     }
   }, [])
 
-  // Register for push notifications after onboarding (temporary user id)
+  // Register for push notifications after onboarding
   useEffect(() => {
-    if (hasSeenOnboarding) {
-      // TODO: replace with real authenticated user id
-      registerForPushNotificationsAsync(1)
+    if (hasSeenOnboarding && userId) {
+      registerForPushNotificationsAsync(userId)
     }
-  }, [hasSeenOnboarding])
+  }, [hasSeenOnboarding, userId])
 
   if (isLoading) {
     return null

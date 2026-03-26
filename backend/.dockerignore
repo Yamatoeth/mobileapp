@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tox/
+.venv/
+venv/
+ENV/
+
+# Test & Dev files
+tests/
+scripts/
+*.md
+.git/
+.github/
+.vscode/
+*.log
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Database
+*.db
+*.sqlite3
+
+# Large binary files (use Git LFS instead)
+*.mp3
+*.wav
+*.onnx
+*.bin
+models/
+
+# Node/Expo
+node_modules/
+.expo/
+web-build/
+*.tsbuildinfo
+ios/
+android/

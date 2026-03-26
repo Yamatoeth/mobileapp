@@ -13,15 +13,17 @@ Notes:
    deployments should add authentication, rate limits, backpressure, and
    binary streaming support.
 """
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Any, Optional
 import base64
 import asyncio
 import logging
+import json
 import httpx
 
+from app.auth import decode_token
 from app.core.config import get_settings
 from app.core.context_builder import build_context
 from app.core.prompt_engine import build_messages
@@ -75,6 +77,20 @@ def _looks_like_pcm_wav(metadata: AudioPayloadMetadata) -> bool:
         or file_name.endswith(".wav")
         or file_name.endswith(".caf")
     )
+
+
+def _parse_speed(value: Any, fallback: float | None) -> float | None:
+    """Coerce arbitrary payload speed into a float, keeping previous value on invalid input."""
+    if value is None:
+        return fallback
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return fallback
+    return fallback
 
 
 async def transcribe_audio_deepgram(
@@ -408,8 +424,35 @@ async def process_text_query(payload: TextQueryRequest):
     }
 
 
+def _extract_and_validate_token(token: Optional[str], expected_user_id: str) -> bool:
+    """Validate JWT token and ensure it matches the user_id path param."""
+    if not token:
+        return False
+    try:
+        payload = decode_token(token)
+        token_user_id = payload.get("sub")
+        return token_user_id == expected_user_id
+    except Exception:
+        return False
+
+
 @router.websocket("/ws/voice/{user_id}")
-async def websocket_voice(user_id: str, websocket: WebSocket):
+async def websocket_voice(
+    user_id: str,
+    websocket: WebSocket,
+    token: Optional[str] = Query(None),
+):
+    """WebSocket voice endpoint with optional JWT authentication.
+
+    Query parameters:
+    - token: JWT token for authentication (required in production).
+             In development/test mode, token is optional.
+    """
+    # Validate token unless in test_mode or development with test_mode disabled
+    if not settings.test_mode and not _extract_and_validate_token(token, user_id):
+        await websocket.close(code=4003, reason="Unauthorized")
+        return
+
     await websocket.accept()
     audio_buffer = bytearray()
     audio_metadata = AudioPayloadMetadata()
@@ -446,11 +489,7 @@ async def websocket_voice(user_id: str, websocket: WebSocket):
 
             if "text" in msg and msg["text"]:
                 try:
-                    if hasattr(websocket, "json_decoder"):
-                        payload = websocket.json_decoder(msg["text"])
-                    else:
-                        import json as _json
-                        payload = _json.loads(msg["text"]) if msg.get("text") else None
+                    payload = json.loads(msg["text"]) if msg.get("text") else None
                 except Exception:
                     # Best-effort fallback: if the text contains a simple control like 'final',
                     # accept it as a final marker. This helps clients that send plain strings.
@@ -478,7 +517,7 @@ async def websocket_voice(user_id: str, websocket: WebSocket):
                                 file_name=payload.get("file_name") or audio_metadata.file_name,
                                 mime_type=payload.get("mime_type") or audio_metadata.mime_type,
                                 voice=payload.get("voice") or audio_metadata.voice,
-                                speed=payload.get("speed") if payload.get("speed") is not None else audio_metadata.speed,
+                                speed=_parse_speed(payload.get("speed"), audio_metadata.speed),
                                 lang=payload.get("lang") or audio_metadata.lang,
                             )
                         if data_b64:
@@ -498,7 +537,7 @@ async def websocket_voice(user_id: str, websocket: WebSocket):
                                 file_name=payload.get("file_name") or audio_metadata.file_name,
                                 mime_type=payload.get("mime_type") or audio_metadata.mime_type,
                                 voice=payload.get("voice") or audio_metadata.voice,
-                                speed=payload.get("speed") if payload.get("speed") is not None else audio_metadata.speed,
+                                speed=_parse_speed(payload.get("speed"), audio_metadata.speed),
                                 lang=payload.get("lang") or audio_metadata.lang,
                             )
 

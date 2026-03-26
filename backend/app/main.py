@@ -1,17 +1,19 @@
 """
 J.A.R.V.I.S. Backend - FastAPI Application
 """
+import logging
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 import sentry_sdk
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sentry_sdk.integrations.logging import LoggingIntegration
 
 from app.core.config import get_settings
+from app.db.pinecone_client import pinecone_client
 from app.db.redis_client import redis_client
-from fastapi import APIRouter
-
 from app.api.conversations import router as conversations_router
 from app.api.voice import router as voice_router
 from app.api.knowledge import router as knowledge_router
@@ -25,10 +27,31 @@ from app.api.messages import router as messages_router
 
 settings = get_settings()
 
-# Initialize Sentry as early as possible so any import-time errors are captured.
+# ---------------------------------------------------------------------------
+# Structured JSON logging
+# ---------------------------------------------------------------------------
+try:
+    from pythonjsonlogger import jsonlogger  # type: ignore
+
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(
+        jsonlogger.JsonFormatter(
+            fmt="%(asctime)s %(name)s %(levelname)s %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S",
+        )
+    )
+    logging.root.handlers = [_handler]
+except ImportError:
+    logging.basicConfig(level=logging.INFO)
+
+logging.root.setLevel(logging.DEBUG if settings.debug else logging.INFO)
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Sentry
+# ---------------------------------------------------------------------------
 try:
     if settings.sentry_dsn:
-        # Capture Python logging breadcrumbs and errors
         sentry_logging = LoggingIntegration(level=None, event_level=None)
         sentry_sdk.init(
             dsn=settings.sentry_dsn,
@@ -40,8 +63,22 @@ try:
             profile_lifecycle="trace",
         )
 except Exception:
-    # Fail open: do not prevent app from starting if Sentry setup fails
     pass
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting (slowapi)
+# ---------------------------------------------------------------------------
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler  # type: ignore
+    from slowapi.errors import RateLimitExceeded  # type: ignore
+    from slowapi.util import get_remote_address  # type: ignore
+
+    limiter = Limiter(key_func=get_remote_address, default_limits=["120/minute"])
+    _SLOWAPI_AVAILABLE = True
+except ImportError:
+    limiter = None  # type: ignore
+    _SLOWAPI_AVAILABLE = False
 
 
 @asynccontextmanager
@@ -54,14 +91,17 @@ async def lifespan(app: FastAPI):
         pass
 
 
-
-
 app = FastAPI(
     title="J.A.R.V.I.S. API",
     description="Proactive AI Executive Assistant Backend",
     version=settings.app_version,
     lifespan=lifespan,
 )
+
+# Rate limiter state
+if _SLOWAPI_AVAILABLE and limiter is not None:
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore
 
 # Register API routers
 app.include_router(conversations_router, prefix="/api/v1", tags=["conversations"])
@@ -84,16 +124,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Route definitions remain unchanged ---
 
-# Optionally attach ASGI middleware for Sentry if available in the runtime.
+# ---------------------------------------------------------------------------
+# Request ID middleware
+# ---------------------------------------------------------------------------
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
+
+# Optionally attach ASGI middleware for Sentry
 try:
     from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
     asgi_app = SentryAsgiMiddleware(app)
 except Exception:
     asgi_app = app
-    # integration not available or failed — ignore
-    pass
 
 
 @app.get("/health")
@@ -116,22 +164,20 @@ async def root():
 async def api_status():
     """API status with service health checks."""
     redis_healthy = False
-    pinecone_healthy = False
-    
     try:
         await redis_client.client.ping()
         redis_healthy = True
     except Exception:
         pass
-    
+
     pinecone_healthy = pinecone_client.is_configured
-    
+
     return {
         "api": "healthy",
         "version": settings.app_version,
         "services": {
             "redis": "connected" if redis_healthy else "disconnected",
             "pinecone": "configured" if pinecone_healthy else "not_configured",
-            "database": "configured",  # Will check on actual connection
-        }
+            "database": "configured",
+        },
     }

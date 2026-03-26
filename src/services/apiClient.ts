@@ -1,21 +1,7 @@
-// ============================================
-// Trigger Logging
-// ============================================
-
-/**
- * Log trigger event to backend
- */
-export async function logTrigger(payload: Record<string, unknown>): Promise<void> {
-  return request<void>('/trigger', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
 /**
  * J.A.R.V.I.S. API Client
  * Handles communication with the FastAPI backend
  */
-
 import type { User, Conversation, Message } from '../../shared/types'
 
 // Default to localhost for development
@@ -36,6 +22,20 @@ export class ApiError extends Error {
     super(message)
     this.name = 'ApiError'
   }
+}
+
+// ============================================
+// Trigger Logging
+// ============================================
+
+/**
+ * Log trigger event to backend
+ */
+export async function logTrigger(payload: Record<string, unknown>): Promise<void> {
+  return request<void>('/trigger', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 /**

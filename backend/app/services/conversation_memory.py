@@ -4,7 +4,7 @@ Durable recent-conversation memory with graceful fallbacks.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 import asyncio
@@ -158,7 +158,7 @@ async def append_turn(
     turn = PersistedTurn(
         role=role,
         content=normalized,
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         conversation_id=conversation_id,
     )
 
