@@ -84,6 +84,10 @@ except ImportError:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
+    try:
+        await redis_client.connect()
+    except Exception:
+        logger.warning("Redis connection unavailable during startup", exc_info=True)
     yield
     try:
         await redis_client.close()

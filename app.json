@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Medicus",
-    "slug": "medicus",
+    "name": "JARVIS",
+    "slug": "jarvis",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,9 +14,9 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.medicus",
+      "bundleIdentifier": "com.jarvis.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Allow Medicus to access your microphone for voice interactions",
+        "NSMicrophoneUsageDescription": "Allow JARVIS to access your microphone for voice interactions",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -33,7 +33,7 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
       ],
-      "package": "com.anonymous.medicus",
+      "package": "com.jarvis.app",
       "googleServicesFile": "./google-services.json"
     },
     "web": {

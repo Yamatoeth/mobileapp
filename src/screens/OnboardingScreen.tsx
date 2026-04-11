@@ -16,14 +16,14 @@ type OnboardingSlide = {
 const slides: OnboardingSlide[] = [
   {
     icon: 'chatbubbles',
-    title: 'AI Health Assistant',
-    description: 'Chat with Medicus, your personal AI health companion. Get answers to health questions and personalized wellness advice.',
+    title: 'AI Personal Assistant',
+    description: 'Chat with JARVIS, your personal AI companion. Get answers to questions and personalized advice.',
     color: '#0066ff',
   },
   {
     icon: 'fitness',
-    title: 'Track Your Health',
-    description: 'Log symptoms, vitals, sleep, nutrition, exercise, and mood. Build a complete picture of your health over time.',
+    title: 'Track Your Data',
+    description: 'Log symptoms, vitals, sleep, nutrition, exercise, and mood. Build a complete picture of your life over time.',
     color: '#10b981',
   },
   {

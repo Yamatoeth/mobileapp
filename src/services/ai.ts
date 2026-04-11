@@ -27,7 +27,7 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
 // Health assistant system prompt
 function buildSystemPrompt(healthContext?: HealthContext): string {
-  let basePrompt = `You are Medicus, a friendly and knowledgeable health assistant. Your role is to:
+  let basePrompt = `You are JARVIS, a friendly and knowledgeable personal assistant. Your role is to:
 
 1. Answer health-related questions in a clear, helpful manner
 2. Provide general wellness advice and health information
