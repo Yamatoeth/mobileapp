@@ -33,8 +33,6 @@ async def add_conversation_turn(payload: ConversationTurn, db: AsyncSession = De
         conversation_id=conv.id,
         role=payload.message.role,
         content=payload.message.content,
-        hrv_snapshot=payload.message.hrv_snapshot,
-        bpm_snapshot=payload.message.bpm_snapshot,
         timestamp=datetime.utcnow(),
     )
     db.add(msg)
@@ -47,7 +45,5 @@ async def add_conversation_turn(payload: ConversationTurn, db: AsyncSession = De
         conversation_id=msg.conversation_id,
         role=msg.role,
         content=msg.content,
-        hrv_snapshot=msg.hrv_snapshot,
-        bpm_snapshot=msg.bpm_snapshot,
         timestamp=msg.timestamp.isoformat(),
     )

@@ -37,6 +37,17 @@ class Settings(BaseSettings):
     kokoro_default_language: str = "en-us"
     kokoro_default_speed: float = 1.0
     local_memory_path: str = str(Path(__file__).resolve().parents[2] / "data" / "conversation_memory")
+
+    # Provider selection
+    stt_provider: str = "deepgram"
+    llm_provider: str = "groq"
+    tts_provider: str = "deepgram"
+    embedding_provider: str = "openai"
+    groq_chat_model: str = "openai/gpt-oss-120b"
+    groq_fallback_model: str = "llama-3.1-8b-instant"
+    groq_stt_model: str = "whisper-large-v3-turbo"
+    deepgram_stt_model: str = "nova-3"
+    deepgram_tts_model: str = "aura-2-thalia-en"
     
     # Security
     secret_key: str = "development-secret-key-change-in-production"

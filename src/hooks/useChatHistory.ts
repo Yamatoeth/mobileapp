@@ -15,7 +15,7 @@ type Message = {
 const DEFAULT_MESSAGE: Message = {
   id: '1',
   role: 'assistant',
-  content: "Hi! I'm Medicus, your health assistant. How can I help you today?",
+  content: "Hi. I'm JARVIS, your personal thinking partner. What should we work on?",
   timestamp: Date.now(),
 }
 

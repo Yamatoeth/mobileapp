@@ -80,7 +80,9 @@ Every LLM call assembles context from all three tiers simultaneously via `asynci
 
 ### Pillar 3: The Intelligence Engine
 
-GPT-4o configured with a strict four-layer prompt:
+Phase 1 uses Groq-hosted LLM inference behind a provider boundary. The default hot-path model is `openai/gpt-oss-120b`; cheaper/smaller Groq models may be used only as explicit fallbacks for simple commands. GPT-4o is no longer the Phase 1 default.
+
+The assistant is configured with a strict four-layer prompt:
 
 1. **Character definition** — who JARVIS is, how it speaks
 2. **User identity** — full Knowledge Base summary injected
@@ -125,11 +127,11 @@ At the end, JARVIS presents a structured summary of everything it has learned. Y
 
 ## 5. Continuous Learning
 
-After every conversation, a background Celery job runs fact extraction:
+After every completed conversation, a background Celery job runs fact extraction:
 
-1. Sends full conversation transcript to GPT-4o with a structured extraction prompt
+1. Sends the full conversation transcript to the configured fact-extraction provider with a structured extraction prompt
 2. Model returns JSON list of knowledge updates — each with domain, field, new value, and confidence
-3. Updates merged into Knowledge Base with conflict resolution (higher confidence and more recent wins)
+3. Updates are merged into the PostgreSQL Knowledge Base with conflict resolution (higher confidence and more recent wins)
 4. All changes logged in `knowledge_updates` table with source conversation reference
 
 The user never manually updates their profile. JARVIS learns by paying attention.
@@ -142,15 +144,15 @@ The user never manually updates their profile. JARVIS learns by paying attention
 
 **Pipeline:**
 ```
-User speaks → expo-av captures audio → WebSocket streams to backend
-→ Deepgram STT (streaming, <300ms) → Context Builder assembles 4-layer prompt
-→ GPT-4o generates response (streaming) → ElevenLabs TTS (streaming)
+User speaks → expo-audio captures audio → WebSocket sends audio to backend
+→ Deepgram Flux/Nova-3 STT → Context Builder assembles 4-layer prompt
+→ Groq LLM generates response (streaming) → Deepgram Aura TTS
 → Audio streamed back to iPhone → Played immediately
 ```
 
 **Target latency:** Under 2 seconds end-to-end (speech end to audio start).
 
-The voice pipeline is non-negotiable. If latency exceeds 2 seconds consistently, users stop using it. Stream everything — audio in, LLM out, audio out. Never wait for a complete response before starting the next stage.
+The voice pipeline is non-negotiable. If latency exceeds 2 seconds consistently, users stop using it. Stream the stages as far as each provider supports. Local Kokoro TTS remains a development fallback only, not the production default.
 
 ---
 
@@ -182,7 +184,7 @@ The voice pipeline is non-negotiable. If latency exceeds 2 seconds consistently,
 **Audio:** Deleted immediately after transcription. Never stored.
 **Conversations:** Stored as text summaries, not recordings. Encrypted at rest (AES-256).
 **Knowledge Base:** Stored encrypted in PostgreSQL. Never sent to third parties beyond the LLM call.
-**LLM calls:** Use OpenAI API with no training data opt-out enabled.
+**LLM calls:** Use Groq in the Phase 1 hot path. OpenAI is used only for embeddings unless a later decision explicitly changes the default LLM provider.
 
 **User controls:**
 - One-click data export (full Knowledge Base + conversation history as JSON)
@@ -210,7 +212,8 @@ jarvis/
 │   │   ├── api/                # REST + WebSocket endpoints
 │   │   ├── core/               # Context builder, fact extractor, prompt engine
 │   │   ├── db/                 # SQLAlchemy models, Redis client, Pinecone client
-│   │   ├── services/           # OpenAI, ElevenLabs, Deepgram integrations
+│   │   ├── providers.py        # STTProvider, LLMProvider, TTSProvider, EmbeddingProvider
+│   │   ├── services/           # persistence and non-provider app services
 │   │   ├── tasks/              # Celery background jobs (fact extraction, summaries)
 │   │   └── schemas/            # Pydantic models
 │   ├── tests/
@@ -246,8 +249,8 @@ To stay focused, be explicit about what JARVIS does not do in v1:
 
 - ❌ Biometric monitoring (future Phase 4+)
 - ❌ Proactive interruptions (future Phase 2)
-✅ Système de rappels interne — universel, indépendant de tout calendrier externe
-✅ Intégration calendrier externe — opt-in, lecture seule par défaut
+- ❌ Location tracking in Phase 1
+- ❌ Calendar integration in Phase 1
 - ❌ Sending messages or emails autonomously (future Phase 3)
 - ❌ Financial account connections (future Phase 3)
 - ❌ Android support (future after iOS is stable)

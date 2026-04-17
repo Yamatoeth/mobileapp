@@ -10,12 +10,6 @@ export interface Message {
   role: MessageRole;
   content: string;
   timestamp: Date;
-  // Biometric snapshot at time of message
-  biometricSnapshot?: {
-    hrvMs: number;
-    bpm: number;
-    stressScore: number;
-  };
   // Audio data (for voice playback)
   audioUrl?: string;
 }

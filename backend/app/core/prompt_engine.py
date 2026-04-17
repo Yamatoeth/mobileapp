@@ -42,12 +42,9 @@ def _format_context_sections(context: Optional[Dict[str, Any]]) -> str:
     character = context.get("character") or {}
     if character:
         name = character.get("full_name")
-        trust_level = character.get("trust_level")
         char_parts = []
         if name:
             char_parts.append(f"name={name}")
-        if trust_level:
-            char_parts.append(f"trust_level={trust_level}")
         if char_parts:
             lines.append("Character: " + ", ".join(char_parts))
 
@@ -105,7 +102,7 @@ def build_system_prompt(context: Optional[Dict[str, Any]] = None) -> str:
 
 
 def build_messages(user_input: str, context: Optional[Dict[str, Any]] = None, extra_instructions: Optional[str] = None) -> List[Dict[str, str]]:
-    """Return a messages array ready for OpenAI-style chat completions.
+    """Return a messages array ready for OpenAI-compatible chat completions.
 
     Args:
       user_input: the user's utterance or transcript

@@ -1,130 +1,61 @@
 /**
- * J.A.R.V.I.S. Shared Type Definitions
- * These types are shared between frontend (React Native) and backend (FastAPI)
+ * J.A.R.V.I.S. shared type definitions used by the mobile app and API client.
+ * Phase 1 keeps the client thin: voice, conversations, and Knowledge Base facts.
  */
-
-// ============================================
-// User & Authentication
-// ============================================
 
 export interface User {
   id: string;
   email: string;
   fullName: string;
-  trustLevel: TrustLevel;
-  trustScore: number;
   createdAt: string;
 }
-
-export type TrustLevel = 'consultant' | 'advisor' | 'manager' | 'executive';
-
-// ============================================
-// Biometric Data
-// ============================================
-
-export interface BiometricData {
-  hrvMs: number;
-  bpm: number;
-  timestamp: string;
-  source: 'apple_watch' | 'manual';
-}
-
-export interface BiometricReading extends BiometricData {
-  id: string;
-  stressScore: number;
-  state: LifeState;
-  interventionNeeded: boolean;
-  createdAt: string;
-}
-
-// ============================================
-// Life States
-// ============================================
-
-export type LifeState =
-  | 'sleeping'
-  | 'exercising'
-  | 'working'
-  | 'meeting'
-  | 'leisure'
-  | 'stressed';
-
-export interface CurrentState {
-  state: LifeState;
-  hrvMs: number;
-  bpm: number;
-  stressScore: number;
-  lastUpdated: string;
-  context: ContextPayload;
-}
-
-// ============================================
-// Context
-// ============================================
-
-export interface ContextPayload {
-  location?: string;
-  nextEvent?: string;
-  nextEventTime?: string;
-  calendarEvents?: CalendarEvent[];
-}
-
-export interface CalendarEvent {
-  id: string;
-  title: string;
-  startTime: string;
-  endTime: string;
-  attendees: number;
-  isFocusTime: boolean;
-}
-
-// ============================================
-// Conversations & Memory
-// ============================================
 
 export interface Message {
   id: string;
   conversation_id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
-  biometricSnapshot?: BiometricData;
+  audioUrl?: string;
 }
 
 export interface Conversation {
   id: string;
   user_id: string;
   created_at: string;
-  // Add other fields as backend returns
+  updated_at?: string;
 }
 
-// ============================================
-// Interventions
-// ============================================
+export type KnowledgeDomain =
+  | 'identity'
+  | 'goals'
+  | 'projects'
+  | 'finances'
+  | 'relationships'
+  | 'patterns';
 
-export type InterventionType =
-  | 'breathing_exercise'
-  | 'movement_break'
-  | 'hydration_reminder'
-  | 'energy_management';
-
-export type InterventionPriority = 'critical' | 'important' | 'nice_to_have';
-
-export interface Intervention {
+export interface KnowledgeFact {
   id: string;
-  type: InterventionType;
-  priority: InterventionPriority;
-  message: string;
+  domain: KnowledgeDomain;
+  field_name: string;
+  field_value: string;
   confidence: number;
-  triggerReason: string;
-  biometricValues: BiometricData;
-  createdAt: string;
-  userResponse?: 'accepted' | 'dismissed' | 'snoozed';
+  source: 'onboarding' | 'conversation' | 'manual' | 'system' | string;
+  last_updated: string;
 }
 
-// ============================================
-// API Responses
-// ============================================
+export interface KnowledgeUpdate {
+  id: string;
+  user_id: string;
+  conversation_id?: string | null;
+  table_name: string;
+  field_name: string;
+  old_value?: string | null;
+  new_value?: string | null;
+  confidence: number;
+  source: string;
+  created_at: string;
+}
 
 export interface ApiResponse<T> {
   data: T;
@@ -139,18 +70,14 @@ export interface PaginatedResponse<T> {
   pageSize: number;
 }
 
-// ============================================
-// Voice Pipeline
-// ============================================
-
 export interface TranscriptionResult {
   text: string;
-  confidence: number;
-  durationMs: number;
+  confidence?: number;
+  durationMs?: number;
 }
 
 export interface VoiceResponse {
   text: string;
   audioUrl?: string;
-  biometricContext?: BiometricData;
+  memoryUpdated?: boolean;
 }

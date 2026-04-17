@@ -9,16 +9,7 @@ interface UserSettings {
   // Notification preferences
   notificationsEnabled: boolean;
   voiceInterruptionsEnabled: boolean;
-  
-  // Intervention preferences
-  breathingRemindersEnabled: boolean;
-  movementRemindersEnabled: boolean;
-  hydrationRemindersEnabled: boolean;
-  
-  // Privacy settings
-  locationTrackingEnabled: boolean;
-  calendarAccessEnabled: boolean;
-  
+
   // Display preferences
   darkModeEnabled: boolean;
   hapticFeedbackEnabled: boolean;
@@ -34,20 +25,13 @@ interface SettingsState {
   
   // Settings
   settings: UserSettings;
-  
-  // API keys (stored securely)
-  openAiApiKey: string | null;
-  groqApiKey: string | null;
-  
   // Onboarding
   hasCompletedOnboarding: boolean;
   hasGrantedMicrophonePermissions: boolean;
   
   // Actions
   setUser: (userId: string, email: string, fullName: string) => void;
-  // Trust system removed — no-op placeholders may be added server-side
   updateSettings: (settings: Partial<UserSettings>) => void;
-  setApiKey: (key: 'openai' | 'groq', value: string) => void;
   completeOnboarding: () => void;
   setMicrophonePermissions: (granted: boolean) => void;
   logout: () => void;
@@ -56,14 +40,9 @@ interface SettingsState {
 const defaultSettings: UserSettings = {
   notificationsEnabled: true,
   voiceInterruptionsEnabled: false,
-  breathingRemindersEnabled: true,
-  movementRemindersEnabled: true,
-  hydrationRemindersEnabled: true,
-  locationTrackingEnabled: false,
-  calendarAccessEnabled: false,
   darkModeEnabled: false,
   hapticFeedbackEnabled: true,
-  preferredTtsVoice: 'af_sarah',
+  preferredTtsVoice: '',
 };
 
 const initialState = {
@@ -71,8 +50,6 @@ const initialState = {
   email: null,
   fullName: null,
   settings: defaultSettings,
-  openAiApiKey: null,
-  groqApiKey: null,
   hasCompletedOnboarding: false,
   hasGrantedMicrophonePermissions: false,
 };
@@ -86,27 +63,15 @@ export const useSettingsStore = create<SettingsState>()(
         set({ userId, email, fullName });
       },
 
-      // Trust system removed — no local trust scoring or auto-upgrades
-
       updateSettings: (updates) => {
         set((state) => ({
           settings: { ...state.settings, ...updates },
         }));
       },
 
-      setApiKey: (key, value) => {
-        if (key === 'openai') {
-          set({ openAiApiKey: value });
-        } else {
-          set({ groqApiKey: value });
-        }
-      },
-
       completeOnboarding: () => {
         set({ hasCompletedOnboarding: true });
       },
-
-      // HealthKit permissions removed from front-end settings
 
       setMicrophonePermissions: (granted) => {
         set({ hasGrantedMicrophonePermissions: granted });
@@ -127,7 +92,6 @@ export const useSettingsStore = create<SettingsState>()(
         settings: state.settings,
         hasCompletedOnboarding: state.hasCompletedOnboarding,
         hasGrantedMicrophonePermissions: state.hasGrantedMicrophonePermissions,
-        // Note: API keys should be stored in SecureStore, not AsyncStorage
       }),
     }
   )

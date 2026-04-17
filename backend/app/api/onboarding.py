@@ -17,7 +17,7 @@ from uuid import uuid4
 import logging
 
 from app.db.redis_client import redis_client
-from app.core.fact_extractor import extract_facts, facts_to_kb_updates
+from app.tasks.fact_extraction import run_extract_facts
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -92,30 +92,16 @@ async def continue_onboarding(session_id: str, payload: Dict[str, Any]):
             session["completed"] = True
             await redis_client.set_working_memory(user_id, f"onboarding:{session_id}", session)
 
-            # Aggregate answers into a transcript and extract facts
+            # Aggregate answers into a transcript and extract durable KB facts.
             transcript = " \n".join(session.get("answers", []))
-            facts = await extract_facts(transcript)
+            extraction = await run_extract_facts(transcript, user_id)
+            summary = await redis_client.get_working_memory(user_id, "kb_summary")
 
-            # Persist facts into kb_entries (prepend)
-            existing = await redis_client.get_working_memory(user_id, "kb_entries") or []
-            kb_updates = facts_to_kb_updates(facts)
-            # Convert each fact to a KB entry
-            new_entries = []
-            for f in kb_updates:
-                entry = {"id": str(uuid4()), "title": f.get("predicate"), "content": f.get("object"), "metadata": {"confidence": f.get("confidence", 0.5), "source": f.get("source")}}
-                new_entries.append(entry)
-
-            # Prepend and save
-            combined = new_entries + existing
-            await redis_client.set_working_memory(user_id, "kb_entries", combined)
-
-            # Cache a short summary
-            summary_lines = [f"{e['title']}: {e['content'][:120]}" for e in new_entries[:5]]
-            summary = " \n".join(summary_lines)
-            if summary:
-                await redis_client.set_working_memory(user_id, "kb_summary", summary)
-
-            return {"status": "completed", "facts_added": len(new_entries), "summary": summary}
+            return {
+                "status": "completed",
+                "facts_added": extraction.get("updates_applied", 0),
+                "summary": summary or "",
+            }
 
         # Not yet complete: save session and return next question
         await redis_client.set_working_memory(user_id, f"onboarding:{session_id}", session)

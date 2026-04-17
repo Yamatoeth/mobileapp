@@ -26,28 +26,12 @@ def upgrade() -> None:
     sa.Column('email', sa.String(length=255), nullable=False),
     sa.Column('hashed_password', sa.String(length=255), nullable=False),
     sa.Column('full_name', sa.String(length=255), nullable=False),
-    sa.Column('trust_level', sa.Enum('CONSULTANT', 'ADVISOR', 'MANAGER', 'EXECUTIVE', name='trustlevel'), nullable=False),
-    sa.Column('trust_score', sa.Integer(), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
-    op.create_table('biometric_readings',
-    sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('user_id', sa.String(length=36), nullable=False),
-    sa.Column('hrv_ms', sa.Float(), nullable=False),
-    sa.Column('bpm', sa.Integer(), nullable=False),
-    sa.Column('stress_score', sa.Float(), nullable=False),
-    sa.Column('state', sa.Enum('SLEEPING', 'EXERCISING', 'WORKING', 'MEETING', 'LEISURE', 'STRESSED', name='lifestate'), nullable=False),
-    sa.Column('source', sa.String(length=50), nullable=False),
-    sa.Column('timestamp', sa.DateTime(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_biometric_readings_user_id'), 'biometric_readings', ['user_id'], unique=False)
     op.create_table('conversations',
     sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('user_id', sa.String(length=36), nullable=False),
@@ -57,30 +41,11 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_conversations_user_id'), 'conversations', ['user_id'], unique=False)
-    op.create_table('interventions',
-    sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('user_id', sa.String(length=36), nullable=False),
-    sa.Column('intervention_type', sa.String(length=50), nullable=False),
-    sa.Column('priority', sa.String(length=20), nullable=False),
-    sa.Column('message', sa.Text(), nullable=False),
-    sa.Column('confidence', sa.Float(), nullable=False),
-    sa.Column('trigger_reason', sa.Text(), nullable=False),
-    sa.Column('hrv_at_trigger', sa.Float(), nullable=False),
-    sa.Column('bpm_at_trigger', sa.Integer(), nullable=False),
-    sa.Column('user_response', sa.String(length=20), nullable=True),
-    sa.Column('responded_at', sa.DateTime(), nullable=True),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_interventions_user_id'), 'interventions', ['user_id'], unique=False)
     op.create_table('messages',
     sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('conversation_id', sa.String(length=36), nullable=False),
     sa.Column('role', sa.String(length=20), nullable=False),
     sa.Column('content', sa.Text(), nullable=False),
-    sa.Column('hrv_snapshot', sa.Float(), nullable=True),
-    sa.Column('bpm_snapshot', sa.Integer(), nullable=True),
     sa.Column('timestamp', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['conversation_id'], ['conversations.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -110,12 +75,8 @@ def downgrade() -> None:
     op.drop_constraint(None, 'knowledge_finances', type_='foreignkey')
     op.drop_index(op.f('ix_messages_conversation_id'), table_name='messages')
     op.drop_table('messages')
-    op.drop_index(op.f('ix_interventions_user_id'), table_name='interventions')
-    op.drop_table('interventions')
     op.drop_index(op.f('ix_conversations_user_id'), table_name='conversations')
     op.drop_table('conversations')
-    op.drop_index(op.f('ix_biometric_readings_user_id'), table_name='biometric_readings')
-    op.drop_table('biometric_readings')
     op.drop_index(op.f('ix_users_email'), table_name='users')
     op.drop_table('users')
     # ### end Alembic commands ###

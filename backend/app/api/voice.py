@@ -3,10 +3,10 @@ WebSocket voice hot-path
 
 Endpoint flow (hot path):
  1. Receive audio chunks over WebSocket (base64 JSON or binary frames)
- 2. Assemble audio and run STT (Deepgram preferred, fallback to OpenAI Whisper)
+ 2. Assemble audio and run STT through the configured STT provider
  3. Build server-side context via `build_context`
- 4. Stream LLM response back over the WebSocket (SSE-style from OpenAI)
- 5. Synthesize TTS audio with local Kokoro and stream/send audio back
+ 4. Stream LLM response back over the WebSocket
+ 5. Synthesize TTS audio through the configured TTS provider
 
 Notes:
  - This implementation focuses on clarity and safe fallbacks. Production
@@ -21,7 +21,6 @@ import base64
 import asyncio
 import logging
 import json
-import httpx
 
 from app.auth import decode_token
 from app.core.config import get_settings
@@ -29,6 +28,8 @@ from app.core.context_builder import build_context
 from app.core.prompt_engine import build_messages
 from app.services.kokoro_service import kokoro_tts_service
 from app.services.conversation_memory import append_turn
+from app.providers import AudioMetadata, llm_provider, stt_provider, tts_provider
+from app.tasks.fact_extraction import schedule_extract_facts
 
 settings = get_settings()
 router = APIRouter()
@@ -69,16 +70,6 @@ async def _safe_send_json(ws: WebSocket, payload: dict) -> bool:
         return False
 
 
-def _looks_like_pcm_wav(metadata: AudioPayloadMetadata) -> bool:
-    mime = (metadata.mime_type or "").lower()
-    file_name = (metadata.file_name or "").lower()
-    return (
-        mime in {"audio/wav", "audio/x-wav", "audio/wave", "audio/x-caf"}
-        or file_name.endswith(".wav")
-        or file_name.endswith(".caf")
-    )
-
-
 def _parse_speed(value: Any, fallback: float | None) -> float | None:
     """Coerce arbitrary payload speed into a float, keeping previous value on invalid input."""
     if value is None:
@@ -93,137 +84,16 @@ def _parse_speed(value: Any, fallback: float | None) -> float | None:
     return fallback
 
 
-async def transcribe_audio_deepgram(
-    audio_bytes: bytes,
-    metadata: AudioPayloadMetadata,
-) -> Optional[str]:
-    """Try Deepgram transcription for linear PCM-style payloads."""
-    # Test-mode stub
-    if settings.test_mode:
-        return "this is a test transcript from deepgram stub"
-
-    if not settings.deepgram_api_key or not _looks_like_pcm_wav(metadata):
-        return None
-
-    url = "https://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1&punctuate=true"
-    headers = {
-        "Authorization": f"Token {settings.deepgram_api_key}",
-        "Content-Type": metadata.mime_type or "audio/wav",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            r = await client.post(url, content=audio_bytes, headers=headers)
-            try:
-                r.raise_for_status()
-            except Exception:
-                logger.error(f"Deepgram error response: {r.text}")
-                raise
-            data = r.json()
-            return data.get("results", {}).get("channels", [])[0].get("alternatives", [])[0].get("transcript")
-    except Exception:
-        logger.exception("Deepgram transcription failed")
-        return None
-
-
-async def transcribe_audio_groq(
-    audio_bytes: bytes,
-    metadata: AudioPayloadMetadata,
-) -> Optional[str]:
-    """Primary STT via Groq Whisper-compatible transcription API."""
-    # Test-mode stub
-    if settings.test_mode:
-        return "this is a test transcript from whisper stub"
-
-    if not settings.groq_api_key:
-        return None
-
-    url = "https://api.groq.com/openai/v1/audio/transcriptions"
-    headers = {"Authorization": f"Bearer {settings.groq_api_key}"}
-
-    file_name = metadata.file_name or "audio.m4a"
-    mime_type = metadata.mime_type or "audio/mp4"
-    files = {"file": (file_name, audio_bytes, mime_type)}
-    data = {"model": "whisper-large-v3-turbo"}
-
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            r = await client.post(url, headers=headers, files=files, data=data)
-            r.raise_for_status()
-            data = r.json()
-            return data.get("text")
-    except Exception:
-        logger.exception("Groq transcription failed")
-        return None
-
-
-async def stream_openai_chat(messages, websocket: WebSocket) -> str:
-    """Stream OpenAI chat completions to the websocket. Returns the full text."""
-    # Test-mode streaming stub
-    if settings.test_mode:
-        full_text = "Hello — this is JARVIS (test mode). I know your goals and will help you."
-        # simulate streaming in chunks
-        for chunk in [full_text[:20], full_text[20:40], full_text[40:]]:
-            await websocket.send_json({"type": "llm_chunk", "data": chunk})
-            await asyncio.sleep(0.02)
-        await websocket.send_json({"type": "llm_done", "content": full_text})
-        return full_text
-
-    if not settings.groq_api_key:
-        await _safe_send_json(websocket, {"type": "error", "message": "Groq API key not configured"})
-        return ""
-
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {settings.groq_api_key}",
-        "Content-Type": "application/json",
-    }
-
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": messages,
-        "temperature": 0.7,
-        "stream": True,
-    }
-
+async def stream_chat_response(messages, websocket: WebSocket) -> str:
+    """Stream chat completions through the configured LLM provider."""
     full_text = ""
-
     try:
-        async with httpx.AsyncClient(timeout=None) as client:
-            async with client.stream("POST", url, json=payload, headers=headers) as r:
-                r.raise_for_status()
-                async for line in r.aiter_lines():
-                    if not line:
-                        continue
-                    # OpenAI SSE streams lines like: "data: {json}\n\n"
-                    if line.startswith("data: "):
-                        data = line[len("data: "):]
-                    else:
-                        data = line
-
-                    if data.strip() == "[DONE]":
-                        break
-                    try:
-                        parsed = httpx.Response(200, content=data.encode()).json()
-                    except Exception:
-                        # If it's not JSON, forward raw chunk
-                        await websocket.send_json({"type": "llm_chunk", "data": data})
-                        full_text += data
-                        continue
-
-                    # Compatibility: parsed may follow OpenAI streaming choice schema
-                    delta = None
-                    try:
-                        delta = parsed.get("choices", [])[0].get("delta", {}).get("content")
-                    except Exception:
-                        pass
-
-                    if delta:
-                        full_text += delta
-                        await _safe_send_json(websocket, {"type": "llm_chunk", "data": delta})
+        async for delta in llm_provider.stream_chat(messages):
+            full_text += delta
+            await _safe_send_json(websocket, {"type": "llm_chunk", "data": delta})
 
     except Exception:
-        logger.exception("OpenAI streaming failed")
+        logger.exception("LLM streaming failed")
         await _safe_send_json(websocket, {"type": "error", "message": "LLM streaming failed"})
     await _safe_send_json(websocket, {"type": "llm_done", "content": full_text})
     return full_text
@@ -259,62 +129,45 @@ def _build_local_response(user_input: str, context: Optional[dict[str, Any]] = N
         response += f"I also have this saved context: {summary}\n\n"
     response += (
         "The app, backend routing, and assistant loop are working. "
-        "If you add Groq/OpenAI and optional voice provider keys, this same flow will use live model responses."
+        "If you add Groq and voice provider keys, this same flow will use live model responses."
     )
     return response
 
 
 async def generate_chat_response(messages, user_input: str, context: Optional[dict[str, Any]] = None) -> str:
-    """Return a single assistant response using Groq when configured, or a local fallback."""
-    if settings.test_mode:
-        return "Hello — this is JARVIS (test mode). I know your goals and will help you."
-
-    if not settings.groq_api_key:
-        return _build_local_response(user_input=user_input, context=context)
-
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {settings.groq_api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": messages,
-        "temperature": 0.7,
-        "stream": False,
-    }
-
+    """Return a single assistant response through the configured LLM provider."""
     try:
-        async with httpx.AsyncClient(timeout=90) as client:
-            response = await client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            return data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        return await llm_provider.complete(messages)
     except Exception:
         logger.exception("Non-stream chat completion failed")
         return _build_local_response(user_input=user_input, context=context)
 
 
-async def synthesize_kokoro_tts(
+def _provider_metadata(metadata: AudioPayloadMetadata) -> AudioMetadata:
+    return AudioMetadata(**metadata.model_dump())
+
+
+async def synthesize_tts(
     text: str,
     *,
     voice: str | None = None,
     speed: float | None = None,
     lang: str | None = None,
 ) -> bytes:
-    return await asyncio.to_thread(
-        kokoro_tts_service.generate_speech,
+    return await tts_provider.synthesize(
         text,
-        voice=voice,
-        speed=speed,
-        lang=lang,
+        AudioMetadata(voice=voice, speed=speed, lang=lang),
     )
 
 
 @router.get("/tts/voices")
 async def list_tts_voices():
-    voices = await asyncio.to_thread(kokoro_tts_service.get_voices)
-    return {"voices": voices, "default": settings.kokoro_default_voice}
+    try:
+        voices = await asyncio.to_thread(kokoro_tts_service.get_voices)
+    except Exception:
+        voices = []
+    deepgram_default = settings.deepgram_tts_model
+    return {"voices": [deepgram_default, *voices], "default": deepgram_default}
 
 
 @router.post("/tts")
@@ -323,7 +176,7 @@ async def generate_tts(payload: TTSRequest):
     if not text:
         return JSONResponse(status_code=400, content={"detail": "Text cannot be empty"})
 
-    audio_bytes = await synthesize_kokoro_tts(
+    audio_bytes = await synthesize_tts(
         text,
         voice=payload.voice,
         speed=payload.speed,
@@ -334,7 +187,7 @@ async def generate_tts(payload: TTSRequest):
         media_type="audio/wav",
         headers={
             "Content-Disposition": 'inline; filename="tts.wav"',
-            "X-TTS-Voice": payload.voice or settings.kokoro_default_voice,
+            "X-TTS-Voice": payload.voice or settings.deepgram_tts_model,
         },
     )
 
@@ -348,9 +201,7 @@ async def run_voice_pipeline(
 ) -> None:
     await _safe_send_json(websocket, {"type": "stt_start"})
 
-    transcript = await transcribe_audio_groq(audio_bytes, metadata)
-    if not transcript:
-        transcript = await transcribe_audio_deepgram(audio_bytes, metadata)
+    transcript = await stt_provider.transcribe(audio_bytes, _provider_metadata(metadata))
 
     await _safe_send_json(websocket, {"type": "stt_done", "transcript": transcript})
     conversation_id: str | None = None
@@ -366,7 +217,7 @@ async def run_voice_pipeline(
     elapsed_ms = int((asyncio.get_running_loop().time() - start) * 1000)
     await _safe_send_json(websocket, {"type": "context_built", "ms": elapsed_ms})
     messages = build_messages(user_input=transcript or "", context=context)
-    full_text = await stream_openai_chat(messages, websocket)
+    full_text = await stream_chat_response(messages, websocket)
     if full_text:
         conversation_id = await append_turn(
             user_id=user_id,
@@ -374,8 +225,16 @@ async def run_voice_pipeline(
             content=full_text,
             conversation_id=conversation_id,
         )
+        try:
+            schedule_extract_facts(
+                transcript=f"User: {transcript}\nAssistant: {full_text}",
+                user_id=user_id,
+                conversation_id=conversation_id,
+            )
+        except Exception:
+            logger.exception("Failed to schedule fact extraction for conversation %s", conversation_id)
 
-    tts_audio = await synthesize_kokoro_tts(
+    tts_audio = await synthesize_tts(
         full_text,
         voice=metadata.voice,
         speed=metadata.speed,
@@ -416,10 +275,20 @@ async def process_text_query(payload: TextQueryRequest):
         content=response_text,
         conversation_id=conversation_id,
     )
+    memory_updated = False
+    try:
+        schedule_extract_facts(
+            transcript=f"User: {query}\nAssistant: {response_text}",
+            user_id=payload.user_id,
+            conversation_id=conversation_id,
+        )
+        memory_updated = True
+    except Exception:
+        logger.exception("Failed to schedule fact extraction for text conversation %s", conversation_id)
 
     return {
         "response": response_text,
-        "memoryUpdated": False,
+        "memoryUpdated": memory_updated,
         "mode": "provider" if settings.groq_api_key else "local_fallback",
     }
 

@@ -1,7 +1,7 @@
 /**
  * Context Aggregation Service (server-backed)
  *
- * The frontend no longer assembles biometric or calendar context locally.
+ * The frontend no longer assembles domain context locally.
  * Instead, `getServerContext` requests layers 2-4 from the backend Context Builder:
  *  - layer2_identity: Knowledge Base summary (Postgres)
  *  - layer3_recent: Working memory (Redis)
@@ -35,7 +35,7 @@ export async function getServerContext(
     return null
   })
 
-  const kbPromise = fetch(`${base}/api/v1/knowledge/summary?user_id=${encodeURIComponent(
+  const kbPromise = fetch(`${base}/api/v1/kb/summary?user_id=${encodeURIComponent(
     userId
   )}`, {
     method: 'GET',

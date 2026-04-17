@@ -15,12 +15,6 @@ export {
   type RecordingState,
 } from './audioRecording';
 
-// Health
-// HealthKit removed in Phase 1 pivot — health service omitted
-
-// Storage
-export * from './storage';
-
 // Playback
 export {
   audioPlaybackService,
@@ -41,18 +35,7 @@ export {
 // State Machine
 // State machine removed — stateMachine service omitted
 
-// Calendar service removed in Phase 1 pivot — frontend calendar hooks/types are feature-flagged
-
-// Location
-export {
-  locationService,
-  type LocationType,
-  type Coordinates,
-  type LocationInfo,
-  type AddressInfo,
-  type SavedLocation,
-  type LocationChangeEvent,
-} from './locationService';
+// Location/calendar/health surfaces are intentionally absent from Phase 1.
 
 // Context Aggregation (server-backed)
 export { default as contextService, getServerContext } from './contextService';

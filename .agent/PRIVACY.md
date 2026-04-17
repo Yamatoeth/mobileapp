@@ -122,25 +122,25 @@
 
 | Service | Data sent | Why | Opt-out possible |
 |---------|----------|-----|-----------------|
-| **OpenAI** | Transcription + KB context (anonymised) | LLM inference | No (core feature) |
-| **Deepgram** | Audio stream | STT | No (core feature) |
-| **ElevenLabs** | JARVIS response text | TTS | No (core feature) |
+| **Groq** | Prompt + KB context | LLM inference | No (core feature) |
+| **Deepgram** | Audio stream and response text | STT + TTS | No (core feature) |
+| **OpenAI** | Text snippets for embeddings | Semantic memory | Yes (disables embeddings) |
 | **Pinecone** | Numerical vectors + minimal metadata | Episodic memory | Yes (disables long-term memory) |
 | **Sentry** | Error stack traces (anonymised) | Error tracking | Yes (in settings) |
 
 ### What is never shared
 
-- Raw financial data to any third party other than OpenAI (in LLM context)
+- Raw financial data to third parties unless it is explicitly needed in LLM context
 - Conversation content to analytics services
 - Knowledge Base to data brokers
 - User data to advertising partners (JARVIS has no advertising)
 
-### OpenAI — important detail
+### Provider data sharing — important detail
 
-OpenAI calls include Knowledge Base context to personalise responses. By design, OpenAI receives summaries of your personal life. Mitigation:
-- `training_opt_out` option enabled (data not used to train models)
-- Content sent to OpenAI is the minimum necessary (context truncated if token budget exceeded)
-- OpenAI zero-data retention policy applied
+Groq calls include Knowledge Base context to personalise responses. Deepgram receives audio/text for STT/TTS. OpenAI receives text snippets only for embeddings. Mitigation:
+- Content sent to providers is the minimum necessary
+- Context is truncated if token budget is exceeded
+- Vendor retention settings must be reviewed before production launch
 
 ---
 
@@ -327,10 +327,9 @@ Validate before any public launch (external TestFlight or App Store).
 - [ ] Database access restricted (no direct public access)
 
 **Third-party:**
-- [ ] DPA (Data Processing Agreement) signed with OpenAI
+- [ ] DPA (Data Processing Agreement) signed with Groq
 - [ ] DPA signed with Deepgram
-- [ ] DPA signed with ElevenLabs
-- [ ] Training opt-out option enabled with OpenAI
+- [ ] DPA signed with OpenAI for embeddings
 
 **Documentation:**
 - [ ] Privacy Policy published and accessible

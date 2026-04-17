@@ -1,6 +1,6 @@
 /**
  * useVoiceAssistant - Hook for end-to-end voice interaction with J.A.R.V.I.S.
- * Integrates STT → LLM → TTS pipeline with biometric context
+ * Integrates the backend-owned STT → LLM → TTS pipeline.
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSettingsStore } from '../store/settingsStore';

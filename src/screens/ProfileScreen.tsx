@@ -2,13 +2,11 @@ import { View, Text, ScrollView, TouchableOpacity, Alert, Pressable } from 'reac
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme } from '../hooks/useTheme'
-import { useHealthLogs } from '../hooks/useHealthLogs'
 import { useChatHistory } from '../hooks/useChatHistory'
 import { useOnboarding } from '../hooks/useOnboarding'
 
 export function ProfileScreen({ onNavigate }: { onNavigate?: (route: 'home'|'profile') => void }) {
   const { isDark, themeMode, setThemeMode } = useTheme()
-  const { logs, clearAllLogs } = useHealthLogs()
   const { clearHistory: clearChatHistory } = useChatHistory()
   const { resetOnboarding } = useOnboarding()
 
@@ -34,15 +32,15 @@ export function ProfileScreen({ onNavigate }: { onNavigate?: (route: 'home'|'pro
   const handleDeleteAllData = () => {
     Alert.alert(
       'Delete All Data',
-      'This will permanently delete all your health logs, chat history, and settings. This action cannot be undone.',
+      'This will permanently delete local chat history and reset onboarding. Server knowledge must be deleted from the backend. This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await clearAllLogs?.()
             await clearChatHistory()
+            await resetOnboarding()
             Alert.alert('Done', 'All data has been deleted.')
           },
         },
@@ -88,19 +86,19 @@ export function ProfileScreen({ onNavigate }: { onNavigate?: (route: 'home'|'pro
           {/* Stats Row */}
           <View className="flex-row gap-3">
             <View className={`flex-1 p-4 rounded-xl items-center ${isDark ? 'bg-gray-800' : 'bg-white shadow'}`}>
-              <Ionicons name="document-text-outline" size={22} color="#00d4ff" />
-              <Text className={`text-xl font-bold mt-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>{logs.length}</Text>
-              <Text className={isDark ? 'text-gray-400' : 'text-gray-500'}>Entries</Text>
+              <Ionicons name="mic-outline" size={22} color="#00d4ff" />
+              <Text className={`text-xl font-bold mt-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Voice</Text>
+              <Text className={isDark ? 'text-gray-400' : 'text-gray-500'}>Backend-owned</Text>
             </View>
             <View className={`flex-1 p-4 rounded-xl items-center ${isDark ? 'bg-gray-800' : 'bg-white shadow'}`}>
-              <Ionicons name="calendar-outline" size={22} color="#10b981" />
-              <Text className={`text-xl font-bold mt-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>{logs.length > 0 ? new Set(logs.map(l => new Date(l.timestamp).toDateString())).size : 0}</Text>
-              <Text className={isDark ? 'text-gray-400' : 'text-gray-500'}>Days Logged</Text>
+              <Ionicons name="server-outline" size={22} color="#10b981" />
+              <Text className={`text-xl font-bold mt-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>KB</Text>
+              <Text className={isDark ? 'text-gray-400' : 'text-gray-500'}>PostgreSQL</Text>
             </View>
             <View className={`flex-1 p-4 rounded-xl items-center ${isDark ? 'bg-gray-800' : 'bg-white shadow'}`}>
-              <Ionicons name="server-outline" size={22} color="#8b5cf6" />
-              <Text className={`text-xl font-bold mt-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>BE</Text>
-              <Text className={isDark ? 'text-gray-400' : 'text-gray-500'}>Backend Voice</Text>
+              <Ionicons name="sync-outline" size={22} color="#8b5cf6" />
+              <Text className={`text-xl font-bold mt-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Async</Text>
+              <Text className={isDark ? 'text-gray-400' : 'text-gray-500'}>Fact extraction</Text>
             </View>
           </View>
 

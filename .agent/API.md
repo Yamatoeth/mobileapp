@@ -85,7 +85,7 @@ Content-Type: application/json
 ## 2. Voice Interaction
 
 ### WebSocket: Voice Stream
-Connect to: `ws://localhost:8000/ws/voice`
+Connect to: `ws://localhost:8000/api/v1/ws/voice/{user_id}?token=<jwt>`
 
 This is the primary interaction channel. All voice communication flows through here.
 
@@ -96,58 +96,50 @@ This is the primary interaction channel. All voice communication flows through h
 
 **Server → Client: Transcription (streaming)**
 ```json
-{ "type": "transcription_partial", "text": "What should I focus on", "confidence": 0.87 }
+{ "type": "stt_start" }
 ```
 
 ```json
-{ "type": "transcription_final", "text": "What should I focus on today?", "confidence": 0.95, "duration_seconds": 2.1 }
+{ "type": "stt_done", "transcript": "What should I focus on today?" }
 ```
 
 **Server → Client: LLM Response (streaming)**
 ```json
-{ "type": "llm_response_chunk", "text": "Based on your projects, ", "is_final": false }
+{ "type": "llm_chunk", "data": "Based on your projects, " }
 ```
 
 ```json
-{ "type": "llm_response_chunk", "text": "you should prioritise the client proposal.", "is_final": true }
+{ "type": "llm_done", "content": "Based on your projects, you should prioritise the client proposal." }
 ```
 
 **Server → Client: Audio Response (streaming)**
 ```json
-{ "type": "audio_response", "audio_chunk": "<base64-encoded-audio>", "chunk_index": 1, "is_final": false }
+{ "type": "tts_audio_chunk", "data": "<base64-encoded-audio>" }
 ```
 
 **Server → Client: Context Used (after response)**
 ```json
 {
-  "type": "context_used",
-  "knowledge_domains_injected": ["goals", "projects"],
-  "memories_retrieved": 3,
-  "working_memory_entries": 12,
-  "context_build_ms": 187
+  "type": "context_built",
+  "ms": 187
 }
 ```
 
 ### Generate Text Response (REST fallback)
 ```http
-POST /voice/generate
+POST /api/v1/ai/process
 Authorization: Bearer <token>
 Content-Type: application/json
 
-{ "query": "What should I focus on today?", "include_context": true }
+{ "user_id": "usr_123abc", "query": "What should I focus on today?" }
 ```
 
 **Response (200):**
 ```json
 {
-  "text": "Based on your projects, you should prioritise the client proposal. You mentioned it was due Friday and you have not touched it since Monday.",
-  "audio_url": "https://cdn.jarvis.app/audio/resp_789ghi.mp3",
-  "processing_time_ms": 1340,
-  "context_used": {
-    "knowledge_domains": ["projects", "goals"],
-    "memories_retrieved": 2,
-    "working_memory_entries": 8
-  }
+  "response": "Based on your projects, you should prioritise the client proposal.",
+  "memoryUpdated": true,
+  "mode": "provider"
 }
 ```
 

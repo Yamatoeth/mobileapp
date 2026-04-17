@@ -50,7 +50,7 @@ Every LLM call assembles exactly these four layers in this order. No shortcuts.
 └─────────────────────────────────────────────┘
 ```
 
-**Target total budget:** < 2000 tokens in context to keep GPT-4o latency under 800ms to first token.
+**Target total budget:** < 2000 tokens in context to keep Groq first-token latency under 800ms.
 
 **Priority rule in case of conflict:**
 Layer 2 (structured KB) > Layer 4 (episodic memory) > Layer 3 (recent) > Layer 1 (character default).

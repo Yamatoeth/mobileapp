@@ -69,7 +69,7 @@
 - **APScheduler:** Good for periodic jobs, not for event-triggered jobs with retry.
 - **FastAPI BackgroundTasks:** Same problem as asyncio — no durability.
 
-**Reason for choice:** Celery + Redis provides durability, automatic retry, and monitoring (Flower). Fact extraction takes up to 10s (GPT-4o call) — if the server restarts, we don't want to lose that job.
+**Reason for choice:** Celery + Redis provides durability, automatic retry, and monitoring (Flower). Fact extraction can take several seconds through the configured LLM provider — if the server restarts, we don't want to lose that job.
 
 **Consequences:**
 - One extra service to start in dev (see QUICKSTART.md)
@@ -77,9 +77,11 @@
 
 ---
 
-### [2026-01] GPT-4o only, no Gemini fallback
+### [2026-01] GPT-4o only, no Gemini fallback [SUPERSEDED]
 
 **Decision:** GPT-4o as the sole LLM, with no Gemini fallback.
+
+**Superseded by:** [2026-04] Phase 1 source of truth — Deepgram + Groq + Deepgram Aura.
 
 **Rejected alternatives:**
 - **Gemini fallback:** Two-provider resilience is appealing, but prompts differ between providers, character degrades, and the complexity of maintaining two integrations isn't justified solo.
@@ -111,7 +113,7 @@
 
 **Decision:** The character system prompt (Layer 1) is written in English even if the user speaks another language.
 
-**Reason:** GPT-4o performs slightly better at following complex instructions in English. JARVIS's final response can be in the user's language (it detects it) — only the system prompt is in English.
+**Reason:** OpenAI-compatible chat models generally follow complex system instructions more consistently in English. JARVIS's final response can be in the user's language — only the system prompt is in English.
 
 **Validated by:** Informal A/B test over 20 exchanges — character enforcement ~15% more consistent in English.
 
@@ -176,8 +178,26 @@
 
 | Decision | Target date | Context |
 |----------|------------|---------|
-| GPT-4o-mini for fact extraction | End of Phase 1 | Test quality vs cost. If output > 80% of GPT-4o quality at 10x cheaper → switch. |
+| Fact extraction quality tuning | End of Phase 1 | Keep extraction behind the LLM provider boundary; compare Groq model quality before considering another provider. |
 | pgvector vs Pinecone long-term | Month 6 | If Pinecone > $30/month and still solo, evaluate pgvector migration. |
 | Android support | Month 8 | iOS-first is correct for Phase 1-2. Android in Phase 3 if TestFlight demand justifies it. |
 | Multi-user | Month 10 | Architecture already supports it (user_id everywhere). Decide if App Store = multi-user or personal app first. |
 | On-device wake word model | Month 4 | Marked `[X]` in TIMELINE but exact model not fixed. Whisper on-device vs third-party solution. |
+
+---
+
+### [2026-04] Phase 1 voice stack freeze: Deepgram + Groq + Deepgram Aura
+
+**Decision:** Use Deepgram Flux/Nova-3 for STT, Groq `openai/gpt-oss-120b` for the hot LLM path, and Deepgram Aura for production TTS. Keep Kokoro ONNX as a local development fallback only.
+
+**Rejected alternatives:**
+- **OpenAI Realtime as default:** best latency and cleanest speech-to-speech architecture, but too expensive for the cheap Phase 1 default.
+- **ElevenLabs as default:** strong voice quality, but higher TTS cost than Deepgram Aura.
+- **Groq Whisper as default STT:** very cheap, but less aligned with real streaming conversational STT than Deepgram Flux/Nova.
+
+**Reason for choice:** This stack gives the best cost/latency balance for solo daily use while preserving the backend-owned memory and prompt architecture.
+
+**Consequences:**
+- Provider access must go through `STTProvider`, `LLMProvider`, `TTSProvider`, and `EmbeddingProvider`.
+- PostgreSQL is the durable Knowledge Base; Redis is cache/working memory only.
+- Old biometric, location, and calendar surfaces are out of Phase 1.

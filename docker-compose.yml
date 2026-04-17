@@ -38,7 +38,7 @@ services:
       - redis
     environment:
       - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=postgresql://jarvis:jarvis_dev@postgres:5432/jarvis_db
+      - DATABASE_URL=postgresql+asyncpg://jarvis:jarvis_dev@postgres:5432/jarvis_db
     ports:
       - "8000:8000"
 
@@ -51,6 +51,8 @@ services:
       - redis
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/1
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql+asyncpg://jarvis:jarvis_dev@postgres:5432/jarvis_db
     volumes:
       - ./backend:/app/backend
 
@@ -63,6 +65,8 @@ services:
       - redis
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/1
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql+asyncpg://jarvis:jarvis_dev@postgres:5432/jarvis_db
     volumes:
       - ./backend:/app/backend
 

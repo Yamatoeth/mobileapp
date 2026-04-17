@@ -39,7 +39,9 @@ The new JARVIS knows you. It knows your goals, your projects, your finances, you
 
 ### Tech Stack: Mostly Preserved, Different Purpose
 
-Kept: FastAPI, React Native, Expo, TypeScript, GPT-4o, Deepgram, ElevenLabs, Pinecone, Redis, PostgreSQL, Zustand, Celery.
+Kept: FastAPI, React Native, Expo, TypeScript, Deepgram, Pinecone, Redis, PostgreSQL, Zustand, Celery.
+
+Phase 1 defaults now use Deepgram STT, Groq LLM inference, Deepgram Aura TTS, and OpenAI embeddings only.
 
 Removed: `react-native-health`, `expo-calendar`, `expo-location`, TimescaleDB, Gemini fallback, all biometric models, intervention logic, trust scoring.
 
@@ -63,7 +65,7 @@ JARVIS is only as good as what it knows about you. Build this first. Six Postgre
 Three tiers: Redis (last 30 conversations, fast), Pinecone (full history, semantic), PostgreSQL (structured facts, always fresh). All three queried concurrently on every LLM call via `asyncio.gather()`. Context build target: under 300ms.
 
 **Pillar 3: The Intelligence Engine**
-GPT-4o with a strict 4-layer prompt: character definition, user identity injection, recent context, relevant memories. The character layer is non-negotiable — JARVIS must be direct, honest, and specific. No hedging, no generic advice.
+Groq-hosted OpenAI-compatible chat completions behind an `LLMProvider`, with a strict 4-layer prompt: character definition, user identity injection, recent context, relevant memories. The character layer is non-negotiable — JARVIS must be direct, honest, and specific. No hedging, no generic advice.
 
 ---
 
@@ -73,7 +75,7 @@ Do not start anywhere except here.
 
 | Week | Build | Done when |
 |------|-------|-----------|
-| Week 1 | Voice pipeline v0 | Speak → hear GPT-4o respond via ElevenLabs. No context. Just the pipe. |
+| Week 1 | Voice pipeline v0 | Speak → hear Groq respond via Deepgram Aura. No context. Just the pipe. |
 | Week 2 | Knowledge Base schema + onboarding | Six domain tables created. You complete your own onboarding interview. |
 | Week 3 | Context injection | Every voice call uses your Knowledge Base. JARVIS references who you are. |
 | Week 4 | Memory integration | Redis working memory + Pinecone episodic memory connected. JARVIS remembers last month. |

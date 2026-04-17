@@ -9,7 +9,7 @@
   └─────────────────────────────────────────────────────────┘
                           ▲ ▼ WSS + HTTPS
   ┌─────────────────────────────────────────────────────────┐
-  │             Backend (FastAPI + Python 3.11)              │
+  │             Backend (FastAPI + Python 3.12)              │
   │     Context Builder · Fact Extractor · Prompt Engine    │
   └─────────────────────────────────────────────────────────┘
           ▲               ▲               ▲               ▲
@@ -22,10 +22,12 @@
           ▲               ▲               ▲
           │               │               │
   ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-  │   Deepgram   │ │   GPT-4o    │ │  ElevenLabs  │
-  │     STT      │ │     LLM     │ │     TTS      │
+  │   Deepgram   │ │    Groq      │ │   Deepgram   │
+  │ Flux/Nova STT│ │ GPT-OSS LLM │ │   Aura TTS   │
   └──────────────┘ └──────────────┘ └──────────────┘
   ```
+
+Phase 1 source of truth: production voice uses Deepgram STT, Groq LLM inference, and Deepgram Aura TTS. Kokoro is allowed only as a local development fallback. OpenAI Realtime and ElevenLabs are future premium/provider options, not Phase 1 defaults.
 
 ---
 
@@ -33,13 +35,13 @@
 
 ### Core Framework
 
-**React Native 0.73+ with Expo SDK 50+**
+**React Native with Expo SDK 54+**
 ```bash
 npx create-expo-app jarvis --template
 ```
 Why: iOS-first, single codebase, managed workflow, no native Xcode wrestling.
 
-**TypeScript 5.3+ (strict mode)**
+**TypeScript 5.9+ (strict mode)**
 
 `tsconfig.json`:
 ```json
@@ -54,7 +56,7 @@ Why: iOS-first, single codebase, managed workflow, no native Xcode wrestling.
 
 ### State Management
 
-**Zustand 4.5+**
+**Zustand 5+**
 ```bash
 npm install zustand
 ```
@@ -62,7 +64,7 @@ Four stores: `voiceStore`, `conversationStore`, `knowledgeStore`, `settingsStore
 
 ### Navigation
 
-**React Navigation 6**
+**React Navigation 7**
 ```bash
 npm install @react-navigation/native @react-navigation/native-stack
 npm install react-native-screens react-native-safe-area-context
@@ -71,15 +73,15 @@ Stack navigator with four screens: VoiceScreen (default), HistoryScreen, Knowled
 
 ### Audio
 
-**expo-av**
+**expo-audio**
 ```bash
-npx expo install expo-av
+npx expo install expo-audio
 ```
-Records audio at 16kHz WAV for Deepgram. Plays back ElevenLabs TTS streaming audio.
+Records microphone input for the backend-owned voice pipeline. `expo-av` is deprecated and must not be used for new Phase 1 audio work.
 
 ### Animation
 
-**React Native Reanimated 3**
+**React Native Reanimated 4**
 ```bash
 npx expo install react-native-reanimated
 ```
@@ -91,7 +93,7 @@ Required for the arc-reactor pulse animation and voice waveform. 60fps on device
 ```bash
 npx expo install expo-notifications
 ```
-Used for JARVIS-initiated morning briefings and proactive check-ins. Not used in Phase 1.
+Used for future JARVIS-initiated briefings and proactive check-ins. Not used in Phase 1.
 
 ### package.json scripts
 
@@ -103,7 +105,8 @@ Used for JARVIS-initiated morning briefings and proactive check-ins. Not used in
     "test": "jest --watchAll",
     "type-check": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
-    "format": "prettier --write \"**/*.{ts,tsx,json}\""
+    "pretty": "prettier --check \"app.json\" \"babel.config.js\" \"jest.config.js\" \"package*.json\"",
+    "format": "prettier --write \"app.json\" \"babel.config.js\" \"jest.config.js\" \"package*.json\""
   }
 }
 ```
@@ -114,7 +117,7 @@ Used for JARVIS-initiated morning briefings and proactive check-ins. Not used in
 
 ### Core Framework
 
-**FastAPI 0.109+ with Python 3.11+**
+**FastAPI 0.109+ with Python 3.12**
 ```bash
 pip install fastapi[all] uvicorn[standard]
 ```
@@ -177,29 +180,42 @@ On each voice call, semantic search with the current query returns top 5 relevan
 
 ### LLM
 
-**OpenAI GPT-4o**
+**Groq**
 ```bash
-pip install openai
+pip install httpx
 ```
-Always use streaming (`stream=True`). First token must arrive in under 800ms. The four-layer prompt is assembled by the Context Builder before each call.
+Default Phase 1 model: `openai/gpt-oss-120b`. Fast/cheap fallback for simple commands: `llama-3.1-8b-instant`. Always use streaming where the endpoint supports it. First token should arrive in under 800ms after context build.
 
 **OpenAI text-embedding-3-small** for Pinecone embeddings (background jobs only, not in hot path).
 
 ### STT
 
-**Deepgram**
+**Deepgram Flux/Nova-3**
 ```bash
 pip install deepgram-sdk
 ```
-Streaming transcription via WebSocket. Interim results sent back to the client immediately so the UI can show live transcription. Final result triggers the LLM call.
+Default Phase 1 STT provider. Use Flux for voice-agent turn handling where available; otherwise use Nova-3. Groq Whisper may remain a fallback adapter, but not the production default.
 
 ### TTS
 
-**ElevenLabs**
+**Deepgram Aura**
 ```bash
-pip install elevenlabs
+pip install httpx
 ```
-Streaming audio response. Begin streaming TTS as soon as the first LLM chunk arrives — do not wait for the complete LLM response. This is critical for meeting the 2-second latency budget.
+Default Phase 1 TTS provider. Use Aura-1 when cost matters most and Aura-2 when quality matters more. Kokoro ONNX remains a local development fallback.
+
+### Provider Boundary
+
+All voice/AI providers must be accessed through backend interfaces:
+
+```python
+STTProvider
+LLMProvider
+TTSProvider
+EmbeddingProvider
+```
+
+Routes and core services depend on these interfaces, not on provider-specific SDKs. This keeps Deepgram/Groq/Kokoro/OpenAI as swappable adapters rather than competing architectures.
 
 ### Background Jobs
 
@@ -207,7 +223,7 @@ Streaming audio response. Begin streaming TTS as soon as the first LLM chunk arr
 ```bash
 pip install celery[redis]
 ```
-Uses Redis as broker. One critical task: `extract_facts_from_conversation` runs after every conversation ends. This task sends the transcript to GPT-4o with a structured extraction prompt and merges the results into the Knowledge Base.
+Uses Redis as broker. One critical task: `extract_facts_from_conversation` runs after every completed conversation. This task extracts structured facts and writes to PostgreSQL domain tables plus `knowledge_updates`. Redis may cache summaries, but it is not the durable Knowledge Base.
 
 One weekly task: `analyse_patterns` runs every Sunday night, analyses the past 30 days of conversations for behavioural patterns, and writes findings to the `knowledge_patterns` table.
 
@@ -243,12 +259,11 @@ alembic==1.13.1
 
 # Memory
 redis[hiredis]==5.0.1
-pinecone-client==3.0.0
+pinecone==8.0.0
 
 # AI / Voice
 openai==1.10.0
 deepgram-sdk==3.0.0
-elevenlabs==0.2.27
 
 # Background jobs
 celery[redis]==5.3.6
@@ -450,8 +465,8 @@ jobs:
 | Audio → backend (WebSocket) | <200ms | 400ms |
 | Deepgram STT (streaming) | <300ms | 700ms |
 | Context Builder (all 3 memory tiers) | <300ms | 500ms |
-| GPT-4o first token | <800ms | 1500ms |
-| ElevenLabs first audio chunk | <400ms | 800ms |
+| Groq first token | <800ms | 1500ms |
+| Deepgram Aura first audio chunk | <400ms | 800ms |
 | **Total end-to-end** | **<2.0s** | **3.0s** |
 
 If total exceeds 3s consistently: degrade gracefully — return text only, log the failure.
@@ -473,44 +488,42 @@ If total exceeds 3s consistently: degrade gracefully — return text only, log t
 
 | Service | Use | Cost (dev) | Sign up |
 |---------|-----|-----------|---------|
-| OpenAI | LLM + embeddings | ~$30/mo | platform.openai.com |
-| Deepgram | STT | $0 (free tier: $200 credit) | deepgram.com |
-| ElevenLabs | TTS + voice clone | $0 (10k chars/mo free) | elevenlabs.io |
+| Groq | Low-latency LLM inference | Usage-based; cheap dev tier | console.groq.com |
+| OpenAI | Embeddings only in Phase 1 | Low usage-based | platform.openai.com |
+| Deepgram | STT + Aura TTS | Usage-based; free credits often available | deepgram.com |
 | Pinecone | Vector memory | $0 (100k vectors free) | pinecone.io |
 | Sentry | Error tracking | $0 (5k events/mo free) | sentry.io |
 
-### Voice Clone Setup (ElevenLabs)
+### Voice Setup
 
-You need a custom voice for JARVIS. On ElevenLabs:
-1. Voice Lab → Add Voice → Instant Voice Cloning
-2. Upload 5–10 minutes of clean source audio (the tone you want)
-3. Name it "JARVIS"
-4. Copy the Voice ID to your `.env`
-
-Alternatively, use one of ElevenLabs' built-in professional voices.
+Use Deepgram Aura for Phase 1 production TTS. Kokoro remains a local fallback
+for development without external TTS credentials. ElevenLabs is not a Phase 1
+dependency.
 
 ---
 
 ## Cost Estimates
 
 **Phase 1 (solo dev, daily use only):**
-- OpenAI: ~$20/month
-- All others: free tiers
-- **Total: ~$20/month**
+- Groq LLM: ~$5-15/month at solo-dev volume
+- Deepgram STT/TTS: ~$5-20/month depending on spoken minutes
+- OpenAI embeddings: <$5/month
+- Pinecone/Redis/Postgres local or free tiers: ~$0
+- **Total: ~$10-40/month**
 
 **Phase 3 (10 users on TestFlight):**
-- OpenAI: ~$80/month
-- ElevenLabs: ~$22/month (Starter plan)
+- Groq LLM: ~$30-80/month
+- Deepgram STT/TTS: ~$40-120/month
 - Hosting: ~$20/month (Railway)
 - Pinecone: ~$0 (still on free tier)
-- **Total: ~$120/month**
+- **Total: ~$90-220/month**
 
 **Post App Store (100 users):**
-- OpenAI: ~$400/month
-- ElevenLabs: ~$99/month (Creator plan)
+- Groq LLM: ~$250-600/month
+- Deepgram STT/TTS: ~$400-1,200/month
 - Pinecone: ~$70/month (Standard)
 - Infrastructure: ~$50/month
-- **Total: ~$620/month**
+- **Total: ~$770-1,920/month**
 
 ---
 
@@ -521,7 +534,7 @@ Alternatively, use one of ElevenLabs' built-in professional voices.
 - ❌ `expo-calendar` — Phase 3 only
 - ❌ `expo-location` — removed
 - ❌ TimescaleDB extension — no biometric time-series data
-- ❌ `google-generativeai` (Gemini) — GPT-4o only, no fallback needed for v1
+- ❌ `google-generativeai` (Gemini) — Groq is the Phase 1 LLM provider
 - ❌ `react-native-chart-kit` — no biometric charts
 - ❌ Webhook infrastructure — Phase 3 only
 - ❌ `APScheduler` — replaced by Celery for all background jobs
