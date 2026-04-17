@@ -10,6 +10,7 @@
 export { HoldToTalkButton } from './HoldToTalkButton';
 export { default as JarvisVoiceScreen } from './JarvisVoiceScreen';
 export { default as ParticleSphere } from './ParticleSphere';
+export { default as SimpleVoiceOrb } from './SimpleVoiceOrb';
 
 // Form Components
 // `LogForm` removed during pivot — use specialized health entry UI or restore if needed
