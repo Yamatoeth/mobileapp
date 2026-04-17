@@ -1,8 +1,25 @@
 /**
  * J.A.R.V.I.S. API Client
- * Handles communication with the FastAPI backend
+ * Handles communication with the FastAPI backend with runtime validation
  */
 import type { User, Conversation, Message } from '../../shared/types'
+import { z } from 'zod'
+import {
+  validateResponse,
+  HealthResponseSchema,
+  UserResponseSchema,
+  ConversationResponseSchema,
+  MessageResponseSchema,
+  StatusResponseSchema,
+  TtsVoicesResponseSchema,
+  MemorySearchResponseSchema,
+  ProcessQueryResponseSchema,
+  type HealthResponse,
+  type TtsVoicesResponse,
+  type MemorySearchResponse,
+  type ProcessQueryResponse,
+  type StatusResponse,
+} from './validation'
 
 // Default to localhost for development
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
@@ -32,32 +49,11 @@ export class ApiError extends Error {
  * Log trigger event to backend
  */
 export async function logTrigger(payload: Record<string, unknown>): Promise<void> {
-  return request<void>('/trigger', {
+  const schema = z.void()
+  return request<void>('/trigger', schema, {
     method: 'POST',
     body: JSON.stringify(payload),
-  });
-}
-
-/**
- * Health check response type
- */
-type HealthResponse = {
-  status: string
-  version: string
-  debug: boolean
-}
-
-type TtsVoicesResponse = {
-  voices: string[]
-  default: string
-}
-
-/**
- * Generic API response wrapper
- */
-type ApiResponse<T> = {
-  data: T
-  error?: string
+  })
 }
 
 /**
@@ -97,10 +93,11 @@ async function fetchWithTimeout(
 }
 
 /**
- * Make an API request with error handling
+ * Make an API request with error handling and validation
  */
 async function request<T>(
   endpoint: string,
+  schema: z.ZodSchema<T>,
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`
@@ -132,13 +129,18 @@ async function request<T>(
     // Handle empty responses
     const text = await response.text()
     if (!text) {
-      return {} as T
+      throw new ApiError(500, 'Empty response body')
     }
 
-    return JSON.parse(text) as T
+    const parsed = JSON.parse(text)
+    // Validate response against schema
+    return validateResponse(parsed, schema)
   } catch (error) {
     if (error instanceof ApiError) {
       throw error
+    }
+    if (error instanceof z.ZodError) {
+      throw new ApiError(0, `Invalid response format: ${error.message}`, error.flatten())
     }
     if (error instanceof Error && error.name === 'AbortError') {
       throw new ApiError(408, 'Request timed out')
@@ -174,18 +176,14 @@ async function requestArrayBuffer(
  * Check if the backend is healthy
  */
 export async function checkHealth(): Promise<HealthResponse> {
-  return request<HealthResponse>('/health')
+  return request<HealthResponse>('/health', HealthResponseSchema)
 }
 
 /**
  * Get detailed backend status
  */
-export async function getStatus(): Promise<{
-  environment: string
-  redis: string
-  pinecone: string
-}> {
-  return request('/api/v1/status')
+export async function getStatus(): Promise<StatusResponse> {
+  return request<StatusResponse>('/api/v1/status', StatusResponseSchema)
 }
 
 // ============================================
@@ -196,7 +194,7 @@ export async function getStatus(): Promise<{
  * Get or create a user
  */
 export async function getOrCreateUser(userId: string): Promise<User> {
-  return request<User>(`/api/v1/users/${userId}`, {
+  return request<User>(`/api/v1/users/${userId}`, UserResponseSchema, {
     method: 'PUT',
   })
 }
@@ -213,7 +211,7 @@ export async function getOrCreateUser(userId: string): Promise<User> {
 export async function createConversation(
   userId: string
 ): Promise<Conversation> {
-  return request<Conversation>('/api/v1/conversations', {
+  return request<Conversation>('/api/v1/conversations', ConversationResponseSchema, {
     method: 'POST',
     body: JSON.stringify({ user_id: userId }),
   })
@@ -225,21 +223,28 @@ export async function createConversation(
 export async function getConversation(
   conversationId: string
 ): Promise<Conversation> {
-  return request<Conversation>(`/api/v1/conversations/${conversationId}`)
+  return request<Conversation>(
+    `/api/v1/conversations/${conversationId}`,
+    ConversationResponseSchema
+  )
 }
 
 /**
  * Get all conversations for a user
  */
 export async function getConversations(userId: string): Promise<Conversation[]> {
-  return request<Conversation[]>(`/api/v1/conversations?user_id=${userId}`)
+  const ArraySchema = z.array(ConversationResponseSchema)
+  return request<Conversation[]>(
+    `/api/v1/conversations?user_id=${userId}`,
+    ArraySchema
+  )
 }
 
 /**
  * Add message to conversation
  */
 export async function sendMessage(payload: MessagePayload): Promise<Message> {
-  return request<Message>('/api/v1/messages', {
+  return request<Message>('/api/v1/messages', MessageResponseSchema, {
     method: 'POST',
     body: JSON.stringify(payload),
   })
@@ -249,8 +254,10 @@ export async function sendMessage(payload: MessagePayload): Promise<Message> {
  * Get messages for a conversation
  */
 export async function getMessages(conversationId: string): Promise<Message[]> {
+  const ArraySchema = z.array(MessageResponseSchema)
   return request<Message[]>(
-    `/api/v1/conversations/${conversationId}/messages`
+    `/api/v1/conversations/${conversationId}/messages`,
+    ArraySchema
   )
 }
 
@@ -267,8 +274,8 @@ export async function searchMemory(
   userId: string,
   query: string,
   limit: number = 5
-): Promise<{ id: string; score: number; metadata: Record<string, unknown> }[]> {
-  return request('/api/v1/memory/search', {
+): Promise<MemorySearchResponse> {
+  return request('/api/v1/memory/search', MemorySearchResponseSchema, {
     method: 'POST',
     body: JSON.stringify({ user_id: userId, query, limit }),
   })
@@ -280,7 +287,8 @@ export async function searchMemory(
 export async function getWorkingMemory(
   userId: string
 ): Promise<Record<string, unknown>> {
-  return request(`/api/v1/memory/working/${userId}`)
+  const WorkingMemorySchema = z.record(z.string(), z.any())
+  return request<Record<string, unknown>>(`/api/v1/memory/working/${userId}`, WorkingMemorySchema)
 }
 
 // ============================================
@@ -294,11 +302,8 @@ export async function processQuery(
   userId: string,
   query: string,
   context?: Record<string, unknown>
-): Promise<{
-  response: string
-  memoryUpdated: boolean
-}> {
-  return request('/api/v1/ai/process', {
+): Promise<ProcessQueryResponse> {
+  return request('/api/v1/ai/process', ProcessQueryResponseSchema, {
     method: 'POST',
     body: JSON.stringify({ user_id: userId, query, context }),
   })
@@ -318,15 +323,15 @@ export async function synthesizeSpeech(
 }
 
 export async function getTtsVoices(): Promise<TtsVoicesResponse> {
-  return request<TtsVoicesResponse>('/api/v1/tts/voices')
+  return request<TtsVoicesResponse>('/api/v1/tts/voices', TtsVoicesResponseSchema)
 }
 
-export async function get<T>(endpoint: string): Promise<T> {
-  return request<T>(endpoint)
+export async function get<T>(endpoint: string, schema: z.ZodSchema<T>): Promise<T> {
+  return request<T>(endpoint, schema)
 }
 
-export async function post<T>(endpoint: string, body?: unknown): Promise<T> {
-  return request<T>(endpoint, {
+export async function post<T>(endpoint: string, schema: z.ZodSchema<T>, body?: unknown): Promise<T> {
+  return request<T>(endpoint, schema, {
     method: 'POST',
     body: body === undefined ? undefined : JSON.stringify(body),
   })
