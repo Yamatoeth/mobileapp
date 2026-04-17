@@ -15,7 +15,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import VoiceOrb from '../components/VoiceOrb/VoiceOrb'
+import SimpleVoiceOrb from '../components/SimpleVoiceOrb'
 import * as Haptics from 'expo-haptics'
 import { useFonts as useOrbitron, Orbitron_700Bold } from '@expo-google-fonts/orbitron'
 import { useFonts as useRajdhani, Rajdhani_300Light, Rajdhani_500Medium } from '@expo-google-fonts/rajdhani'
@@ -337,7 +337,7 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
         <Text style={styles.latencyStatus}>{latencyLabel}</Text>
 
         <View style={{ width: SPHERE_SIZE, height: SPHERE_SIZE, alignItems: 'center', justifyContent: 'center' }}>
-          <VoiceOrb
+          <SimpleVoiceOrb
             state={isListening ? 'listening' : isSpeaking ? 'speaking' : isProcessing ? 'thinking' : 'idle'}
             style={{ width: SPHERE_SIZE, height: SPHERE_SIZE, borderRadius: SPHERE_SIZE / 2 }}
           />
