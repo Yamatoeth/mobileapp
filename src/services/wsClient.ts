@@ -16,7 +16,7 @@ export type WsMessage =
   | { type: 'tts_data'; data: string }
   | { type: 'tts_done' }
   | { type: 'error'; message: string }
-  | { type: 'closed' }
+  | { type: 'closed'; code?: number; reason?: string; wasClean?: boolean }
   | { type: 'raw'; data: string }
   | { type: string; [key: string]: unknown }
 
@@ -50,7 +50,38 @@ export class WSClient {
     } catch (e) {}
   }
 
-  connect(userId: string): Promise<void> {
+  private get healthUrl(): string {
+    return `${this.url.replace(/^ws/i, 'http')}/health`
+  }
+
+  private async assertBackendReachable(): Promise<void> {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 3000)
+
+    try {
+      const response = await fetch(this.healthUrl, { signal: controller.signal })
+      if (!response.ok) {
+        throw new Error(`health check returned HTTP ${response.status}`)
+      }
+      try {
+        console.log('[WSClient] backend health ok ->', this.healthUrl)
+      } catch (e) {}
+    } catch (error) {
+      try {
+        console.error('[WSClient] backend health failed ->', this.healthUrl, error)
+      } catch (e) {}
+      throw new Error(
+        `Voice backend is not reachable from this device at ${this.healthUrl}. ` +
+          'Open that URL on the phone browser; if it fails, allow Python/uvicorn through the Mac firewall or use the same Wi-Fi network.'
+      )
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  async connect(userId: string): Promise<void> {
+    await this.assertBackendReachable()
+
     return new Promise((resolve, reject) => {
       const wsUrl = `${this.url}/api/v1/ws/voice/${encodeURIComponent(userId)}`
       try {
@@ -90,7 +121,12 @@ export class WSClient {
         } catch (err) {}
         if (!settled) {
           settled = true
-          reject(new Error('Unable to connect to the voice backend'))
+          reject(
+            new Error(
+              `Unable to open the voice WebSocket at ${wsUrl}. ` +
+                `The backend health check succeeded at ${this.healthUrl}, so check the backend terminal for a WebSocket rejection code.`
+            )
+          )
         }
       }
 
@@ -99,16 +135,23 @@ export class WSClient {
         this.handlers.forEach((h) => h(msg))
       }
 
-      this.ws.onclose = () => {
+      this.ws.onclose = (event) => {
         if (this.connectTimeout) {
           clearTimeout(this.connectTimeout)
           this.connectTimeout = null
         }
+        const reason = typeof event.reason === 'string' ? event.reason : ''
         try {
-          console.log('[WSClient] onclose -> websocket closed')
+          console.log('[WSClient] onclose -> websocket closed', {
+            code: event.code,
+            reason,
+            wasClean: event.wasClean,
+          })
         } catch (e) {}
         // notify handlers about close
-        this.handlers.forEach((h) => h({ type: 'closed' }))
+        this.handlers.forEach((h) =>
+          h({ type: 'closed', code: event.code, reason, wasClean: event.wasClean })
+        )
       }
     })
   }

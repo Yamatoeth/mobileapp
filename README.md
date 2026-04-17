@@ -72,14 +72,34 @@ Backend:
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+For a physical phone, the backend must listen on the LAN, not only on
+`127.0.0.1`. From the repo root, after activating the backend virtualenv, you
+can run the same LAN-safe command with:
+
+```bash
+npm run backend:setup
+npm run backend
+```
+
+Then verify from the phone browser:
+
+```text
+http://<your-mac-lan-ip>:8000/health
+```
+
+If that URL does not return `{"status":"healthy",...}`, the mobile app cannot
+open the voice WebSocket either.
 
 ### Mobile App
 ```bash
 npm install
 npm start # choose platform from Expo CLI
 ```
+- For Expo Go over a tunnel: `npm run start:go -- --clear`.
+- For an Expo Dev Client build over a tunnel: `npm run start:dev-client -- --clear`.
 - `npx expo run:android` / `npx expo run:ios` builds Dev Client when you need native modules.
 - Ensure the device can reach the backend URL in `.env` (use `http://10.0.2.2` for Android emulator).
 
@@ -94,6 +114,7 @@ The root `docker-compose.yml` launches backend + Postgres + Redis. Set the same 
 6. After the conversation completes, a Celery task extracts durable facts into PostgreSQL and logs `knowledge_updates`.
 
 ## Troubleshooting
+- **Voice WebSocket closes immediately on a physical phone** — start the backend with `npm run backend` or `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`, then open `http://<your-mac-lan-ip>:8000/health` from the phone. For local unauthenticated voice testing, `backend/.env` also needs `ALLOW_INSECURE_DEV_AUTH=true`.
 - **Text works, voice silent** — verify `GROQ_API_KEY` and Kokoro paths; backend logs should show `context_built` and `tts_generated` events.
 - **Android cannot reach backend** — keep `EXPO_PUBLIC_API_URL=http://10.0.2.2:8000` and ensure emulator and FastAPI share the same host machine.
 - **No speech output** — confirm `backend/models/kokoro` files are readable by the backend process.

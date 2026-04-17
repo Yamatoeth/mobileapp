@@ -18,6 +18,11 @@
       "bundleIdentifier": "com.jarvis.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Allow JARVIS to access your microphone for voice interactions",
+        "NSLocalNetworkUsageDescription": "Allow JARVIS to connect to the local development backend on your network",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": true
+        },
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -32,6 +37,7 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
+      "usesCleartextTraffic": true,
       "package": "com.jarvis.app",
       "googleServicesFile": "./google-services.json"
     },

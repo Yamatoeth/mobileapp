@@ -4,6 +4,11 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
+    "start:go": "expo start --go --tunnel",
+    "start:dev-client": "expo start --dev-client --tunnel",
+    "backend": "cd backend && .venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "backend:local": "cd backend && .venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+    "backend:setup": "cd backend && python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
