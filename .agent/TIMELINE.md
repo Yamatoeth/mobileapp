@@ -18,15 +18,19 @@
 
 ---
 
-## 🔴 CURRENT STATE — Last updated: 2026-02-18
+## 🔴 CURRENT STATE — Last updated: 2026-04-17
 
-**Current phase:** Phase 1 — End of Month 3
+**Current phase:** Phase 1 — validation / stabilisation before Phase 2
 
 **Where things actually stand:**
 
-Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all operational. Frontend skeleton with navigation, Zustand stores, and basic Iron Man UI in place. Voice pipeline partially built.
+Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all operational. Frontend skeleton with navigation, Zustand stores, and Iron Man UI in place. The provider-backed real-device voice loop now works, but Phase 1 is not complete until latency, onboarding, memory, and stability validation are finished.
 
 **What is actually working (tested end-to-end):**
+- Physical iPhone hold-to-talk path: microphone recording → backend WebSocket → Deepgram STT → Groq provider response → response displayed in the app ✓
+- Backend reachable from phone over LAN with `/health` and voice WebSocket smoke-tested ✓
+- Provider secrets now load server-side from `backend/.env`; Groq is no longer exposed through `EXPO_PUBLIC_*` ✓
+- ContextBuilder is wired into the voice and text hot paths before prompt construction ✓
 - Redis working memory: storing and retrieving conversation summaries ✓
 - Pinecone index: upserting and searching vectors ✓
 - Celery fact extraction: job triggers, extracts facts ✓
@@ -34,19 +38,26 @@ Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all o
 - Arc-reactor and waveform animations ✓
 
 **What exists but is not yet validated end-to-end:**
-- ContextBuilder: is it wired into the voice handler? To be verified
-- Complete voice pipeline: end-to-end latency measured? No
+- Complete voice pipeline: one real-device low-latency smoke test passed; p95 over 20 tests not measured
 - Fact extraction → KB update: tested with a real conversation? No
 - Onboarding flow: complete 45-minute session without errors? No
+- Personal context validation: ask about goals/situation without prompting? Not yet tested
+- WebSocket reconnect behaviour on drop: not yet validated
+- Crash-free soak: 48-hour / 7-day tests not yet run
 
 **Current blockers:**
-- Week 8 (ContextBuilder injection) marked `[X]` in the old timeline but not validated
-- End-to-end latency test < 2s not yet done
+- End-to-end latency p95 < 2s not yet measured over 20 runs
+- 45-minute onboarding session not yet validated
+- Working memory / episodic memory recall tests still missing
+- Fact extraction → `knowledge_updates` → KB update after a real conversation still missing
+- WebSocket reconnect behaviour still missing
 
 **Next focus this week:**
-1. Verify that the voice WebSocket handler actually calls `context_builder.build_context()`
-2. Measure end-to-end latency on iOS simulator
+1. Measure real-device voice latency p50/p95 over 20 runs
+2. Validate personal context: ask about goals/situation after KB is populated
 3. Run a complete 45-minute onboarding session
+4. Test fact extraction from a real conversation into `knowledge_updates`
+5. Add / validate WebSocket reconnect on drop
 
 ---
 
@@ -78,17 +89,17 @@ Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all o
 - [X] WebSocket connection (iPhone ↔ backend) for audio streaming
 - [X] Groq LLM integration behind provider boundary
 - [X] Streaming LLM response back to client
-- [~] Conversation displayed as text on screen
+- [X] Conversation displayed as text on screen
 
 **Week 4: TTS + End-to-End**
 - [X] Deepgram Aura TTS configured behind provider boundary
 - [X] Streaming TTS audio back to iPhone
 - [X] Audio playback via `expo-av`
-- [ ] End-to-end latency test: target < 2 seconds
+- [~] End-to-end latency test: target < 2 seconds (single real-device smoke test felt fast; p95 not measured)
 - [ ] Fix top 5 latency issues
 
 **✅ Month 1 validation — complete when:**
-- [ ] Speak → hear JARVIS respond within 2 seconds
+- [~] Speak → hear JARVIS respond within 2 seconds (single real-device provider-backed query succeeded; formal 20-run latency test pending)
 - [ ] No crashes over a 48-hour test
 - [ ] WebSocket reconnects automatically on drop
 
@@ -118,8 +129,8 @@ Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all o
 
 **Week 8: Context Builder v1**
 - [X] `ContextBuilder` class in the backend
-- [~] Query KB on every voice call
-- [~] Inject user identity summary into system prompt Layer 2
+- [X] Query KB on every voice call
+- [X] Inject user identity summary into system prompt Layer 2
 - [ ] **Critical validation:** JARVIS responses mention your goals and situation without being told
 - [ ] Latency test: context build < 300ms
 
@@ -308,7 +319,7 @@ Translated with DeepL.com (free version)
 | LLM costs exceed budget | Medium | Medium | Cache frequent queries; move simple extraction to cheaper Groq fallback |
 | App Store rejection | Low | High | No medical claims; wellness framing; privacy policy clear |
 | Feature creep delays Phase 1 | **High** | **High** | This file exists to prevent exactly this |
-| ContextBuilder not wired into the hot path | **Confirmed** | High | **Priority fix #1 this week** |
+| Personal context may not surface naturally in answers | Medium | High | Hot path wiring is verified; next test is goal/situation recall after KB population |
 
 ---
 
