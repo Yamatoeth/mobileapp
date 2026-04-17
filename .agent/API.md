@@ -1,5 +1,6 @@
 # J.A.R.V.I.S. API Specification
 
+
 ## Base URL
 - Development: `http://localhost:8000/api/v1`
 - Production: `https://api.jarvis.app/api/v1`
