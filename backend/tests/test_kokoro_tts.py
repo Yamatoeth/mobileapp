@@ -1,4 +1,12 @@
+import pytest
+
 from app.services.kokoro_service import kokoro_tts_service
+
+
+pytestmark = pytest.mark.skipif(
+    not kokoro_tts_service.is_available(),
+    reason="Kokoro local TTS dependencies are not installed",
+)
 
 
 def test_kokoro_lists_voices():

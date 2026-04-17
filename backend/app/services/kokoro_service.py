@@ -1,22 +1,24 @@
 from __future__ import annotations
 
 from io import BytesIO
-from pathlib import Path
 from threading import Lock
-from typing import Iterable
+from typing import Any, Iterable
 
-import soundfile as sf
-from kokoro_onnx import Kokoro
+from importlib.util import find_spec
 
 from app.core.config import get_settings
 
 settings = get_settings()
 
 
+class KokoroUnavailableError(RuntimeError):
+    """Raised when the optional local Kokoro TTS runtime is not installed."""
+
+
 class KokoroTTSService:
     def __init__(self) -> None:
         self._lock = Lock()
-        self._engine: Kokoro | None = None
+        self._engine: Any | None = None
 
     def _resolve_model_path(self) -> str:
         return settings.kokoro_model_path
@@ -24,7 +26,20 @@ class KokoroTTSService:
     def _resolve_voices_path(self) -> str:
         return settings.kokoro_voices_path
 
-    def _ensure_engine(self) -> Kokoro:
+    def is_available(self) -> bool:
+        return find_spec("kokoro_onnx") is not None and find_spec("soundfile") is not None
+
+    def _ensure_engine(self) -> Any:
+        try:
+            from kokoro_onnx import Kokoro
+        except ModuleNotFoundError as exc:
+            if exc.name == "kokoro_onnx":
+                raise KokoroUnavailableError(
+                    "Kokoro TTS is not installed. Install backend requirements or "
+                    "configure DEEPGRAM_API_KEY with TTS_PROVIDER=deepgram."
+                ) from exc
+            raise
+
         if self._engine is not None:
             return self._engine
 
@@ -60,6 +75,15 @@ class KokoroTTSService:
             lang=selected_lang,
         )
 
+        try:
+            import soundfile as sf
+        except ModuleNotFoundError as exc:
+            if exc.name == "soundfile":
+                raise KokoroUnavailableError(
+                    "Kokoro TTS audio encoding requires soundfile. Install backend requirements."
+                ) from exc
+            raise
+
         buffer = BytesIO()
         sf.write(buffer, audio, sample_rate, format="WAV", subtype="PCM_16")
         return buffer.getvalue()
@@ -76,4 +100,4 @@ class KokoroTTSService:
 
 kokoro_tts_service = KokoroTTSService()
 
-__all__ = ["KokoroTTSService", "kokoro_tts_service"]
+__all__ = ["KokoroTTSService", "KokoroUnavailableError", "kokoro_tts_service"]
