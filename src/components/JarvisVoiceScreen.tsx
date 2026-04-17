@@ -96,7 +96,7 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
   const [isBootstrapping, setIsBootstrapping] = useState(true)
   const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'offline'>('checking')
   const [ttsVoices, setTtsVoices] = useState<string[]>([])
-  const pressTimeout = useRef<number | null>(null)
+  const toggleRecordingInFlight = useRef(false)
   const wake = useWakeWord()
   const userId = useSettingsStore((s) => s.userId)
   const setUser = useSettingsStore((s) => s.setUser)
@@ -189,26 +189,26 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
     }
   }, [preferredTtsVoice, updateSettings])
 
-  const onPressIn = useCallback(() => {
-    if (pressTimeout.current) clearTimeout(pressTimeout.current)
-    pressTimeout.current = setTimeout(() => {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-      void cancel()
-      void startListening()
-    }, 60) as unknown as number
-  }, [cancel, startListening])
-
-  const onPressOut = useCallback(() => {
-    if (pressTimeout.current) {
-      clearTimeout(pressTimeout.current)
-      pressTimeout.current = null
+  const onToggleRecording = useCallback(async () => {
+    if (toggleRecordingInFlight.current || isBootstrapping || isProcessing) {
+      return
     }
 
-    if (isListening) {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-      void stopListening()
+    toggleRecordingInFlight.current = true
+    try {
+      if (isListening) {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+        await stopListening()
+        return
+      }
+
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+      await cancel()
+      await startListening()
+    } finally {
+      toggleRecordingInFlight.current = false
     }
-  }, [isListening, stopListening])
+  }, [cancel, isBootstrapping, isListening, isProcessing, startListening, stopListening])
 
   useEffect(() => {
     wake.onWake(() => {
@@ -259,12 +259,6 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
       await AsyncStorage.setItem(WAKE_KEY, value ? '1' : '0')
     } catch {
       // ignore wake-word persistence write errors
-    }
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      if (pressTimeout.current) clearTimeout(pressTimeout.current)
     }
   }, [])
 
@@ -343,9 +337,10 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
           />
 
           <Pressable
-            onPressIn={onPressIn}
-            onPressOut={onPressOut}
-            disabled={isBootstrapping}
+            onPress={() => {
+              void onToggleRecording()
+            }}
+            disabled={isBootstrapping || isProcessing}
             style={{
               position: 'absolute',
               width: SPHERE_SIZE,
@@ -360,7 +355,7 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
         <WaveBars visible={isListening || isProcessing || isSpeaking} />
         <View style={{ height: 18 }} />
         <Text style={[styles.hint, (isListening || isSpeaking) && styles.hintActive]}>
-          {isListening ? 'Release to send' : isBootstrapping ? 'Preparing local session' : 'Hold to speak'}
+          {isListening ? 'Tap to send' : isBootstrapping ? 'Preparing local session' : 'Tap to speak'}
         </Text>
       </View>
 
@@ -406,7 +401,7 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
             <View style={styles.messageCard}>
               <Text style={styles.messageLabel}>JARVIS</Text>
               <Text style={styles.placeholderText}>
-                Ask a question below, or hold the orb to speak.
+                Ask a question below, or tap the orb to speak.
               </Text>
             </View>
           )}

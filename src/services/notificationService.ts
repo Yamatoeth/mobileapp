@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import { getBackendBaseUrl } from './backendUrl';
 
 // Configure behaviour while app is foregrounded (once, at module level)
 Notifications.setNotificationHandler({
@@ -35,7 +36,7 @@ export async function registerForPushNotificationsAsync(userId: number | string)
   const token = tokenData.data;
 
   try {
-    await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/notifications/register`, {
+    await fetch(`${getBackendBaseUrl()}/api/v1/notifications/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: userId, token }),

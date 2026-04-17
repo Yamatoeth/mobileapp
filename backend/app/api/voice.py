@@ -334,6 +334,10 @@ def _extract_and_validate_token(token: Optional[str], expected_user_id: str) -> 
         return False
 
 
+def _allow_insecure_dev_websocket() -> bool:
+    return settings.allow_insecure_dev_auth and settings.app_env not in {"production", "prod"}
+
+
 @router.websocket("/ws/voice/{user_id}")
 async def websocket_voice(
     user_id: str,
@@ -346,8 +350,11 @@ async def websocket_voice(
     - token: JWT token for authentication (required in production).
              In development/test mode, token is optional.
     """
-    # Validate token unless in test_mode or development with test_mode disabled
-    if not settings.test_mode and not _extract_and_validate_token(token, user_id):
+    if (
+        not settings.test_mode
+        and not _allow_insecure_dev_websocket()
+        and not _extract_and_validate_token(token, user_id)
+    ):
         await websocket.close(code=4003, reason="Unauthorized")
         return
 

@@ -3,6 +3,7 @@
  * Connects to backend `/ws/voice/{userId}` and sends audio chunks (base64)
  * and receives streaming LLM/TTS messages.
  */
+import { getBackendWsUrl } from './backendUrl'
 
 /**
  * Discriminated union type for WebSocket messages from backend
@@ -43,7 +44,7 @@ export class WSClient {
   private connectTimeout: ReturnType<typeof setTimeout> | null = null
 
   constructor(baseUrl?: string) {
-    this.url = baseUrl || (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000')
+    this.url = getBackendWsUrl(baseUrl)
     try {
       console.log('[WSClient] init baseUrl=', this.url)
     } catch (e) {}
@@ -51,7 +52,7 @@ export class WSClient {
 
   connect(userId: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const wsUrl = this.url.replace(/^http/, 'ws') + `/api/v1/ws/voice/${encodeURIComponent(userId)}`
+      const wsUrl = `${this.url}/api/v1/ws/voice/${encodeURIComponent(userId)}`
       try {
         console.log('[WSClient] connecting to', wsUrl)
       } catch (e) {}

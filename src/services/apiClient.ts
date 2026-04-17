@@ -4,6 +4,7 @@
  */
 import type { User, Conversation, Message } from '../../shared/types'
 import { z } from 'zod'
+import { getBackendBaseUrl } from './backendUrl'
 import {
   validateResponse,
   HealthResponseSchema,
@@ -21,8 +22,7 @@ import {
   type StatusResponse,
 } from './validation'
 
-// Default to localhost for development
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL = getBackendBaseUrl()
 
 // Request timeout in milliseconds
 const REQUEST_TIMEOUT = 10000

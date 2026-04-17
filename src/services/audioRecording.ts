@@ -8,6 +8,8 @@ const { Audio }: any = require('expo-av')
 type ExpoRecordingOptions = any
 type ExpoRecording = any
 import * as FileSystem from 'expo-file-system/legacy';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 // ============================================
 // Types
@@ -69,6 +71,74 @@ class AudioRecordingService {
   private startTime: number = 0;
   private levelUpdateCallback: ((level: AudioLevel) => void) | null = null;
   private levelInterval: ReturnType<typeof setInterval> | null = null;
+  private lastError: string | null = null;
+
+  getLastError(): string | null {
+    return this.lastError;
+  }
+
+  private async cleanupRecordingInstance(recording: ExpoRecording | null): Promise<void> {
+    if (!recording) return;
+
+    try {
+      recording.setOnRecordingStatusUpdate?.(null);
+    } catch (error) {
+      // Best effort: some Expo AV states do not allow clearing the callback.
+    }
+
+    try {
+      await recording.stopAndUnloadAsync();
+    } catch (error) {
+      // Best effort: startAsync may have failed before recording actually started.
+    }
+  }
+
+  private async resetAudioMode(): Promise<void> {
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+    }).catch(() => undefined);
+  }
+
+  private async createStartedRecording(
+    onLevelUpdate?: (level: AudioLevel) => void,
+    traceId: string = 'no-trace'
+  ): Promise<ExpoRecording> {
+    if (typeof Audio.Recording?.createAsync === 'function') {
+      console.log('[audioRecording] Recording.createAsync start', { traceId });
+      const created = await Audio.Recording.createAsync(
+        RECORDING_OPTIONS,
+        onLevelUpdate
+          ? (status: { isRecording?: boolean; metering?: number }) => {
+              if (status.isRecording && status.metering !== undefined) {
+                onLevelUpdate({
+                  level: Math.max(0, Math.min(1, (status.metering + 60) / 60)),
+                  timestamp: Date.now(),
+                });
+              }
+            }
+          : undefined,
+        100
+      );
+      console.log('[audioRecording] Recording.createAsync done', { traceId });
+      return created.recording;
+    }
+
+    const recording = new Audio.Recording();
+    try {
+      console.log('[audioRecording] prepareToRecordAsync start', { traceId });
+      await recording.prepareToRecordAsync(RECORDING_OPTIONS);
+      console.log('[audioRecording] prepareToRecordAsync done', { traceId });
+
+      console.log('[audioRecording] startAsync start', { traceId });
+      await recording.startAsync();
+      console.log('[audioRecording] startAsync done', { traceId });
+      return recording;
+    } catch (error) {
+      await this.cleanupRecordingInstance(recording);
+      throw error;
+    }
+  }
 
   /**
    * Request microphone permissions
@@ -122,6 +192,15 @@ class AudioRecordingService {
     options?: { traceId?: string }
   ): Promise<boolean> {
     const traceId = options?.traceId || 'no-trace'
+    let recording: ExpoRecording | null = null;
+    this.lastError = null;
+
+    if (Platform?.OS === 'ios' && Constants.isDevice === false) {
+      this.lastError = 'iOS Simulator does not support microphone recording. Use the text input here, or test voice on a physical iPhone.';
+      console.warn('[audioRecording] iOS Simulator microphone recording is not supported', { traceId });
+      return false;
+    }
+
     // Prevent concurrent starts
     if (this.starting) {
       console.warn('[audioRecording] startRecording already in progress (starting)', { traceId });
@@ -139,7 +218,7 @@ class AudioRecordingService {
     if (this.recording) {
       try {
         console.log('[audioRecording] stop/unload leftover recording before starting new one');
-        await this.recording.stopAndUnloadAsync();
+        await this.cleanupRecordingInstance(this.recording);
       } catch (err) {
         console.warn('[audioRecording] Error stopping leftover recording', err);
       } finally {
@@ -153,6 +232,7 @@ class AudioRecordingService {
     if (!hasPermission) {
       const granted = await this.requestPermissions();
       if (!granted) {
+        this.lastError = 'Microphone permission denied.';
         console.error('Microphone permission denied');
         return false;
       }
@@ -168,16 +248,17 @@ class AudioRecordingService {
       console.log('[audioRecording] configuring audio mode');
       await this.configureAudioMode();
 
-      // Create and prepare recording
-      const recording = new Audio.Recording();
-      console.log('[audioRecording] prepareToRecordAsync start', { traceId });
-      await recording.prepareToRecordAsync(RECORDING_OPTIONS);
-      console.log('[audioRecording] prepareToRecordAsync done', { traceId });
-
-      // Start recording
-      console.log('[audioRecording] startAsync start', { traceId });
-      await recording.startAsync();
-      console.log('[audioRecording] startAsync done', { traceId });
+      try {
+        recording = await this.createStartedRecording(onLevelUpdate, traceId);
+      } catch (startError) {
+        console.warn('[audioRecording] first start attempt failed, retrying once', startError);
+        await this.cleanupRecordingInstance(recording);
+        recording = null;
+        await this.resetAudioMode();
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        await this.configureAudioMode();
+        recording = await this.createStartedRecording(onLevelUpdate, traceId);
+      }
 
       this.recording = recording;
       this.state = 'recording';
@@ -193,6 +274,10 @@ class AudioRecordingService {
       return true;
     } catch (error) {
       console.error('Failed to start recording:', error);
+      this.lastError = error instanceof Error ? error.message : 'Failed to start recording.';
+      this.stopLevelMonitoring();
+      await this.cleanupRecordingInstance(recording);
+      await this.resetAudioMode();
       this.state = 'idle';
       this.recording = null;
       this.starting = false;

@@ -4,9 +4,8 @@ import { Skia } from '@shopify/react-native-skia'
 /**
  * Skia JSI module interface for type-safe bindings
  */
-interface SkiaJSIFunction {
+type SkiaJSIFunction = ((this: unknown, ...args: unknown[]) => unknown) & {
   __wrapped_by_skiaSafe?: boolean
-  call(thisArg: unknown, ...args: unknown[]): unknown
 }
 
 interface SkiaPictureModule {

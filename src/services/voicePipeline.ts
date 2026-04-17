@@ -212,8 +212,9 @@ export class VoicePipelineService {
     })
 
     if (!ok) {
-      this.setState('error')
-      this.callbacks.onError?.(new Error('Failed to start recording'))
+      await audioRecordingService.cancelRecording()
+      this.setState('idle')
+      this.callbacks.onError?.(new Error(audioRecordingService.getLastError() || 'Failed to start recording'))
     }
   }
 
@@ -397,7 +398,7 @@ export class VoicePipelineService {
               ctx.transcriptStartedAt = Date.now()
               break
             case 'stt_done':
-              transcript = message.transcript || ''
+              transcript = typeof message.transcript === 'string' ? message.transcript : ''
               if (!transcript.trim()) {
                 fail(new Error('Transcription failed. Please speak more clearly and try again.'))
                 return
@@ -451,7 +452,7 @@ export class VoicePipelineService {
               void finalize(false)
               break
             case 'error':
-              fail(new Error(message.message || 'Voice backend error'))
+              fail(new Error(typeof message.message === 'string' ? message.message : 'Voice backend error'))
               break
             case 'closed':
               if (this.state !== 'idle') {

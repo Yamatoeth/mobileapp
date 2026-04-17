@@ -1,4 +1,14 @@
-import { audioRecordingService } from '../services/audioRecording'
+import { AudioRecordingService, audioRecordingService } from '../services/audioRecording'
+
+let mockStartShouldFail = false
+let mockStopCalls = 0
+
+jest.mock('expo-constants', () => ({
+  __esModule: true,
+  default: {
+    isDevice: true,
+  },
+}))
 
 // Mock expo-av
 jest.mock('expo-av', () => {
@@ -8,10 +18,14 @@ jest.mock('expo-av', () => {
       return Promise.resolve()
     }
     async startAsync() {
+      if (mockStartShouldFail) {
+        throw new Error('recording not started')
+      }
       this.uri = 'file://mock/recording.wav'
       return Promise.resolve()
     }
     async stopAndUnloadAsync() {
+      mockStopCalls += 1
       return Promise.resolve()
     }
     getURI() {
@@ -45,7 +59,8 @@ jest.mock('expo-file-system/legacy', () => ({
 
 describe('audioRecordingService', () => {
   beforeEach(() => {
-    // Reset internal state by recreating service? The service is a singleton; ensure idle
+    mockStartShouldFail = false
+    mockStopCalls = 0
   })
 
   test('startRecording is idempotent on double calls and stopRecording returns result', async () => {
@@ -65,5 +80,24 @@ describe('audioRecordingService', () => {
 
     // After stop, service should be idle
     expect(audioRecordingService.isRecording()).toBe(false)
+  })
+
+  test('cleans up prepared recorder when startAsync fails', async () => {
+    const service = new AudioRecordingService()
+
+    mockStartShouldFail = true
+    const failed = await service.startRecording()
+
+    expect(failed).toBe(false)
+    expect(service.getState()).toBe('idle')
+    expect(mockStopCalls).toBeGreaterThanOrEqual(1)
+
+    mockStartShouldFail = false
+    const recovered = await service.startRecording()
+
+    expect(recovered).toBe(true)
+    expect(service.isRecording()).toBe(true)
+
+    await service.cancelRecording()
   })
 })

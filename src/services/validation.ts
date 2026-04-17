@@ -97,7 +97,7 @@ export type TtsVoicesResponse = z.infer<typeof TtsVoicesResponseSchema>
 export const MemoryHitSchema = z.object({
   id: z.string(),
   score: z.number(),
-  metadata: z.record(z.any()),
+  metadata: z.record(z.string(), z.any()),
 })
 export type MemoryHit = z.infer<typeof MemoryHitSchema>
 

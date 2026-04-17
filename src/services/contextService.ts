@@ -9,6 +9,7 @@
  */
 
 import { getWorkingMemory, searchMemory } from './apiClient';
+import { getBackendBaseUrl } from './backendUrl';
 
 export type ServerContext = {
   layer2_identity?: Record<string, unknown> | null;
@@ -27,7 +28,7 @@ export async function getServerContext(
   userId: string,
   query?: string
 ): Promise<ServerContext> {
-  const base = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
+  const base = getBackendBaseUrl()
 
   // Parallel fetches: working memory (Redis) + knowledge summary (Postgres)
   const workingPromise = getWorkingMemory(userId).catch((e) => {

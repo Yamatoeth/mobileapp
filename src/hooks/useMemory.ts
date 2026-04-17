@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-const DEFAULT_API = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000') + '/api/v1';
+import { getBackendBaseUrl } from '../services/backendUrl';
+
+const DEFAULT_API = `${getBackendBaseUrl()}/api/v1`;
 
 export type MemoryItem = {
   id?: string;

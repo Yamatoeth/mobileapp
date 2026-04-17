@@ -17,52 +17,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 export type WakeCallback = () => void
 
-/**
- * Porcupine module interface for dynamic import
- */
-interface PorcupineManager {
-  start: (callback: (keywordIndex: number) => void) => Promise<void>
-  stop: () => Promise<void>
-  delete: () => Promise<void>
-}
-
-interface PorcupineModule {
-  PorcupineManager: {
-    fromKeywordPaths: (
-      accessKey: string,
-      keywordPaths: string[],
-      sensitivities: number[]
-    ) => Promise<PorcupineManager>
-  }
-}
-
-const runtimeImport = new Function(
-  'moduleName',
-  'return import(moduleName)'
-) as (moduleName: string) => Promise<{ default: PorcupineModule }>
-
 export function useWakeWord() {
   const [available, setAvailable] = useState(false)
   const [listening, setListening] = useState(false)
-  const engineRef = useRef<PorcupineModule | null>(null)
   const callbackRef = useRef<WakeCallback | null>(null)
 
   useEffect(() => {
     let mounted = true;
 
     async function init() {
-      try {
-        // Try to dynamically import the native Porcupine module if present.
-        // This keeps the JS bundle runnable even without the native dependency.
-        const mod = await runtimeImport('@picovoice/porcupine-react-native');
-        if (!mounted) return;
-        engineRef.current = mod;
-        setAvailable(true);
-      } catch (err) {
-        // Not available in this environment — log for developers.
-        // console.warn('Wake-word engine not available:', err);
-        setAvailable(false);
-      }
+      if (!mounted) return
+      setAvailable(false)
     }
 
     init();
@@ -81,63 +46,10 @@ export function useWakeWord() {
       setListening(false);
       return;
     }
-
-    try {
-      const porcupine = engineRef.current;
-      if (!porcupine) return;
-
-      // The native API differs; this is a best-effort wrapper that assumes
-      // the typical Porcupine RN usage. Developers should adapt to the
-      // exact API after installing the native module.
-      if (porcupine.PorcupineManager) {
-        // Example expected API (porcupine-react-native):
-        // const manager = await porcupine.PorcupineManager.fromKeywordPaths(accessKey, [keywordPath], [sensitivity]);
-        // manager.start((keywordIndex) => { callbackRef.current?.(); });
-        // Save manager to engineRef.current.manager
-        const accessKey = process.env.PICOVOICE_ACCESS_KEY || ''
-        const manager = await porcupine.PorcupineManager.fromKeywordPaths(accessKey, [], [])
-        // store manager
-        ;(engineRef.current as any).manager = manager
-        manager.start((keywordIndex: number) => {
-          callbackRef.current?.()
-        })
-        setListening(true)
-        return
-      }
-
-      // If module exposes a simple `start` function
-      if (typeof porcupine.start === 'function') {
-        porcupine.start((idx: number) => callbackRef.current?.());
-        setListening(true);
-        return;
-      }
-
-      console.warn('Wake-word native module loaded but API is unexpected.');
-    } catch (err) {
-      console.error('Failed to start wake-word engine:', err);
-      setListening(false);
-    }
   }, [available]);
 
   const stop = useCallback(async () => {
-    try {
-      const porcupine = engineRef.current;
-      if (!porcupine) {
-        setListening(false);
-        return;
-      }
-
-      if (porcupine.PorcupineManager && porcupine.manager) {
-        await porcupine.manager.stop();
-        await porcupine.manager.release();
-      } else if (typeof porcupine.stop === 'function') {
-        porcupine.stop();
-      }
-    } catch (err) {
-      console.error('Failed to stop wake-word engine:', err);
-    } finally {
-      setListening(false);
-    }
+    setListening(false)
   }, []);
 
   return {
