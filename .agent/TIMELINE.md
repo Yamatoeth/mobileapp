@@ -67,7 +67,7 @@ Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all o
 - [ ] GitHub repo with branch protection
 
 **Week 2: Voice Recording**
-- [X] `expo-av` audio recording at 16kHz WAV
+- [~] `expo-audio` migration for recording/playback; current client still uses temporary `expo-av` compatibility
 - [X] Microphone permission request and handling
 - [X] Hold-to-talk button with press/release states
 - [X] Visual feedback during recording (waveform animation)
@@ -76,12 +76,12 @@ Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all o
 **Week 3: STT + LLM**
 - [X] Deepgram streaming transcription endpoint
 - [X] WebSocket connection (iPhone ↔ backend) for audio streaming
-- [X] GPT-4o integration with basic system prompt
+- [X] Groq LLM integration behind provider boundary
 - [X] Streaming LLM response back to client
 - [~] Conversation displayed as text on screen
 
 **Week 4: TTS + End-to-End**
-- [X] ElevenLabs TTS configured with JARVIS voice
+- [X] Deepgram Aura TTS configured behind provider boundary
 - [X] Streaming TTS audio back to iPhone
 - [X] Audio playback via `expo-av`
 - [ ] End-to-end latency test: target < 2 seconds
@@ -110,7 +110,7 @@ Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all o
 - [ ] Tested in real conditions: 45 minutes without errors
 
 **Week 7: KB Population**
-- [X] Parse onboarding conversation and extract structured facts via GPT-4o
+- [X] Parse onboarding conversation and extract structured facts via provider-backed extractor
 - [X] Write extracted facts into all 6 KB tables
 - [X] Review screen: user sees what JARVIS learned and corrects it
 - [X] Knowledge Dashboard showing all 6 domains
@@ -146,7 +146,7 @@ Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all o
 
 **Week 11: Fact Extraction Pipeline**
 - [X] Celery worker runs after every conversation
-- [X] Transcription sent to GPT-4o with structured extraction prompt
+- [X] Transcription sent to provider-backed extractor with structured extraction prompt
 - [X] JSON of knowledge updates received and parsed
 - [X] Conflict resolution: higher confidence + more recent wins
 - [ ] All updates logged in `knowledge_updates`
@@ -305,7 +305,7 @@ Translated with DeepL.com (free version)
 | Voice latency > 2s | Medium | High | Stream everything; degrade to text if needed |
 | KB becomes inaccurate over time | Medium | High | Weekly review prompt; easy manual correction |
 | Fact extraction hallucinates wrong updates | Low | High | Confidence scoring; manual review for confidence < 0.6 |
-| LLM costs exceed budget | Medium | Medium | Cache frequent queries; GPT-4o-mini for extraction |
+| LLM costs exceed budget | Medium | Medium | Cache frequent queries; move simple extraction to cheaper Groq fallback |
 | App Store rejection | Low | High | No medical claims; wellness framing; privacy policy clear |
 | Feature creep delays Phase 1 | **High** | **High** | This file exists to prevent exactly this |
 | ContextBuilder not wired into the hot path | **Confirmed** | High | **Priority fix #1 this week** |

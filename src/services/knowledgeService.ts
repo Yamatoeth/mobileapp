@@ -15,12 +15,12 @@ type KnowledgeApplyResponse = {
 }
 
 export async function applyKBUpdates(updates: unknown[]) {
-  return apiClient.post<KnowledgeApplyResponse>('/api/v1/knowledge/apply', { updates })
+  return apiClient.post<KnowledgeApplyResponse>('/api/v1/kb/apply', { updates })
 }
 
 export async function listDomainItems(domain: string, userId: number | string) {
   return apiClient.get<KnowledgeListResponse>(
-    `/api/v1/knowledge/items/${encodeURIComponent(domain)}/${encodeURIComponent(String(userId))}`
+    `/api/v1/kb/items/${encodeURIComponent(domain)}/${encodeURIComponent(String(userId))}`
   )
 }
 

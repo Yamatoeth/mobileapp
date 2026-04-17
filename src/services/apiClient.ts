@@ -201,12 +201,7 @@ export async function getOrCreateUser(userId: string): Promise<User> {
   })
 }
 
-/**
- * Update user trust level
- */
-// `trust` concept removed in Phase 1 pivot; updateTrustLevel omitted
-
-// Biometric endpoints removed in pivot
+// Legacy user scoring and sensor endpoints are intentionally absent from Phase 1.
 
 // ============================================
 // Conversations
@@ -259,7 +254,7 @@ export async function getMessages(conversationId: string): Promise<Message[]> {
   )
 }
 
-// Intervention endpoints removed in pivot
+// Proactive coaching endpoints are intentionally absent from Phase 1.
 
 // ============================================
 // Memory & Context

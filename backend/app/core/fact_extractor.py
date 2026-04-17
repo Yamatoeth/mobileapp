@@ -2,9 +2,9 @@
 Fact extractor for transcripts -> structured KB updates
 
 This module exposes a primary function `extract_facts(transcript)` which
-attempts to use the OpenAI Chat Completions API to parse free-text
-transcripts into a compact JSON array of factual assertions. If OpenAI is not
-configured or the call fails, a lightweight rule-based fallback extracts
+attempts to use the configured LLM provider to parse free-text
+transcripts into a compact JSON array of factual assertions. If the provider
+is not configured or the call fails, a lightweight rule-based fallback extracts
 candidate facts from sentences.
 
 The output format is a list of objects like:
@@ -17,9 +17,9 @@ from typing import List, Dict, Any, Optional
 import logging
 import re
 import json
-import httpx
 
 from app.core.config import get_settings
+from app.providers import llm_provider
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -39,19 +39,23 @@ def _rule_based_extract(transcript: str) -> List[Dict[str, Any]]:
     sentences = re.split(r"(?<=[.!?])\s+", text)
 
     fact_patterns = [
-        # I live in ... / I'm in ...
-        (re.compile(r"\bI(?:'m| am) (?:from |in |based in )?(?P<object>.+?)(?:\.|$)", re.I), "lives_in"),
-        (re.compile(r"\bI(?:'m| am) (?:a |an )?(?P<object>.+?)(?:\.|$)", re.I), "identity"),
-        (re.compile(r"\bI (?:like|love|enjoy) (?P<object>.+?)(?:\.|$)", re.I), "likes"),
-        (re.compile(r"\bI (?:don't |do not )?(?:like|love|enjoy) (?P<object>.+?)(?:\.|$)", re.I), "dislikes"),
-        (re.compile(r"\bMy (?:favorite|favourite) (?P<object>.+?) is (?P<object2>.+?)(?:\.|$)", re.I), "preference"),
-        (re.compile(r"\bI met (?P<object>.+?)(?:\.|$)", re.I), "met_person"),
-        (re.compile(r"\bI (?:bought|purchased) (?P<object>.+?)(?:\.|$)", re.I), "purchased"),
+        (re.compile(r"\bmy name is (?P<object>.+?)(?:\.|$)", re.I), "identity", "name"),
+        (re.compile(r"\bmy goal is (?P<object>.+?)(?:\.|$)", re.I), "goals", "stated_goal"),
+        (re.compile(r"\bI (?:want|need|plan|aim) to (?P<object>.+?)(?:\.|$)", re.I), "goals", "stated_goal"),
+        (re.compile(r"\bI am (?:working on|building) (?P<object>.+?)(?:\.|$)", re.I), "projects", "active_project"),
+        (re.compile(r"\bI (?:live in|am from|am based in) (?P<object>.+?)(?:\.|$)", re.I), "identity", "home_base"),
+        (re.compile(r"\bI'm (?:from|in|based in) (?P<object>.+?)(?:\.|$)", re.I), "identity", "home_base"),
+        (re.compile(r"\bI(?:'m| am) (?:a |an )?(?P<object>.+?)(?:\.|$)", re.I), "identity", "self_description"),
+        (re.compile(r"\bI (?:like|love|enjoy) (?P<object>.+?)(?:\.|$)", re.I), "identity", "preference"),
+        (re.compile(r"\bI (?:don't |do not )?(?:like|love|enjoy) (?P<object>.+?)(?:\.|$)", re.I), "patterns", "aversion"),
+        (re.compile(r"\bMy (?:favorite|favourite) (?P<object>.+?) is (?P<object2>.+?)(?:\.|$)", re.I), "identity", "preference"),
+        (re.compile(r"\bI met (?P<object>.+?)(?:\.|$)", re.I), "relationships", "person"),
+        (re.compile(r"\bI (?:bought|purchased) (?P<object>.+?)(?:\.|$)", re.I), "finances", "purchase"),
     ]
 
     for s in sentences:
         s = s.strip()
-        for pattern, predicate in fact_patterns:
+        for pattern, domain, field_name in fact_patterns:
             m = pattern.search(s)
             if m:
                 obj = m.groupdict().get("object") or m.groupdict().get("object2")
@@ -59,8 +63,11 @@ def _rule_based_extract(transcript: str) -> List[Dict[str, Any]]:
                     obj = obj.strip().strip('.').strip()
                     facts.append({
                         "subject": "user",
-                        "predicate": predicate,
+                        "predicate": field_name,
                         "object": obj,
+                        "domain": domain,
+                        "field_name": field_name,
+                        "field_value": obj,
                         "source": "rule_fallback",
                         "confidence": 0.4,
                     })
@@ -69,91 +76,80 @@ def _rule_based_extract(transcript: str) -> List[Dict[str, Any]]:
     return facts
 
 
-async def _openai_extract(transcript: str) -> Optional[List[Dict[str, Any]]]:
-    """Use OpenAI Chat Completions to extract facts as JSON. Returns None on
+async def _llm_extract(transcript: str) -> Optional[List[Dict[str, Any]]]:
+    """Use the configured LLM provider to extract facts as JSON. Returns None on
     failure so caller can fallback.
     """
-    if not settings.openai_api_key:
+    if not settings.groq_api_key and not settings.test_mode:
         return None
 
     system = (
         "You are a JSON-extraction assistant. Given a user's transcript, "
         "extract concise factual assertions as a JSON array. Each item should "
-        "have keys: subject, predicate, object, confidence (0-1), and source. "
+        "have keys: domain, field_name, field_value, confidence (0-1), and source. "
+        "Allowed domains: identity, goals, projects, finances, relationships, patterns. "
         "Return ONLY valid JSON. If no facts, return an empty array."
     )
 
-    user_prompt = f"Transcript:\n{transcript}"
-
-    payload = {
-        "model": "gpt-4o",
-        "messages": [
+    messages = [
             {"role": "system", "content": system},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.0,
-        "max_tokens": 500,
-    }
-
-    url = "https://api.openai.com/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {settings.openai_api_key}",
-        "Content-Type": "application/json",
-    }
+            {"role": "user", "content": f"Transcript:\n{transcript}"},
+        ]
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(url, json=payload, headers=headers)
-            r.raise_for_status()
-            data = r.json()
-            content = data.get("choices", [])[0].get("message", {}).get("content", "")
-            # Attempt to parse JSON from the model output
-            try:
-                parsed = json.loads(content)
-                if isinstance(parsed, list):
-                    return parsed
-                # If model returned an object with a field, try to find it
-                if isinstance(parsed, dict):
-                    # heuristics: look for keys containing 'facts' or 'items'
-                    for k in ["facts", "items", "data"]:
-                        if k in parsed and isinstance(parsed[k], list):
-                            return parsed[k]
-            except json.JSONDecodeError:
-                # Try to extract JSON substring
-                m = re.search(r"(\[\s*\{.*\}\s*\])", content, re.S)
-                if m:
-                    try:
-                        return json.loads(m.group(1))
-                    except Exception:
-                        logger.exception("Failed to parse JSON substring from OpenAI output")
-            return None
+        content = await llm_provider.complete(messages)
+        try:
+            parsed = json.loads(content)
+            if isinstance(parsed, list):
+                return parsed
+            if isinstance(parsed, dict):
+                for key in ["facts", "items", "data"]:
+                    if isinstance(parsed.get(key), list):
+                        return parsed[key]
+        except json.JSONDecodeError:
+            match = re.search(r"(\[\s*\{.*\}\s*\])", content, re.S)
+            if match:
+                try:
+                    return json.loads(match.group(1))
+                except Exception:
+                    logger.exception("Failed to parse JSON substring from LLM output")
+        return None
     except Exception:
-        logger.exception("OpenAI fact extraction failed")
+        logger.exception("LLM fact extraction failed")
         return None
 
 
 async def extract_facts(transcript: str) -> List[Dict[str, Any]]:
-    """Primary entrypoint: try OpenAI extractor, fall back to rules.
+    """Primary entrypoint: try provider extraction, fall back to rules.
     Returns a list of fact dicts.
     """
-    # Try OpenAI extraction first
+    # Try provider extraction first
     try:
-        ai_result = await _openai_extract(transcript)
+        ai_result = await _llm_extract(transcript)
         if ai_result is not None:
             # Ensure each fact has expected keys and types
             sanitized = []
             for item in ai_result:
                 if not isinstance(item, dict):
                     continue
-                subj = item.get("subject", "user")
-                pred = item.get("predicate") or item.get("relation") or "statement"
-                obj = item.get("object") or item.get("value") or ""
+                pred = item.get("field_name") or item.get("predicate") or item.get("relation") or "statement"
+                obj = item.get("field_value") or item.get("object") or item.get("value") or ""
+                domain = item.get("domain") or _domain_for_predicate(str(pred))
                 conf = float(item.get("confidence", 0.6)) if item.get("confidence") is not None else 0.6
-                sanitized.append({"subject": subj, "predicate": pred, "object": obj, "confidence": conf, "source": "openai"})
+                sanitized.append({
+                    "subject": item.get("subject", "user"),
+                    "predicate": pred,
+                    "object": obj,
+                    "domain": domain,
+                    "field_name": pred,
+                    "field_value": obj,
+                    "confidence": conf,
+                    "source": item.get("source", "llm"),
+                })
             if sanitized:
                 return sanitized
     except Exception:
-        logger.exception("OpenAI extraction attempt raised")
+        logger.exception("Provider extraction attempt raised")
 
     # Fallback: rule-based
     try:
@@ -163,16 +159,33 @@ async def extract_facts(transcript: str) -> List[Dict[str, Any]]:
         return []
 
 
+def _domain_for_predicate(predicate: str) -> str:
+    predicate = predicate.lower()
+    if any(token in predicate for token in ("goal", "target", "ambition")):
+        return "goals"
+    if any(token in predicate for token in ("project", "building", "working")):
+        return "projects"
+    if any(token in predicate for token in ("finance", "income", "expense", "purchase", "debt", "investment")):
+        return "finances"
+    if any(token in predicate for token in ("person", "relationship", "met")):
+        return "relationships"
+    if any(token in predicate for token in ("habit", "pattern", "aversion", "trigger")):
+        return "patterns"
+    return "identity"
+
+
 def facts_to_kb_updates(facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Transform extracted facts into KB update payloads suitable for
     persistence. This is a thin mapping and can be adapted to your DB schema.
     """
     updates = []
     for f in facts:
+        field_name = f.get("field_name") or f.get("predicate", "statement")
+        field_value = f.get("field_value") or f.get("object", "")
         updates.append({
-            "subject": f.get("subject", "user"),
-            "predicate": f.get("predicate", "statement"),
-            "object": f.get("object", ""),
+            "domain": f.get("domain") or _domain_for_predicate(str(field_name)),
+            "field_name": field_name,
+            "field_value": field_value,
             "confidence": float(f.get("confidence", 0.5)),
             "source": f.get("source", "extractor"),
         })

@@ -1,12 +1,12 @@
 Dev Client & Native Modules Setup
 =================================
 
-Quick steps to build a development client and fix native-module runtime errors (Reanimated, Skia, Expo audio/video):
+Quick steps to build a development client and fix native-module runtime errors (Reanimated, Skia, Expo audio):
 
 1) Install native deps (already done via `expo install` for this repo):
 
    ```bash
-   npx expo install react-native-reanimated react-native-gesture-handler @shopify/react-native-skia expo-audio expo-video
+   npx expo install react-native-reanimated react-native-gesture-handler @shopify/react-native-skia expo-audio expo-av
    ```
 
 2) Clear Metro cache and restart:
@@ -30,5 +30,6 @@ Quick steps to build a development client and fix native-module runtime errors (
 4) Rebuild after installing native packages. Restart the dev client/device after each native change.
 
 Notes:
-- `expo-audio` / `expo-video` replace `expo-av` subsets — this project includes a compatibility wrapper `src/services/audioCompat.ts` so code runs with either package during migration.
+- Phase 1 does not include `expo-location`, `expo-calendar`, or `expo-video`.
+- `expo-audio` is the target recording package. `expo-av` remains temporarily for the current recorder/playback implementation until the client migration is completed.
 - For `react-native-reanimated`, ensure `babel.config.js` includes `'react-native-reanimated/plugin'` as last plugin (this repo already has it). A full app restart is required after installing Reanimated.

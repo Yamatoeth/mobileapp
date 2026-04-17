@@ -1,37 +1,41 @@
 """
-Celery task wiring for background fact extraction and KB updates.
+Celery-aware durable fact extraction.
 
-This module exposes `extract_facts_task` which is registered as a Celery
-task when Celery is installed/configured. If Celery is not available, it
-also exposes a synchronous function `run_extract_facts` which can be called
-directly (useful for development or environments without Celery).
-
-The task performs these steps:
- 1. Extract structured facts from a transcript using `fact_extractor`.
- 2. Persist KB entries into Redis under `kb_entries`.
- 3. Create embeddings for objects and upsert into Pinecone (episodic memory).
-
-This implementation is best-effort and logs failures without raising so
-that background workers don't crash on partial failures.
+Extracted facts are written to PostgreSQL domain tables and logged in
+`knowledge_updates`. Redis is refreshed only as a cache.
 """
-from typing import List, Dict, Any, Optional
-import os
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Optional
 import asyncio
 import logging
+import os
 import uuid
 
-from app.core.fact_extractor import extract_facts, facts_to_kb_updates
-from app.db.redis_client import redis_client
-from app.db.pinecone_client import pinecone_client, get_pinecone
-from app.services.openai_service import openai_service
+from sqlalchemy import select
+
 from app.core.config import get_settings
+from app.core.fact_extractor import extract_facts, facts_to_kb_updates
+from app.db import models
+from app.db.database import async_session_maker
+from app.db.pinecone_client import pinecone_client, get_pinecone
+from app.db.redis_client import redis_client
+from app.providers import embedding_provider
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+MODEL_BY_DOMAIN = {
+    "identity": models.KnowledgeIdentity,
+    "goals": models.KnowledgeGoals,
+    "projects": models.KnowledgeProjects,
+    "finances": models.KnowledgeFinances,
+    "relationships": models.KnowledgeRelationships,
+    "patterns": models.KnowledgePatterns,
+}
 
-# Try to register a Celery task if Celery is available. Otherwise provide a
-# synchronous runner that can be invoked directly.
+
 try:
     from celery import Celery
 
@@ -39,93 +43,212 @@ try:
     broker = os.environ.get("CELERY_BROKER_URL", os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
     celery_app = Celery("jarvis_tasks", broker=broker)
 
-    @celery_app.task(name="jarvis.extract_facts")
-    def extract_facts_task(transcript: str, user_id: str) -> Dict[str, Any]:
-        """Celery task wrapper — runs the async worker synchronously via asyncio.run."""
-        try:
-            result = asyncio.run(run_extract_facts(transcript, user_id))
-            return {"status": "ok", "result": result}
-        except Exception as e:
-            logger.exception("extract_facts_task failed: %s", e)
-            return {"status": "error", "error": str(e)}
+    @celery_app.task(
+        bind=True,
+        name="jarvis.extract_facts",
+        autoretry_for=(Exception,),
+        retry_backoff=True,
+        retry_kwargs={"max_retries": 3},
+    )
+    def extract_facts_task(
+        self,
+        transcript: str,
+        user_id: str,
+        conversation_id: str | None = None,
+    ) -> dict[str, Any]:
+        return asyncio.run(run_extract_facts(transcript, user_id, conversation_id))
 
 except Exception:
     CELERY_AVAILABLE = False
     celery_app = None
-    logger.info("Celery not available; tasks will run synchronously")
+    logger.info("Celery not available; fact extraction will run as an async background task")
 
 
-async def _persist_kb_updates(user_id: str, updates: List[Dict[str, Any]]) -> int:
-    """Persist KB updates into Redis and upsert embeddings into Pinecone.
-
-    Returns the number of entries added.
-    """
-    if not updates:
-        return 0
-
-    try:
-        existing = await redis_client.get_working_memory(user_id, "kb_entries") or []
-        new_entries = []
-        for u in updates:
-            entry = {
-                "id": str(uuid.uuid4()),
-                "title": u.get("predicate")[:120] if u.get("predicate") else "",
-                "content": u.get("object")[:2000] if u.get("object") else "",
-                "metadata": {"confidence": u.get("confidence", 0.5), "source": u.get("source", "extractor")},
-            }
-            new_entries.append(entry)
-
-        combined = new_entries + existing
-        await redis_client.set_working_memory(user_id, "kb_entries", combined)
-
-        # Upsert embeddings to Pinecone if available and OpenAI configured
-        if pinecone_client.is_configured and settings.openai_api_key:
-            pc = get_pinecone()
-            for entry in new_entries:
-                text = entry.get("content") or entry.get("title")
-                if not text:
-                    continue
-                emb = await openai_service.embed_text(text)
-                if emb:
-                    try:
-                        await pc.upsert_memory(memory_id=entry["id"], embedding=emb, metadata={"user_id": user_id, **entry.get("metadata", {})})
-                    except Exception:
-                        logger.exception("Failed to upsert memory for entry %s", entry.get("id"))
-
-        return len(new_entries)
-
-    except Exception:
-        logger.exception("Failed to persist KB updates")
-        return 0
+async def _ensure_user(session, user_id: str) -> None:
+    user = await session.get(models.User, user_id)
+    if user is not None:
+        return
+    session.add(
+        models.User(
+            id=user_id,
+            email=f"user-{user_id}@local.invalid",
+            hashed_password="!",
+            full_name=f"User {user_id[:8]}",
+        )
+    )
+    await session.flush()
 
 
-async def run_extract_facts(transcript: str, user_id: str) -> Dict[str, Any]:
-    """Async runner: extract facts and persist them. Returns summary dict."""
-    try:
-        facts = await extract_facts(transcript)
-        if not facts:
-            return {"facts_extracted": 0}
+async def _apply_update(
+    *,
+    session,
+    user_id: str,
+    conversation_id: str | None,
+    update: dict[str, Any],
+) -> bool:
+    domain = str(update.get("domain") or "identity")
+    model_cls = MODEL_BY_DOMAIN.get(domain)
+    if model_cls is None:
+        logger.warning("Skipping extracted fact with unknown domain=%s", domain)
+        return False
 
-        kb_updates = facts_to_kb_updates(facts)
-        added = await _persist_kb_updates(user_id, kb_updates)
-        return {"facts_extracted": len(facts), "kb_entries_added": added}
-    except Exception:
-        logger.exception("run_extract_facts failed")
-        return {"facts_extracted": 0}
+    field_name = str(update.get("field_name") or "statement")[:128]
+    field_value = str(update.get("field_value") or "").strip()
+    if not field_value:
+        return False
 
+    incoming_confidence = float(update.get("confidence", 0.5) or 0.5)
+    source = str(update.get("source") or "conversation")[:50]
 
-def schedule_extract_facts(transcript: str, user_id: str) -> Optional[Dict[str, Any]]:
-    """Schedule or run the extraction depending on Celery availability.
+    result = await session.execute(
+        select(model_cls).where(
+            model_cls.user_id == user_id,
+            model_cls.field_name == field_name,
+        )
+    )
+    existing = result.scalars().first()
 
-    If Celery is available, enqueue the task and return task id. Otherwise run
-    synchronously and return the result.
-    """
-    if CELERY_AVAILABLE and celery_app is not None:
-        task = extract_facts_task.delay(transcript, user_id)
-        return {"task_id": task.id}
+    old_value = None
+    should_write = existing is None
+    if existing is not None:
+        old_value = existing.field_value
+        existing_confidence = float(existing.confidence or 0.0)
+        should_write = incoming_confidence >= existing_confidence
+
+    if not should_write:
+        return False
+
+    if existing is None:
+        session.add(
+            model_cls(
+                user_id=user_id,
+                field_name=field_name,
+                field_value=field_value,
+                confidence=incoming_confidence,
+                source=source,
+                last_updated=datetime.utcnow(),
+            )
+        )
     else:
-        # Blocking run
-        return asyncio.run(run_extract_facts(transcript, user_id))
+        existing.field_value = field_value
+        existing.confidence = incoming_confidence
+        existing.source = source
+        existing.last_updated = datetime.utcnow()
+
+    session.add(
+        models.KnowledgeUpdate(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            table_name=model_cls.__tablename__,
+            field_name=field_name,
+            old_value=old_value,
+            new_value=field_value,
+            confidence=incoming_confidence,
+            source=source,
+        )
+    )
+    return True
 
 
-__all__ = ["schedule_extract_facts", "run_extract_facts", "extract_facts_task"]
+async def _refresh_redis_summary(user_id: str) -> None:
+    try:
+        async with async_session_maker() as session:
+            parts: list[str] = []
+            for label, model_cls in MODEL_BY_DOMAIN.items():
+                result = await session.execute(
+                    select(model_cls)
+                    .where(model_cls.user_id == user_id)
+                    .order_by(model_cls.confidence.desc())
+                    .limit(3)
+                )
+                rows = result.scalars().all()
+                if rows:
+                    facts = "; ".join(f"{row.field_name}: {row.field_value}" for row in rows)
+                    parts.append(f"{label}: {facts}")
+        if parts:
+            await redis_client.set_working_memory(user_id, "kb_summary", " | ".join(parts), ttl_seconds=3600)
+    except Exception:
+        logger.exception("Failed to refresh Redis KB summary cache")
+
+
+async def _upsert_episodic_memory(user_id: str, updates: list[dict[str, Any]]) -> None:
+    if not pinecone_client.is_configured:
+        return
+
+    pc = get_pinecone()
+    for update in updates:
+        text = str(update.get("field_value") or "")
+        if not text:
+            continue
+        embedding = await embedding_provider.embed_text(text)
+        if not embedding:
+            continue
+        try:
+            await pc.upsert_memory(
+                memory_id=str(uuid.uuid4()),
+                embedding=embedding,
+                metadata={
+                    "user_id": user_id,
+                    "domain": update.get("domain"),
+                    "field_name": update.get("field_name"),
+                    "content": text,
+                    "source": update.get("source", "conversation"),
+                },
+            )
+        except Exception:
+            logger.exception("Failed to upsert episodic memory")
+
+
+async def run_extract_facts(
+    transcript: str,
+    user_id: str,
+    conversation_id: str | None = None,
+) -> dict[str, Any]:
+    facts = await extract_facts(transcript)
+    updates = facts_to_kb_updates(facts)
+    if not updates:
+        return {"facts_extracted": 0, "updates_applied": 0}
+
+    applied = 0
+    async with async_session_maker() as session:
+        await _ensure_user(session, user_id)
+        for update in updates:
+            if await _apply_update(
+                session=session,
+                user_id=user_id,
+                conversation_id=conversation_id,
+                update=update,
+            ):
+                applied += 1
+        await session.commit()
+
+    await _refresh_redis_summary(user_id)
+    await _upsert_episodic_memory(user_id, updates)
+
+    return {"facts_extracted": len(facts), "updates_applied": applied}
+
+
+def _run_async_background(coro) -> None:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(coro)
+        return
+    loop.create_task(coro)
+
+
+def schedule_extract_facts(
+    transcript: str,
+    user_id: str,
+    conversation_id: str | None = None,
+) -> Optional[dict[str, Any]]:
+    if CELERY_AVAILABLE and celery_app is not None:
+        task = extract_facts_task.delay(transcript, user_id, conversation_id)
+        return {"task_id": task.id}
+
+    logger.info("Scheduling local async fact extraction fallback for user_id=%s", user_id)
+    _run_async_background(run_extract_facts(transcript, user_id, conversation_id))
+    return {"scheduled": "local_async"}
+
+
+__all__ = ["schedule_extract_facts", "run_extract_facts", "extract_facts_task", "celery_app"]

@@ -41,8 +41,8 @@ Behind that simplicity:
 
 1. Your voice is transcribed by Deepgram (streaming, under 300ms)
 2. The Context Builder assembles everything JARVIS knows about you — your goals, your active projects, your recent conversations, your patterns
-3. GPT-4o generates a response as a specific entity with a specific character, not a generic assistant
-4. ElevenLabs voices the response and streams it back to your iPhone
+3. Groq generates a response through the backend LLM provider boundary
+4. Deepgram Aura voices the response and streams it back to your iPhone
 5. Everything said is processed by a background job that extracts new facts and updates the Knowledge Base
 
 **Total time from speech end to audio start: under 2 seconds.**
@@ -119,9 +119,9 @@ FastAPI Backend
       │       ├── Redis       ← Last 30 conversations
       │       └── Pinecone    ← Semantic memory (full history)
       │
-      ├── GPT-4o (4-layer prompt: character + identity + recent + relevant)
+      ├── Groq LLM provider (4-layer prompt: character + identity + recent + relevant)
       │
-      └── ElevenLabs TTS (streaming audio back to iPhone)
+      └── Deepgram Aura TTS (streaming audio back to iPhone)
             │
             ▼
       Background: Celery fact-extraction job
@@ -162,10 +162,10 @@ JARVIS has a specific character enforced at the prompt level.
 ## Tech Stack
 
 **iPhone app:** React Native + Expo, TypeScript, Zustand  
-**Backend:** FastAPI + Python 3.11, async throughout  
+**Backend:** FastAPI + Python 3.12, async throughout  
 **STT:** Deepgram (streaming)  
-**LLM:** GPT-4o  
-**TTS:** ElevenLabs  
+**LLM:** Groq (`openai/gpt-oss-120b` by default)  
+**TTS:** Deepgram Aura  
 **Working memory:** Redis (last 30 conversations, 30-day TTL)  
 **Episodic memory:** Pinecone (semantic search over full history)  
 **Knowledge Base:** PostgreSQL (structured personal knowledge graph)  
@@ -196,7 +196,7 @@ Full roadmap: **[TIMELINE.md](./TIMELINE.md)**
 
 **User controls:** Full data export as JSON. One-click complete deletion. Per-domain opt-out (you can exclude financial data from storage, for example).
 
-All data encrypted at rest (AES-256). All traffic over HTTPS/WSS (TLS 1.3). OpenAI called with training data opt-out enabled.
+All data encrypted at rest (AES-256). All traffic over HTTPS/WSS (TLS 1.3). OpenAI is used for embeddings only in Phase 1.
 
 ---
 

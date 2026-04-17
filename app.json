@@ -29,9 +29,7 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "package": "com.jarvis.app",
       "googleServicesFile": "./google-services.json"
@@ -39,15 +37,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-font",
-      "expo-secure-store",
-      "expo-av",
-      "expo-location",
-      "expo-notifications",
-      "expo-audio",
-      "expo-video"
-    ],
+    "plugins": ["expo-font", "expo-secure-store", "expo-av", "expo-notifications", "expo-audio"],
     "extra": {
       "eas": {
         "projectId": "70cf148b-921e-4a06-ab02-c0ee72b3a1bc"

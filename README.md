@@ -1,22 +1,18 @@
 # JARVIS Voice Assistant
 
-Cross-platform (Expo/React Native) client plus FastAPI backend that turns speech into contextual answers and speaks them back. The stack combines:
+This project is wired around one Phase 1 backend-owned voice stack:
 
-- **Groq** — streaming speech-to-text and Llama 3.3 chat generation
-- **Kokoro ONNX** — fully offline, device-hosted text-to-speech
-- **Deepgram** — optional fallback STT for PCM/WAV payloads
-- **PostgreSQL + Redis** — working/episodic memory stores (optional for local dev)
+- `Deepgram Flux/Nova-3` for speech-to-text
+- `Groq` for low-latency, low-cost chat generation
+- `Deepgram Aura` for hosted text-to-speech
+- `Kokoro ONNX` as a local development fallback only
+- Expo mobile app as the microphone + playback client
 
 Use this repo when you need a self-hosted voice assistant that can run without OpenAI or cloud TTS dependencies.
 
-## System Overview
-| Layer | Responsibilities |
-| --- | --- |
-| Expo mobile app | Microphone capture, push token registration, playback, offline text chat fallback |
-| Voice pipeline service | WebSocket client, recorder, wake-word state, local buffering |
-| FastAPI backend | `/api/v1/ws/voice/{userId}` streaming endpoint, `/ai/process` REST entrypoint |
-| Services | STT (Groq/Deepgram), Context builder (Postgres/Redis/Pinecone optional), LLM (Groq), TTS (Kokoro) |
-| Assets | Kokoro ONNX model + voices, optional Pinecone index, Postgres migrations |
+- Text ask -> text answer with no provider keys, using local fallback mode
+- Voice ask -> AI answer when `DEEPGRAM_API_KEY` and `GROQ_API_KEY` are configured
+- Spoken AI reply through Deepgram Aura, with Kokoro available for local fallback
 
 ```mermaid
 graph LR
@@ -42,42 +38,33 @@ graph LR
 - Physical devices via Expo Dev Client (requires `expo run:<platform>`)
 - Backend on macOS/Linux with Python 3.11+; Docker Compose for consolidated infra
 
-## Prerequisites
-### Tooling
-- Node.js 20+, npm 10+, Expo CLI (`npx expo install --check`)
-- Python 3.11+, uv or pip, virtualenv, Poetry optional
-- (Optional) Docker + Docker Compose for Postgres/Redis
+GROQ_API_KEY=your_groq_key
+GROQ_CHAT_MODEL=openai/gpt-oss-120b
+GROQ_FALLBACK_MODEL=llama-3.1-8b-instant
+DEEPGRAM_API_KEY=your_deepgram_key
+DEEPGRAM_STT_MODEL=nova-3
+DEEPGRAM_TTS_MODEL=aura-2-thalia-en
 
-### Accounts & Keys
-| Var | Purpose |
-| --- | --- |
-| `GROQ_API_KEY` | Required for production voice flow (STT + LLM) |
-| `EXPO_PUBLIC_API_URL` | Mobile app base URL (`http://10.0.2.2:8000` for Android emu, `http://127.0.0.1:8000` for iOS) |
-| `KOKORO_MODEL_PATH`, `KOKORO_VOICES_PATH` | Absolute backend paths to the downloaded ONNX + voices files |
-| `DEEPGRAM_API_KEY` | Optional fallback STT |
-| `PINECONE_API_KEY` | Optional episodic memory |
+# Local development fallback only
+KOKORO_MODEL_PATH=/absolute/path/to/backend/models/kokoro/kokoro-v1.0.int8.onnx
+KOKORO_VOICES_PATH=/absolute/path/to/backend/models/kokoro/voices-v1.0.bin
+KOKORO_DEFAULT_VOICE=af_sarah
+KOKORO_DEFAULT_LANGUAGE=en-us
+KOKORO_DEFAULT_SPEED=1.0
 
-## Environment Setup
-1. **Frontend** — copy `.env.example` once it exists or mirror the snippet below into `.env`:
-   ```env
-   EXPO_PUBLIC_API_URL=http://10.0.2.2:8000
-   EXPO_PUBLIC_GROQ_API_KEY=<optional for text-only>
-   ```
-   Sensitive keys (OpenAI, Groq) should be stored via Expo SecureStore at runtime; do **not** persist them in AsyncStorage.
-2. **Backend** — create `backend/.env`:
-   ```env
-   app_env=development
-   debug=true
-   secret_key=replace-with-local-dev-secret
-   database_url=postgresql+asyncpg://jarvis:jarvis_dev@localhost:5432/jarvis_db
-   redis_url=redis://localhost:6379/0
-   GROQ_API_KEY=<required for voice>
-   KOKORO_MODEL_PATH=/absolute/path/to/backend/models/kokoro/kokoro-v1.0.int8.onnx
-   KOKORO_VOICES_PATH=/absolute/path/to/backend/models/kokoro/voices-v1.0.bin
-   KOKORO_DEFAULT_VOICE=af_sarah
-   ```
-3. **Kokoro Assets** — run `scripts/download_kokoro.sh` (coming soon) or manually place the ONNX + voices files under `backend/models/kokoro/`. These binaries should **not** be committed; use Git LFS or local download scripts.
-4. **Optional infra** — run `docker-compose up -d postgres redis` to start dependencies locally.
+PINECONE_API_KEY=
+OPENAI_API_KEY= # embeddings only unless explicitly reconfigured
+```
+
+Notes:
+
+- Postgres is the durable Knowledge Base. Redis is cache/working memory.
+- `OPENAI_API_KEY` is not required for the active LLM path; it is used for embeddings.
+- Kokoro runs locally and does not require external TTS auth, but it is not the production default.
+
+## Run
+
+Backend:
 
 ## Running Locally
 ### Backend
@@ -99,15 +86,12 @@ npm start # choose platform from Expo CLI
 ### Docker Compose
 The root `docker-compose.yml` launches backend + Postgres + Redis. Set the same env vars or mount `backend/.env`.
 
-## Testing & QA
-| Command | Purpose |
-| --- | --- |
-| `npm run lint` / `npm run type-check` | Frontend lint + TS safety |
-| `npm test` | React Native unit tests |
-| `cd backend && pytest` | Backend unit/integration tests |
-| `node scripts/ws_test_node.js` or `python scripts/ws_test_py.py` | Manual WebSocket latency test (see `scripts/WSTEST.md`) |
-
-Add a GitHub Actions workflow or local pre-push hook that runs all commands above.
+1. Open the app.
+2. Type into the composer to verify backend ask/answer works.
+3. Hold the orb to record.
+4. Release to send audio to the backend.
+5. Backend transcribes with Deepgram, builds server-side context, generates the response with Groq, synthesizes with Deepgram Aura, and returns audio for playback.
+6. After the conversation completes, a Celery task extracts durable facts into PostgreSQL and logs `knowledge_updates`.
 
 ## Troubleshooting
 - **Text works, voice silent** — verify `GROQ_API_KEY` and Kokoro paths; backend logs should show `context_built` and `tts_generated` events.
@@ -115,9 +99,7 @@ Add a GitHub Actions workflow or local pre-push hook that runs all commands abov
 - **No speech output** — confirm `backend/models/kokoro` files are readable by the backend process.
 - **WebSocket auth** — implement the token handshake described in `plans/project-improvements.md` before exposing the endpoint publicly.
 
-## Roadmap & References
-- **Improvements** — see [`plans/project-improvements.md`](./plans/project-improvements.md) for prioritized security, architecture, and testing work.
-- **Deployment guidance** — [`backend/DEPLOYMENT_NOTES.md`](./backend/DEPLOYMENT_NOTES.md)
-- **WebSocket testing** — [`scripts/WSTEST.md`](./scripts/WSTEST.md)
-
-Have something to fix? File an issue referencing the roadmap item or open a PR with updated documentation + tests.
+- If text works but voice does not transcribe, check `DEEPGRAM_API_KEY`.
+- If text works and voice transcribes but no spoken reply plays, check Deepgram TTS settings first, then Kokoro fallback paths.
+- Android emulator should usually use `http://10.0.2.2:8000` for `EXPO_PUBLIC_API_URL`.
+- iOS simulator can usually use `http://127.0.0.1:8000`.

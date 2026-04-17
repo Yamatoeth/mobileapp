@@ -154,7 +154,7 @@ This guide covers deploying J.A.R.V.I.S. from local development to production.
    - New → Web Service
    - Connect GitHub repo
    - Name: `jarvis-backend`
-   - Environment: `Python 3.11`
+   - Environment: `Python 3.12`
    - Build Command: `pip install -r requirements.txt`
    - Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
@@ -376,8 +376,8 @@ This guide covers deploying J.A.R.V.I.S. from local development to production.
          "buildNumber": "1",
          "supportsTablet": false,
          "infoPlist": {
-           "NSHealthShareUsageDescription": "JARVIS monitors your biometric data to provide personalized health insights.",
-           "NSHealthUpdateUsageDescription": "JARVIS needs to read your health data to function."
+           "NSMicrophoneUsageDescription": "Allow JARVIS to access your microphone for voice interactions",
+           "ITSAppUsesNonExemptEncryption": false
          }
        }
      }
@@ -417,8 +417,8 @@ This guide covers deploying J.A.R.V.I.S. from local development to production.
    # Generate screenshots
    # Use iPhone 14 Pro Max simulator
    # Capture screenshots of:
-   # - Biometric dashboard
    # - Voice interaction
+   # - Knowledge-aware response
    # - Settings screen
    ```
 
@@ -426,24 +426,26 @@ This guide covers deploying J.A.R.V.I.S. from local development to production.
    - App Store Connect → My Apps → JARVIS
    - App Information:
      - Name: "JARVIS - AI Executive Assistant"
-     - Subtitle: "Biometric Performance Optimization"
-     - Category: Health & Fitness
+     - Subtitle: "Voice AI thinking partner"
+     - Category: Productivity
      - Privacy Policy URL: https://jarvis.app/privacy
 
 3. **Add Version**
    - Version: 1.0.0
    - Description:
      ```
-     JARVIS is your AI executive assistant that monitors your 
-     biometric data in real-time to optimize your performance.
+     JARVIS is your AI executive assistant and personal thinking
+     partner. Speak naturally, get direct answers, and let JARVIS
+     remember durable facts about your goals, projects, and preferences.
      
      Features:
-     • Real-time heart rate variability (HRV) monitoring
-     • Stress detection and intervention
      • Voice-based interaction
-     • Proactive health recommendations
+     • PostgreSQL-backed Knowledge Base
+     • Context-aware answers
+     • Optional future reminders
      
-     Requires Apple Watch for full functionality.
+     Phase 1 does not require Apple Watch, HealthKit, GPS location,
+     or calendar permissions.
      ```
 
 4. **Upload Build**
@@ -455,8 +457,8 @@ This guide covers deploying J.A.R.V.I.S. from local development to production.
 5. **Submit for Review**
    - App Store Connect → Submit for Review
    - Answer review questions:
-     - Uses HealthKit: Yes
-     - Is a medical app: No (wellness tool)
+     - Uses HealthKit: No
+     - Is a medical app: No
      - Export compliance: No (no encryption beyond standard)
 
 6. **Wait for Approval** (typically 24-48 hours)
@@ -760,7 +762,7 @@ eas build --platform ios --profile production
 
 **Frontend:**
 - [ ] Production API URL configured
-- [ ] HealthKit permissions tested
+- [ ] Microphone permission tested
 - [ ] Voice pipeline tested end-to-end
 - [ ] App icon and splash screen set
 - [ ] Privacy policy URL accessible

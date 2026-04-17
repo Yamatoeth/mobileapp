@@ -162,7 +162,7 @@ export function HoldToTalkButton({
     try {
       const success = await audioRecordingService.startRecording(handleLevelUpdate);
       if (success) {
-        console.log('[PIPELINE 1/7] 🎙️ Recording started — expo-av capturing audio');
+        console.log('[PIPELINE 1/7] Recording started — mobile recorder capturing audio');
         setIsRecording(true);
         startTime.current = Date.now();
         onRecordingStart?.();

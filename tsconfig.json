@@ -4,23 +4,11 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "src/*"
-      ],
-      "@shared/*": [
-        "shared/*"
-      ]
+      "@/*": ["src/*"],
+      "@shared/*": ["shared/*"]
     },
     "types": ["jest", "node"]
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    "shared/**/*.ts",
-    "nativewind-env.d.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "backend"
-  ]
+  "include": ["**/*.ts", "**/*.tsx", "shared/**/*.ts", "nativewind-env.d.ts"],
+  "exclude": ["node_modules", "backend"]
 }

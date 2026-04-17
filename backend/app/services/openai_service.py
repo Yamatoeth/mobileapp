@@ -1,7 +1,9 @@
 """
-Server-side OpenAI wrapper providing embedding helpers and streaming chat
-support. Other backend modules should import and reuse this for LLM
-interactions to keep API usage centralized and testable.
+Server-side OpenAI wrapper for embeddings.
+
+Phase 1 routes chat completions through the LLMProvider boundary. The legacy
+chat helpers remain for explicit reconfiguration only; they are not the default
+voice architecture.
 """
 from typing import List, Optional, AsyncGenerator, Dict, Any
 import logging
@@ -14,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIService:
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o", embed_model: str = "text-embedding-3-small"):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, embed_model: str = "text-embedding-3-small"):
         self.api_key = api_key or settings.openai_api_key
         self.model = model
         self.embed_model = embed_model
@@ -44,6 +46,8 @@ class OpenAIService:
         """Non-streaming chat completion. Returns assistant text."""
         if not self.api_key:
             raise RuntimeError("OpenAI API key not configured")
+        if not self.model:
+            raise RuntimeError("OpenAI chat is disabled; use the configured LLMProvider")
 
         url = "https://api.openai.com/v1/chat/completions"
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
@@ -67,6 +71,8 @@ class OpenAIService:
         """
         if not self.api_key:
             raise RuntimeError("OpenAI API key not configured")
+        if not self.model:
+            raise RuntimeError("OpenAI chat is disabled; use the configured LLMProvider")
 
         url = "https://api.openai.com/v1/chat/completions"
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}

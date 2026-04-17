@@ -28,9 +28,8 @@ from app.db.models import (
 )
 from sqlalchemy import select, desc
 from app.core.config import get_settings
-import httpx
-
 from app.services.conversation_memory import get_recent_turns
+from app.providers import embedding_provider
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -47,7 +46,6 @@ async def _fetch_character(user_id: str) -> Dict[str, Any]:
                 "user_id": user.id,
                 "full_name": user.full_name,
                 "email": user.email,
-                "trust_level": getattr(user, "trust_level", None),
             }
     except Exception as exc:
         logger.warning("Character lookup unavailable: %s", exc)
@@ -169,24 +167,8 @@ async def _fetch_knowledge_summary(user_id: str) -> Dict[str, Any]:
 
 
 async def _embed_text(text: str) -> Optional[List[float]]:
-    """Create an embedding for `text` using OpenAI embeddings API if configured."""
-    if not settings.openai_api_key:
-        return None
-
-    url = "https://api.openai.com/v1/embeddings"
-    payload = {"model": "text-embedding-3-small", "input": text}
-    headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
-
-    try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            r = await client.post(url, json=payload, headers=headers)
-            r.raise_for_status()
-            data = r.json()
-            embedding = data.get("data", [])[0].get("embedding")
-            return embedding
-    except Exception:
-        logger.exception("Embedding request failed")
-        return None
+    """Create an embedding for `text` through the configured provider boundary."""
+    return await embedding_provider.embed_text(text)
 
 
 async def _fetch_episodic(user_id: str, query: Optional[str], top_k: int = 5) -> List[Dict[str, Any]]:
@@ -202,7 +184,11 @@ async def _fetch_episodic(user_id: str, query: Optional[str], top_k: int = 5) ->
 
     try:
         pc = get_pinecone()
-        results = await pc.search_memories(query_embedding=embedding, top_k=top_k)
+        results = await pc.search_memories(
+            query_embedding=embedding,
+            top_k=top_k,
+            filter_dict={"user_id": user_id},
+        )
         return results
     except Exception:
         logger.exception("Pinecone search failed")

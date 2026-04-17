@@ -189,7 +189,7 @@ from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/knowledge", tags=["knowledge"])
+router = APIRouter(prefix="/api/v1/kb", tags=["knowledge"])
 
 class KnowledgeDomainResponse(BaseModel):
     domain: str
@@ -381,7 +381,7 @@ logger.info("LLM call",
 
 ```python
 def validate_before_llm_call(system_prompt: str, user_message: str) -> bool:
-    """Guard to call before every GPT-4o invocation."""
+    """Guard to call before every LLM provider invocation."""
     
     # Token budget
     estimated = (len(system_prompt) + len(user_message)) // 4
@@ -510,7 +510,7 @@ async def test_jarvis_response_references_knowledge_base():
     assert "ProjectX" in system_prompt
     
     # If using a real LLM call in testing, verify the response mentions it
-    # (with mocked OpenAI in CI, or real call in local testing)
+    # (with mocked provider calls in CI, or real calls in local testing)
 ```
 
 ### React Native test pattern
@@ -605,8 +605,8 @@ docs(rules): remove deprecated HealthKit references
 | Audio → backend (WS) | <200ms | 400ms | Check audio compression |
 | Deepgram STT (streaming) | <300ms | 700ms | Check Deepgram tier |
 | Context Builder (3 tiers) | <300ms | 500ms | Verify asyncio.gather() |
-| GPT-4o first token | <800ms | 1500ms | Verify streaming enabled |
-| ElevenLabs first audio chunk | <400ms | 800ms | Verify streaming enabled |
+| Groq first token | <800ms | 1500ms | Verify streaming enabled |
+| Deepgram Aura first audio chunk | <400ms | 800ms | Verify streaming enabled |
 | **Total end-to-end** | **<2.0s** | **3.0s** | **Degrade to text only** |
 
 ### Graceful degradation order
@@ -616,7 +616,7 @@ docs(rules): remove deprecated HealthKit references
 # 1. Skip Layer 4 (Pinecone) → context without episodic
 # 2. Truncate Layer 3 to 10 conversations instead of 30
 # 3. Minimal Layer 2 summary (3 fields instead of full)
-# 4. Text-only fallback (no ElevenLabs TTS) if latency > 3s
+# 4. Text-only fallback (no TTS) if latency > 3s
 # 5. NEVER: response without Layer 1 (character definition)
 ```
 
@@ -671,7 +671,7 @@ const reconnectWithBackoff = async (attempt: number = 0) => {
 ### Problem: LLM response too slow (> 800ms to first token)
 
 **Possible causes:**
-1. Streaming not enabled → verify `stream=True` in the OpenAI call
+1. Streaming not enabled → verify streaming in the LLM provider call
 2. Prompt too long → verify `validate_prompt_budget()` before the call
 3. Layer 4 (Pinecone) blocking → verify the timeout in `build_context()`
 
@@ -679,16 +679,16 @@ const reconnectWithBackoff = async (attempt: number = 0) => {
 ```python
 # Always stream
 async def stream_llm_response(messages: list, user_id: str):
-    async with openai_client.chat.completions.stream(
-        model="gpt-4o",
-        messages=messages,
+    async for chunk in llm_provider.stream_chat(
+        messages,
+        temperature=0.7,
         max_tokens=500,  # Limit for voice — keep responses short
-        stream=True,
-    ) as stream:
-        async for chunk in stream:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+    ):
+        yield chunk
 ```
+
+Provider implementations choose the concrete model, with Groq `openai/gpt-oss-120b`
+as the Phase 1 default.
 
 ### Problem: Fact extraction writes wrong information to the KB
 

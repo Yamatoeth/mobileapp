@@ -3,26 +3,9 @@
  * Central export for all UI components
  */
 
-// Biometric Components removed in pivot
-
-
 // Voice Components
 export { HoldToTalkButton } from './HoldToTalkButton';
 export { default as JarvisVoiceScreen } from './JarvisVoiceScreen';
 export { default as ParticleSphere } from './ParticleSphere';
 
-// Form Components
-// `LogForm` removed during pivot — use specialized health entry UI or restore if needed
-
-// State Indicator Components removed (pivot)
-
-// Calendar Components removed in pivot
-
-// Location Components
-export {
-  LocationPermissionCard,
-  CurrentLocation,
-  LocationBadge,
-  SavedLocationsList,
-  AddLocationForm,
-} from './LocationComponents';
+// Biometric, calendar, location, and health-log components are intentionally outside Phase 1.

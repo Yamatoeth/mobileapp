@@ -16,7 +16,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.db.base import Base
 # Import models so that Alembic's autogenerate can see them
 import app.db.models  # noqa: F401
-from app.db.models import User, BiometricReading, Conversation, Message, Intervention
 from app.core.config import get_settings
 
 settings = get_settings()

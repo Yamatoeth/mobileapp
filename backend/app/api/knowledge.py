@@ -1,376 +1,276 @@
 """
-Knowledge Base API (Layer 2)
+Knowledge Base API.
 
-Handles both Redis-backed CRUD (fast path) and PostgreSQL-backed
-structured KB updates (apply/extract endpoints).
-
-Endpoints:
- - GET    /api/v1/kb?user_id=...              list Redis KB entries
- - POST   /api/v1/kb                          create Redis KB entry
- - PUT    /api/v1/kb/{kb_id}                  update Redis KB entry
- - DELETE /api/v1/kb/{kb_id}                  delete Redis KB entry
- - GET    /api/v1/kb/summary?user_id=...       return KB summary
- - POST   /api/v1/kb/extract                  extract KB updates from transcript (LLM)
- - POST   /api/v1/kb/apply                    apply structured KB updates to PostgreSQL
- - GET    /api/v1/kb/items/{domain}/{user_id} list PostgreSQL KB items for a domain
+PostgreSQL is the durable source of truth for Phase 1 knowledge. Redis is used
+only by background extraction/context code as a cache for compact summaries.
 """
-import asyncio
-import json
-import os
-from datetime import datetime
-from typing import List, Optional
-from uuid import uuid4
+from __future__ import annotations
 
-import openai
+from datetime import datetime
+from typing import Any, Iterable, Optional
+
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.core import prompt_engine
+from app.core.fact_extractor import extract_facts, facts_to_kb_updates
+from app.db import models
 from app.db.database import async_session_maker
-from app.db.redis_client import redis_client
-import logging
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Pydantic models
-# ---------------------------------------------------------------------------
+MODEL_BY_DOMAIN = {
+    "identity": models.KnowledgeIdentity,
+    "goals": models.KnowledgeGoals,
+    "projects": models.KnowledgeProjects,
+    "finances": models.KnowledgeFinances,
+    "relationships": models.KnowledgeRelationships,
+    "patterns": models.KnowledgePatterns,
+}
+
 
 class KBUpdate(BaseModel):
     domain: str
-    user_id: int
+    user_id: str
     field_name: str
     field_value: str
-    confidence: float = Field(ge=0.0, le=1.0)
-    source: str
-    conversation_id: Optional[int] = None
+    confidence: float = Field(default=0.6, ge=0.0, le=1.0)
+    source: str = "manual"
+    conversation_id: Optional[str] = None
 
 
 class KBApplyRequest(BaseModel):
-    updates: List[KBUpdate]
+    updates: list[KBUpdate]
 
 
 class ExtractRequest(BaseModel):
-    user_id: int
+    user_id: str
     transcript: str
-    conversation_id: Optional[int] = None
+    conversation_id: Optional[str] = None
 
 
-# ---------------------------------------------------------------------------
-# Domain → SQLAlchemy model name map
-# ---------------------------------------------------------------------------
+def _model_for_domain(domain: str):
+    model_cls = MODEL_BY_DOMAIN.get(domain)
+    if model_cls is None:
+        raise HTTPException(status_code=400, detail=f"unknown domain: {domain}")
+    return model_cls
 
-MODEL_MAP = {
-    "identity": "KnowledgeIdentity",
-    "goals": "KnowledgeGoals",
-    "projects": "KnowledgeProjects",
-    "finances": "KnowledgeFinances",
-    "relationships": "KnowledgeRelationships",
-    "patterns": "KnowledgePatterns",
-}
 
-# ---------------------------------------------------------------------------
-# Redis-backed CRUD endpoints
-# ---------------------------------------------------------------------------
+def _serialize_row(domain: str, row: Any) -> dict[str, Any]:
+    return {
+        "id": getattr(row, "id", None),
+        "domain": domain,
+        "field_name": getattr(row, "field_name", None),
+        "field_value": getattr(row, "field_value", None),
+        "confidence": getattr(row, "confidence", None),
+        "source": getattr(row, "source", None),
+        "last_updated": getattr(row, "last_updated", None).isoformat()
+        if getattr(row, "last_updated", None)
+        else None,
+    }
+
+
+async def _find_row_by_id(session, kb_id: str, user_id: str | None = None):
+    for domain, model_cls in MODEL_BY_DOMAIN.items():
+        stmt = select(model_cls).where(model_cls.id == kb_id)
+        if user_id:
+            stmt = stmt.where(model_cls.user_id == user_id)
+        result = await session.execute(stmt)
+        row = result.scalars().first()
+        if row:
+            return domain, model_cls, row
+    return None, None, None
+
+
+async def _apply_one(session, update: KBUpdate) -> bool:
+    model_cls = _model_for_domain(update.domain)
+
+    result = await session.execute(
+        select(model_cls).where(
+            model_cls.user_id == update.user_id,
+            model_cls.field_name == update.field_name,
+        )
+    )
+    existing = result.scalars().first()
+
+    old_value = None
+    should_write = existing is None
+    if existing is not None:
+        old_value = existing.field_value
+        should_write = update.confidence >= float(existing.confidence or 0.0)
+
+    if not should_write:
+        return False
+
+    if existing is None:
+        session.add(
+            model_cls(
+                user_id=update.user_id,
+                field_name=update.field_name,
+                field_value=update.field_value,
+                confidence=update.confidence,
+                source=update.source,
+                last_updated=datetime.utcnow(),
+            )
+        )
+    else:
+        existing.field_value = update.field_value
+        existing.confidence = update.confidence
+        existing.source = update.source
+        existing.last_updated = datetime.utcnow()
+
+    session.add(
+        models.KnowledgeUpdate(
+            user_id=update.user_id,
+            conversation_id=update.conversation_id,
+            table_name=model_cls.__tablename__,
+            field_name=update.field_name,
+            old_value=old_value,
+            new_value=update.field_value,
+            confidence=update.confidence,
+            source=update.source,
+        )
+    )
+    return True
+
+
+def _summary_parts(items: Iterable[dict[str, Any]]) -> list[str]:
+    grouped: dict[str, list[str]] = {}
+    for item in items:
+        domain = item.get("domain")
+        field_name = item.get("field_name")
+        field_value = item.get("field_value")
+        if not domain or not field_name or not field_value:
+            continue
+        grouped.setdefault(str(domain), []).append(f"{field_name}: {field_value}")
+    return [f"{domain}: {'; '.join(values[:5])}" for domain, values in grouped.items()]
+
 
 @router.get("/kb")
 async def list_knowledge(user_id: str = Query(...)):
-    """Return all KB entries for a user (Redis)."""
-    try:
-        data = await redis_client.get_working_memory(user_id, "kb_entries")
-        return data or []
-    except Exception as e:
-        logger.exception("Failed to list knowledge for %s: %s", user_id, e)
-        raise HTTPException(status_code=500, detail="Failed to read knowledge")
+    """Return all PostgreSQL KB facts for a user."""
+    items: list[dict[str, Any]] = []
+    async with async_session_maker() as session:
+        for domain, model_cls in MODEL_BY_DOMAIN.items():
+            result = await session.execute(
+                select(model_cls)
+                .where(model_cls.user_id == user_id)
+                .order_by(model_cls.confidence.desc())
+            )
+            items.extend(_serialize_row(domain, row) for row in result.scalars().all())
+    return items
 
 
 @router.post("/kb")
-async def create_knowledge(payload: dict):
-    """Create a KB entry. Expects JSON: {user_id, title, content, metadata?}."""
-    user_id = payload.get("user_id")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="user_id required")
+async def create_knowledge(payload: dict[str, Any]):
+    """Create or update a durable KB fact."""
+    update = KBUpdate(
+        domain=payload.get("domain", "identity"),
+        user_id=str(payload.get("user_id") or ""),
+        field_name=payload.get("field_name") or payload.get("title") or "manual_note",
+        field_value=payload.get("field_value") or payload.get("content") or "",
+        confidence=float(payload.get("confidence", 0.7)),
+        source=payload.get("source", "manual"),
+    )
+    if not update.user_id or not update.field_value:
+        raise HTTPException(status_code=400, detail="user_id and field_value/content required")
 
-    entry = {
-        "id": str(uuid4()),
-        "title": payload.get("title", ""),
-        "content": payload.get("content", ""),
-        "metadata": payload.get("metadata") or {},
-    }
-
-    try:
-        existing = await redis_client.get_working_memory(user_id, "kb_entries") or []
-        await redis_client.set_working_memory(user_id, "kb_entries", [entry] + existing)
-        return entry
-    except Exception as e:
-        logger.exception("Failed to create knowledge: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to create knowledge")
+    async with async_session_maker() as session:
+        applied = await _apply_one(session, update)
+        await session.commit()
+    return {"applied": applied}
 
 
 @router.put("/kb/{kb_id}")
-async def update_knowledge(kb_id: str, payload: dict):
-    """Update a KB entry by id."""
-    user_id = payload.get("user_id")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="user_id required")
-
-    try:
-        existing = await redis_client.get_working_memory(user_id, "kb_entries") or []
-        updated = False
-        for item in existing:
-            if item.get("id") == kb_id:
-                item.update({k: v for k, v in payload.items() if k != "user_id"})
-                updated = True
-                break
-
-        if not updated:
+async def update_knowledge(kb_id: str, payload: dict[str, Any]):
+    """Update a KB fact by id."""
+    user_id = str(payload.get("user_id") or "") or None
+    async with async_session_maker() as session:
+        domain, model_cls, row = await _find_row_by_id(session, kb_id, user_id)
+        if row is None or model_cls is None:
             raise HTTPException(status_code=404, detail="KB entry not found")
 
-        await redis_client.set_working_memory(user_id, "kb_entries", existing)
-        return {"status": "ok", "id": kb_id}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Failed to update knowledge: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to update knowledge")
+        old_value = row.field_value
+        if "field_name" in payload:
+            row.field_name = str(payload["field_name"])
+        if "field_value" in payload or "content" in payload:
+            row.field_value = str(payload.get("field_value") or payload.get("content") or "")
+        if "confidence" in payload:
+            row.confidence = float(payload["confidence"])
+        if "source" in payload:
+            row.source = str(payload["source"])
+        row.last_updated = datetime.utcnow()
+
+        session.add(
+            models.KnowledgeUpdate(
+                user_id=row.user_id,
+                conversation_id=None,
+                table_name=model_cls.__tablename__,
+                field_name=row.field_name,
+                old_value=old_value,
+                new_value=row.field_value,
+                confidence=row.confidence,
+                source=payload.get("source", "manual"),
+            )
+        )
+        await session.commit()
+
+    return {"status": "ok", "item": _serialize_row(domain, row)}
 
 
 @router.delete("/kb/{kb_id}")
 async def delete_knowledge(kb_id: str, user_id: Optional[str] = Query(None)):
-    """Delete a KB entry by id. Requires `user_id` query param."""
-    if not user_id:
-        raise HTTPException(status_code=400, detail="user_id required")
-
-    try:
-        existing = await redis_client.get_working_memory(user_id, "kb_entries") or []
-        new_list = [item for item in existing if item.get("id") != kb_id]
-        if len(new_list) == len(existing):
+    """Delete a KB fact by id."""
+    async with async_session_maker() as session:
+        _, _, row = await _find_row_by_id(session, kb_id, user_id)
+        if row is None:
             raise HTTPException(status_code=404, detail="KB entry not found")
-        await redis_client.set_working_memory(user_id, "kb_entries", new_list)
-        return {"status": "deleted", "id": kb_id}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Failed to delete knowledge: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to delete knowledge")
+        await session.delete(row)
+        await session.commit()
+    return {"status": "deleted", "id": kb_id}
 
 
 @router.get("/kb/summary")
 async def knowledge_summary(user_id: str = Query(...)):
-    """Return a compact knowledge summary for the user."""
-    try:
-        kb_summary = await redis_client.get_working_memory(user_id, "kb_summary")
-        if kb_summary:
-            return {"summary": kb_summary}
+    """Return a compact summary built from PostgreSQL KB facts."""
+    items = await list_knowledge(user_id)
+    parts = _summary_parts(items)
+    return {"summary": " | ".join(parts), "count": len(items)}
 
-        entries = await redis_client.get_working_memory(user_id, "kb_entries") or []
-        top = entries[:5]
-        if not top:
-            return {"summary": "", "count": 0}
-
-        parts = []
-        for e in top:
-            title = e.get("title")
-            content = e.get("content", "")
-            if title:
-                parts.append(f"{title}: {content[:120]}")
-            else:
-                parts.append(content[:140])
-
-        return {"summary": "\n".join(parts), "count": len(entries)}
-    except Exception as e:
-        logger.exception("Failed to get knowledge summary: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to compute knowledge summary")
-
-
-# ---------------------------------------------------------------------------
-# PostgreSQL-backed structured endpoints
-# ---------------------------------------------------------------------------
 
 @router.post("/kb/apply")
 async def apply_updates(req: KBApplyRequest):
-    """Apply structured KB updates to PostgreSQL with conflict resolution."""
+    """Apply structured KB updates to PostgreSQL with confidence conflict resolution."""
     applied = 0
-
-    for u in req.updates:
-        model_name = MODEL_MAP.get(u.domain)
-        if not model_name:
-            raise HTTPException(status_code=400, detail=f"unknown domain: {u.domain}")
-
-        models_mod = __import__("app.db.models", fromlist=[model_name])
-        model_cls = getattr(models_mod, model_name, None)
-        if model_cls is None:
-            raise HTTPException(status_code=500, detail=f"model {model_name} not found")
-
-        async with async_session_maker() as session:
-            try:
-                q = await session.execute(
-                    select(model_cls).where(
-                        model_cls.user_id == u.user_id,
-                        model_cls.field_name == u.field_name,
-                    )
-                )
-                existing = q.scalars().first()
-            except Exception:
-                existing = None
-
-            def make_update_log(old_val, new_val):
-                return models_mod.KnowledgeUpdate(
-                    user_id=str(u.user_id),
-                    conversation_id=str(u.conversation_id) if u.conversation_id is not None else None,
-                    table_name=getattr(model_cls, "__tablename__", model_name),
-                    field_name=u.field_name,
-                    old_value=old_val,
-                    new_value=new_val,
-                    confidence=u.confidence,
-                    source=u.source,
-                )
-
-            # No existing row — insert
-            if not existing:
-                obj = model_cls(
-                    user_id=str(u.user_id),
-                    field_name=u.field_name,
-                    field_value=u.field_value,
-                    confidence=u.confidence,
-                    source=u.source,
-                    last_updated=datetime.utcnow(),
-                )
-                session.add(obj)
-                session.add(make_update_log(None, u.field_value))
-                await session.commit()
+    async with async_session_maker() as session:
+        for update in req.updates:
+            if await _apply_one(session, update):
                 applied += 1
-                continue
-
-            # Conflict resolution: higher confidence wins; tie broken by recency
-            try:
-                existing_conf = float(getattr(existing, "confidence", 0.0) or 0.0)
-            except Exception:
-                existing_conf = 0.0
-
-            incoming_conf = float(u.confidence or 0.0)
-            should_update = False
-
-            if incoming_conf > existing_conf + 1e-6:
-                should_update = True
-            elif abs(incoming_conf - existing_conf) <= 1e-6 and u.conversation_id is not None:
-                try:
-                    conv = await session.get(models_mod.Conversation, str(u.conversation_id))
-                    if conv and getattr(conv, "created_at", None):
-                        existing_updated = getattr(existing, "last_updated", None)
-                        if existing_updated is None or conv.created_at > existing_updated:
-                            should_update = True
-                except Exception:
-                    pass
-
-            if should_update:
-                old_val = getattr(existing, "field_value", None)
-                existing.field_value = u.field_value
-                existing.confidence = u.confidence
-                existing.source = u.source
-                existing.last_updated = datetime.utcnow()
-                session.add(make_update_log(old_val, u.field_value))
-                await session.commit()
-                applied += 1
-
+        await session.commit()
     return {"applied": applied}
 
 
 @router.get("/kb/items/{domain}/{user_id}")
-async def list_domain_items(domain: str, user_id: int):
+async def list_domain_items(domain: str, user_id: str):
     """List all PostgreSQL KB items for a domain."""
-    model_name = MODEL_MAP.get(domain)
-    if not model_name:
-        raise HTTPException(status_code=400, detail=f"unknown domain: {domain}")
-
-    models_mod = __import__("app.db.models", fromlist=[model_name])
-    model_cls = getattr(models_mod, model_name, None)
-    if model_cls is None:
-        raise HTTPException(status_code=500, detail=f"model {model_name} not found")
-
+    model_cls = _model_for_domain(domain)
     async with async_session_maker() as session:
-        q = await session.execute(select(model_cls).where(model_cls.user_id == user_id))
-        rows = q.scalars().all()
-
-    return {
-        "items": [
-            {
-                "id": getattr(r, "id", None),
-                "field_name": getattr(r, "field_name", None),
-                "field_value": getattr(r, "field_value", None),
-                "confidence": getattr(r, "confidence", None),
-                "source": getattr(r, "source", None),
-                "last_updated": getattr(r, "last_updated", None).isoformat()
-                if getattr(r, "last_updated", None)
-                else None,
-            }
-            for r in rows
-        ]
-    }
+        result = await session.execute(select(model_cls).where(model_cls.user_id == user_id))
+        rows = result.scalars().all()
+    return {"items": [_serialize_row(domain, row) for row in rows]}
 
 
 @router.post("/kb/extract")
 async def extract_updates(req: ExtractRequest):
-    """Call LLM to extract KB updates from a conversation transcript."""
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
-
-    extra_instructions = (
-        "Extract factual user knowledge into a JSON array.\n"
-        "Each item must be an object with keys: domain (one of identity, goals, projects, finances, relationships, patterns), "
-        "field_name, field_value, confidence (0.0-1.0), source (onboarding/conversation/manual).\n"
-        "Return only valid JSON with no explanation or markdown.\n"
-        'Example: [{"domain": "identity", "user_id": 1, "field_name": "name", "field_value": "Simon", "confidence": 0.95, "source": "onboarding"}]'
-    )
-
-    messages = prompt_engine.build_messages(
-        user_input=req.transcript,
-        context=None,
-        extra_instructions=extra_instructions,
-    )
-
-    async def call_openai():
-        openai.api_key = api_key
-        return openai.ChatCompletion.create(
-            model="gpt-4o",
-            messages=[{"role": m["role"], "content": m["content"]} for m in messages],
-            temperature=0.0,
-            max_tokens=800,
+    """Extract KB update candidates from a transcript without applying them."""
+    facts = await extract_facts(req.transcript)
+    updates = []
+    for update in facts_to_kb_updates(facts):
+        updates.append(
+            {
+                **update,
+                "user_id": req.user_id,
+                "conversation_id": req.conversation_id,
+            }
         )
-
-    try:
-        resp = await asyncio.to_thread(call_openai)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-    try:
-        text = resp.choices[0].message.content
-        parsed = json.loads(text)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"failed to parse LLM output: {e}")
-
-    if not isinstance(parsed, list):
-        raise HTTPException(status_code=500, detail="LLM did not return a JSON array")
-
-    valid: List[dict] = []
-    errors: List[dict] = []
-
-    for idx, item in enumerate(parsed):
-        if not isinstance(item, dict):
-            errors.append({"index": idx, "error": "item is not an object", "item": item})
-            continue
-
-        item.setdefault("user_id", req.user_id)
-        if req.conversation_id is not None:
-            item.setdefault("conversation_id", req.conversation_id)
-
-        try:
-            kb_item = KBUpdate.parse_obj(item)
-            valid.append(kb_item.dict())
-        except ValidationError as exc:
-            errors.append({"index": idx, "errors": exc.errors(), "item": item})
-
-    return {"suggested": valid, "errors": errors}
+    return {"suggested": updates, "errors": []}
