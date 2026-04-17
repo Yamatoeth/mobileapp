@@ -2,17 +2,26 @@
 
 ## What You Have
 
-Eight documents. Everything needed to build JARVIS from a blank directory to an App Store submission, alone, in 12 months.
+A `.agent` documentation set for keeping product intent, implementation rules, local setup, and validation status in sync. Treat `TIMELINE.md`, `QUICKSTART.md`, `ENV_VARS.md`, and `API.md` as operational source-of-truth files; treat `PROJECT.md`, `PROMPT.md`, and `STACK.md` as product/architecture guidance.
 
 | File | Purpose | Read when |
 |------|---------|-----------|
 | **README.md** | Project overview, architecture, what this is and is not | First |
-| **QUICKSTART.md** | Get running locally in 20 minutes | Before first commit |
-| **PROJECT.md** | Complete technical specification — the definitive reference | Before Phase 1 |
-| **TIMELINE.md** | 12-month week-by-week roadmap with checklists | Every Monday morning |
+| **QUICKSTART.md** | Current local setup commands | Before first run |
+| **ENV_VARS.md** | Current backend env var reference | When configuring `.env` |
+| **API.md** | Implemented REST and WebSocket API | When adding or calling endpoints |
+| **TESTS.md** | Test and smoke-test runbook | Before claiming completion |
+| **PROJECT.md** | Product and architecture specification | Before Phase work |
+| **TIMELINE.md** | Current state, validation gaps, and roadmap | Every Monday morning |
 | **RULES.md** | Coding standards for TypeScript and Python | Before writing code |
 | **STACK.md** | Tech stack, infrastructure, environment setup | When setting up tools |
-| **API.md** | REST and WebSocket API specification | When adding endpoints |
+| **PROMPT.md** | Prompt architecture, character rules, eval examples | When touching prompts |
+| **PRIVACY.md** | Privacy posture and production checklist | Before external testing |
+| **DECISIONS.md** | Decision log and superseded choices | Before revisiting architecture |
+| **DEPLOYMENT.md** | Production deployment guide | Before deployment work |
+| **DEV_SETUP.md** | Local Postgres/Redis notes | When infra is down locally |
+| **DEV_CLIENT_SETUP.md** | Expo dev-client/native module notes | When native modules fail |
+| **WakeWORD.md** | Optional wake-word integration notes | When working on Phase 2 wake word |
 | **SUMMARY.md** | This file | When you need to re-orient |
 
 ---
@@ -147,7 +156,7 @@ Knowing requires memory and conversation — a structured knowledge graph, an ex
 
 ## Getting Started Right Now
 
-1. Open **QUICKSTART.md** — get everything running (20 minutes)
+1. Open **QUICKSTART.md** — get everything running
 2. Open **PROJECT.md** — read the complete vision (30 minutes)
 3. Open **TIMELINE.md** — find Week 1 tasks (5 minutes)
 4. Do your own onboarding interview — let JARVIS get to know you (45 minutes)

@@ -1,4 +1,4 @@
-  # J.A.R.V.I.S. Technical Stack
+# J.A.R.V.I.S. Technical Stack
 
   ## Overview
 
@@ -37,9 +37,9 @@ Phase 1 source of truth: production voice uses Deepgram STT, Groq LLM inference,
 
 **React Native with Expo SDK 54+**
 ```bash
-npx create-expo-app jarvis --template
+npm install
 ```
-Why: iOS-first, single codebase, managed workflow, no native Xcode wrestling.
+Why: iOS-first, single codebase, managed workflow, and a custom dev-client path when native modules are required.
 
 **TypeScript 5.9+ (strict mode)**
 
@@ -101,12 +101,16 @@ Used for future JARVIS-initiated briefings and proactive check-ins. Not used in 
 {
   "scripts": {
     "start": "expo start",
+    "start:go": "expo start --go --tunnel",
+    "start:dev-client": "expo start --dev-client --tunnel",
+    "backend": "cd backend && .venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
     "ios": "expo run:ios",
-    "test": "jest --watchAll",
+    "android": "expo run:android",
+    "test": "jest",
     "type-check": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
-    "pretty": "prettier --check \"app.json\" \"babel.config.js\" \"jest.config.js\" \"package*.json\"",
-    "format": "prettier --write \"app.json\" \"babel.config.js\" \"jest.config.js\" \"package*.json\""
+    "pretty": "prettier --check package.json app.json tsconfig.json eas.json",
+    "format": "prettier --write package.json app.json tsconfig.json eas.json"
   }
 }
 ```
@@ -347,14 +351,17 @@ DATABASE_URL=postgresql+asyncpg://jarvis:jarvis_dev@localhost:5432/jarvis_db
 REDIS_URL=redis://localhost:6379
 
 # AI / Voice APIs
-OPENAI_API_KEY=sk-...
+GROQ_API_KEY=...
 DEEPGRAM_API_KEY=...
-ELEVENLABS_API_KEY=...
-ELEVENLABS_VOICE_ID=...          # Your custom JARVIS voice ID
+OPENAI_API_KEY=...               # embeddings only
 
 # Vector memory
 PINECONE_API_KEY=...
-PINECONE_INDEX_NAME=jarvis-memory
+PINECONE_ENVIRONMENT=us-east-1-aws
+
+# Local development TTS fallback
+KOKORO_MODEL_PATH=/absolute/path/to/backend/models/kokoro/kokoro-v1.0.int8.onnx
+KOKORO_VOICES_PATH=/absolute/path/to/backend/models/kokoro/voices-v1.0.bin
 
 # Security
 SECRET_KEY=<generate: openssl rand -hex 32>
@@ -377,9 +384,10 @@ LOG_LEVEL=DEBUG
 
 ```bash
 EXPO_PUBLIC_API_URL=http://localhost:8000
-EXPO_PUBLIC_WS_URL=ws://localhost:8000/ws
 EXPO_PUBLIC_ENV=development
 ```
+
+The app derives the WebSocket base URL from `EXPO_PUBLIC_API_URL`.
 
 ### Production `eas.json`
 
@@ -389,7 +397,6 @@ EXPO_PUBLIC_ENV=development
     "production": {
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.jarvis.app",
-        "EXPO_PUBLIC_WS_URL": "wss://api.jarvis.app/ws",
         "EXPO_PUBLIC_ENV": "production"
       }
     }
@@ -423,14 +430,12 @@ jobs:
         image: redis:7.2
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
       - run: pip install -r requirements.txt
-      - run: pytest --cov=app tests/
-      - run: mypy app/
-      - run: black --check app/
+      - run: pytest
 ```
 
 ### GitHub Actions — Frontend Tests
@@ -445,13 +450,14 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '18'
-      - run: cd mobile && npm ci
-      - run: cd mobile && npm test -- --watchAll=false
-      - run: cd mobile && npm run type-check
+          node-version: '22'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run pretty
+      - run: npm run type-check
 ```
 
 ---

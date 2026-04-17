@@ -69,7 +69,7 @@ Solid backend infrastructure: FastAPI, PostgreSQL, Redis, Pinecone, Celery all o
 ### Month 1 — Voice Pipeline
 
 **Week 1: Infrastructure**
-- [X] Monorepo setup (mobile/, backend/, shared/)
+- [X] Expo app at repo root with `backend/` and `shared/`
 - [X] FastAPI backend with health check endpoint
 - [X] PostgreSQL + Redis via Docker Compose locally
 - [X] React Native + Expo iOS app skeleton
@@ -272,8 +272,6 @@ to touch your calendar.
 
 **Validation:** works identically whether the user has a 
 full or empty calendar.
-
-Translated with DeepL.com (free version)
 
 ### Month 10: Financial Monitoring
 - [ ] Manual financial data entry by voice ("I spent €200 on X today")

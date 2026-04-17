@@ -189,7 +189,7 @@ from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/kb", tags=["knowledge"])
+router = APIRouter(prefix="/kb", tags=["knowledge"])
 
 class KnowledgeDomainResponse(BaseModel):
     domain: str
@@ -643,7 +643,7 @@ def build_kb_summary():  # Called on every message without cache
 
 **Solution:**
 ```typescript
-// mobile/src/hooks/useWebSocket.ts
+// src/hooks/useWebSocket.ts
 import { AppState, AppStateStatus } from 'react-native';
 
 useEffect(() => {

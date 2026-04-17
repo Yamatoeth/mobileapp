@@ -100,4 +100,4 @@ docker-compose logs -f
 - If you see import errors while starting uvicorn, ensure you start it from the `backend/` folder and that `backend/.venv` dependencies are installed.
 
 ---
-If you want I can also add a short script to run the full smoke sequence automatically and summarize `context_built` latencies across N runs.
+Follow-up candidate: add a short script that runs the full smoke sequence automatically and summarizes `context_built` latencies across N runs.

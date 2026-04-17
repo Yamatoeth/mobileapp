@@ -106,9 +106,8 @@ This guide covers deploying J.A.R.V.I.S. from local development to production.
    # Railway auto-provides DATABASE_URL and REDIS_URL
    
    # Add your API keys
-   railway variables set OPENAI_API_KEY=sk-...
+   railway variables set GROQ_API_KEY=...
    railway variables set DEEPGRAM_API_KEY=...
-   railway variables set ELEVENLABS_API_KEY=...
    railway variables set PINECONE_API_KEY=...
    railway variables set PINECONE_ENVIRONMENT=us-east-1-aws
    railway variables set SECRET_KEY=$(openssl rand -hex 32)
@@ -235,9 +234,8 @@ This guide covers deploying J.A.R.V.I.S. from local development to production.
 
 4. **Set Secrets**
    ```bash
-   fly secrets set OPENAI_API_KEY=sk-...
+   fly secrets set GROQ_API_KEY=...
    fly secrets set DEEPGRAM_API_KEY=...
-   fly secrets set ELEVENLABS_API_KEY=...
    fly secrets set SECRET_KEY=$(openssl rand -hex 32)
    ```
 
@@ -282,13 +280,7 @@ This guide covers deploying J.A.R.V.I.S. from local development to production.
    DATABASE_URL=postgresql://postgres:[password]@db.xxx.supabase.co:5432/postgres
    ```
 
-4. **Install TimescaleDB Extension**
-   ```sql
-   -- In Supabase SQL Editor
-   CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
-   ```
-
-5. **Run Migrations**
+4. **Run Migrations**
    ```bash
    # From local machine
    export DATABASE_URL=postgresql://...
@@ -343,7 +335,6 @@ This guide covers deploying J.A.R.V.I.S. from local development to production.
    ```bash
    PINECONE_API_KEY=your-api-key
    PINECONE_ENVIRONMENT=us-east-1-aws
-   PINECONE_INDEX_NAME=jarvis-memory
    ```
 
 ---
@@ -360,7 +351,7 @@ This guide covers deploying J.A.R.V.I.S. from local development to production.
 
 1. **Configure App in Xcode**
    ```bash
-   cd mobile
+   cd /path/to/mobileapp
    npx expo prebuild  # Generate native iOS project
    ```
 
@@ -476,12 +467,11 @@ DATABASE_URL=postgresql://...
 REDIS_URL=redis://...
 
 # LLM & Voice APIs
-OPENAI_API_KEY=sk-...
+GROQ_API_KEY=...
 DEEPGRAM_API_KEY=...
-ELEVENLABS_API_KEY=...
+OPENAI_API_KEY=...        # embeddings only
 PINECONE_API_KEY=...
 PINECONE_ENVIRONMENT=us-east-1-aws
-PINECONE_INDEX_NAME=jarvis-memory
 
 # Security
 SECRET_KEY=<64-char-hex-string>
@@ -520,14 +510,12 @@ FROM_EMAIL=noreply@jarvis.app
     "production": {
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.jarvis.app",
-        "EXPO_PUBLIC_WS_URL": "wss://api.jarvis.app/ws",
         "EXPO_PUBLIC_ENV": "production"
       }
     },
     "preview": {
       "env": {
         "EXPO_PUBLIC_API_URL": "https://staging-api.jarvis.app",
-        "EXPO_PUBLIC_WS_URL": "wss://staging-api.jarvis.app/ws",
         "EXPO_PUBLIC_ENV": "staging"
       }
     }
@@ -581,7 +569,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'mobile/**'
+      - 'src/**'
+      - 'App.tsx'
+      - 'package*.json'
+      - 'app.json'
 
 jobs:
   build:
@@ -596,20 +587,14 @@ jobs:
           node-version: 18
       
       - name: Install dependencies
-        run: |
-          cd mobile
-          npm ci
-      
+        run: npm ci
+
       - name: Run tests
-        run: |
-          cd mobile
-          npm test
-      
+        run: npm test
+
       - name: Build iOS (TestFlight)
         if: github.ref == 'refs/heads/main'
-        run: |
-          cd mobile
-          eas build --platform ios --profile production --non-interactive
+        run: eas build --platform ios --profile production --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 ```
@@ -790,7 +775,7 @@ eas build --platform ios --profile production
 - [ ] Review user feedback in TestFlight
 - [ ] Analyze most-used features (add analytics)
 - [ ] Fix critical bugs immediately
-- [ ] Monitor LLM API costs (OpenAI dashboard)
+- [ ] Monitor provider costs (Groq, Deepgram, OpenAI embeddings, Pinecone)
 
 **Monthly:**
 - [ ] Review server costs (optimize if >$100/month)

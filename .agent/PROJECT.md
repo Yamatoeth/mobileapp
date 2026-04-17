@@ -182,8 +182,8 @@ The voice pipeline is non-negotiable. If latency exceeds 2 seconds consistently,
 **Principle:** You are storing the most personal information a person can share. Default to paranoia.
 
 **Audio:** Deleted immediately after transcription. Never stored.
-**Conversations:** Stored as text summaries, not recordings. Encrypted at rest (AES-256).
-**Knowledge Base:** Stored encrypted in PostgreSQL. Never sent to third parties beyond the LLM call.
+**Conversations:** Stored as text summaries, not recordings. Production target: app-layer encryption for personal data.
+**Knowledge Base:** Stored in PostgreSQL. Production target: encrypted sensitive fields. Never sent to third parties beyond the LLM call.
 **LLM calls:** Use Groq in the Phase 1 hot path. OpenAI is used only for embeddings unless a later decision explicitly changes the default LLM provider.
 
 **User controls:**
@@ -197,16 +197,16 @@ The voice pipeline is non-negotiable. If latency exceeds 2 seconds consistently,
 
 ```
 jarvis/
-├── mobile/                     # React Native iOS app
-│   ├── src/
-│   │   ├── components/         # UI components (VoiceButton, PulseAnimation, etc.)
-│   │   ├── screens/            # Screens (VoiceScreen, HistoryScreen, KnowledgeScreen)
-│   │   ├── services/           # ApiClient, WebSocketService, AudioService
-│   │   ├── hooks/              # useVoice, useKnowledge, useConversation
-│   │   ├── store/              # Zustand stores (voice, conversation, knowledge)
-│   │   └── types/              # TypeScript interfaces
-│   ├── app.json
-│   └── package.json
+├── App.tsx                     # Expo app entry
+├── app.json
+├── package.json
+├── src/
+│   ├── components/             # UI components (VoiceButton, PulseAnimation, etc.)
+│   ├── screens/                # Screens (VoiceScreen, HistoryScreen, KnowledgeScreen)
+│   ├── services/               # ApiClient, WebSocketService, AudioService
+│   ├── hooks/                  # useVoice, useKnowledge, useConversation
+│   ├── store/                  # Zustand stores (voice, conversation, knowledge)
+│   └── types/                  # TypeScript interfaces
 ├── backend/                    # FastAPI server
 │   ├── app/
 │   │   ├── api/                # REST + WebSocket endpoints
@@ -219,7 +219,7 @@ jarvis/
 │   ├── tests/
 │   ├── requirements.txt
 │   └── pyproject.toml
-└── docs/
+└── .agent/
     ├── API.md
     ├── DEPLOYMENT.md
     └── PROJECT.md

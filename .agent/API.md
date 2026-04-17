@@ -1,101 +1,176 @@
-# J.A.R.V.I.S. API Specification
+# J.A.R.V.I.S. API Reference
 
+Status: current implementation reference. This file should match the FastAPI routes registered in `backend/app/main.py` and `backend/app/api/*`.
 
-## Base URL
-- Development: `http://localhost:8000/api/v1`
-- Production: `https://api.jarvis.app/api/v1`
+## Base URLs
+
+- Development API: `http://localhost:8000`
+- Versioned API prefix: `/api/v1`
+- WebSocket voice endpoint: `ws://localhost:8000/api/v1/ws/voice/{user_id}`
+
+Health and root endpoints are not versioned.
+
+## Health
+
+### Health Check
+
+```http
+GET /health
+```
+
+Returns:
+
+```json
+{ "status": "healthy", "app": "J.A.R.V.I.S.", "version": "1.0.0" }
+```
+
+### Status
+
+```http
+GET /api/v1/status
+```
 
 ## Authentication
 
-All authenticated endpoints require a JWT token:
-```
-Authorization: Bearer <jwt_token>
-```
+### Issue Token
 
-### Login
 ```http
-POST /auth/login
+POST /api/v1/auth/token
 Content-Type: application/json
+```
 
+Standard flow:
+
+```json
 { "email": "user@example.com", "password": "secure_password" }
 ```
 
-**Response (200):**
+Development/test bootstrap flows:
+
+```json
+{ "user_id": "1" }
+```
+
+```json
+{ "user_id": "1", "dev_auth_secret": "shared-dev-secret" }
+```
+
+The `user_id` bootstrap works only when `TEST_MODE=true` or `ALLOW_INSECURE_DEV_AUTH=true` with a matching `DEV_AUTH_SECRET`.
+
+Response:
+
+```json
+{ "access_token": "<jwt>", "token_type": "bearer" }
+```
+
+### Current User
+
+```http
+GET /api/v1/auth/me
+Authorization: Bearer <jwt>
+```
+
+## Users
+
+### Get Or Create User
+
+```http
+PUT /api/v1/users/{user_id}
+```
+
+Creates a local placeholder user if it does not already exist.
+
+## Voice And Assistant
+
+### Text Query
+
+```http
+POST /api/v1/ai/process
+Content-Type: application/json
+```
+
 ```json
 {
-  "access_token": "eyJ0eXAiOiJKV1Qi...",
-  "token_type": "bearer",
-  "expires_in": 604800,
-  "user": { "id": "usr_123abc", "email": "user@example.com", "onboarding_complete": false }
+  "user_id": "1",
+  "query": "What should I focus on today?",
+  "context": {}
 }
 ```
 
----
+Response:
 
-## 1. User Management
-
-### Create User
-```http
-POST /users
-Content-Type: application/json
-
-{ "email": "user@example.com", "password": "secure_password", "full_name": "John Doe" }
-```
-
-**Response (201):**
-```json
-{ "id": "usr_123abc", "email": "user@example.com", "full_name": "John Doe", "onboarding_complete": false, "created_at": "2026-02-17T10:00:00Z" }
-```
-
-### Get Profile
-```http
-GET /users/me
-Authorization: Bearer <token>
-```
-
-**Response (200):**
 ```json
 {
-  "id": "usr_123abc",
-  "email": "user@example.com",
-  "full_name": "John Doe",
-  "onboarding_complete": true,
-  "knowledge_base_last_updated": "2026-02-17T09:00:00Z",
-  "settings": {
-    "wake_word_enabled": false,
-    "morning_briefing_enabled": true,
-    "morning_briefing_time": "08:00",
-    "max_proactive_notifications": 3,
-    "voice_id": "jarvis_default"
-  },
-  "created_at": "2026-01-15T10:00:00Z"
+  "response": "Assistant response text",
+  "memoryUpdated": true,
+  "mode": "provider"
 }
 ```
 
-### Update Settings
+`mode` is `local_fallback` when provider keys are not configured.
+
+### TTS Voices
+
 ```http
-PATCH /users/me/settings
-Authorization: Bearer <token>
+GET /api/v1/tts/voices
+```
+
+### Generate TTS Audio
+
+```http
+POST /api/v1/tts
 Content-Type: application/json
-
-{ "morning_briefing_enabled": true, "morning_briefing_time": "07:30", "max_proactive_notifications": 2 }
 ```
 
----
-
-## 2. Voice Interaction
-
-### WebSocket: Voice Stream
-Connect to: `ws://localhost:8000/api/v1/ws/voice/{user_id}?token=<jwt>`
-
-This is the primary interaction channel. All voice communication flows through here.
-
-**Client → Server: Audio Chunk**
 ```json
-{ "type": "audio_chunk", "data": "<base64-encoded-audio>", "chunk_index": 1, "is_final": false }
+{ "text": "Hello.", "voice": "aura-2-thalia-en", "speed": 1.0, "lang": "en-us" }
 ```
 
-**Server → Client: Transcription (streaming)**
+Returns streamed WAV audio.
+
+## Voice WebSocket
+
+### Connect
+
+```text
+ws://localhost:8000/api/v1/ws/voice/{user_id}?token=<jwt>
+```
+
+Token behavior:
+
+- Required outside test mode and insecure local dev mode.
+- Optional when `TEST_MODE=true`.
+- Optional when `ALLOW_INSECURE_DEV_AUTH=true` and `APP_ENV` is not production.
+
+Server sends on connect:
+
+```json
+{ "type": "ready" }
+```
+
+Client can send binary audio frames or JSON frames:
+
+```json
+{
+  "type": "audio_chunk",
+  "data": "<base64-audio>",
+  "file_name": "audio.m4a",
+  "mime_type": "audio/mp4"
+}
+```
+
+Finish an utterance with:
+
+```json
+{ "type": "final" }
+```
+
+Server messages include:
+
+```json
+{ "type": "ack_audio" }
+```
+
 ```json
 { "type": "stt_start" }
 ```
@@ -104,387 +179,290 @@ This is the primary interaction channel. All voice communication flows through h
 { "type": "stt_done", "transcript": "What should I focus on today?" }
 ```
 
-**Server → Client: LLM Response (streaming)**
 ```json
-{ "type": "llm_chunk", "data": "Based on your projects, " }
+{ "type": "context_built", "ms": 187 }
 ```
 
 ```json
-{ "type": "llm_done", "content": "Based on your projects, you should prioritise the client proposal." }
+{ "type": "llm_chunk", "data": "Start with..." }
 ```
 
-**Server → Client: Audio Response (streaming)**
 ```json
-{ "type": "tts_audio_chunk", "data": "<base64-encoded-audio>" }
+{ "type": "llm_done", "content": "Start with the client proposal." }
 ```
 
-**Server → Client: Context Used (after response)**
 ```json
-{
-  "type": "context_built",
-  "ms": 187
-}
+{ "type": "tts_audio_chunk", "data": "<base64-wav-chunk>" }
 ```
 
-### Generate Text Response (REST fallback)
+```json
+{ "type": "tts_audio_done" }
+```
+
+## Knowledge Base
+
+Domains:
+
+- `identity`
+- `goals`
+- `projects`
+- `finances`
+- `relationships`
+- `patterns`
+
+### List User Knowledge
+
 ```http
-POST /api/v1/ai/process
-Authorization: Bearer <token>
+GET /api/v1/kb?user_id=1
+```
+
+Returns a flat list of facts across all domains.
+
+### Create Or Update Fact
+
+```http
+POST /api/v1/kb
 Content-Type: application/json
-
-{ "user_id": "usr_123abc", "query": "What should I focus on today?" }
 ```
 
-**Response (200):**
 ```json
 {
-  "response": "Based on your projects, you should prioritise the client proposal.",
-  "memoryUpdated": true,
-  "mode": "provider"
-}
-```
-
----
-
-## 3. Knowledge Base
-
-The Knowledge Base is the heart of JARVIS. Six domain endpoints follow the same pattern.
-
-### Get Full Knowledge Base
-```http
-GET /knowledge
-Authorization: Bearer <token>
-```
-
-**Response (200):**
-```json
-{
-  "identity": { "last_updated": "2026-02-10T10:00:00Z", "field_count": 8, "completeness": 0.85 },
-  "goals": { "last_updated": "2026-02-15T14:00:00Z", "field_count": 12, "completeness": 0.90 },
-  "projects": { "last_updated": "2026-02-17T09:00:00Z", "field_count": 6, "completeness": 0.75 },
-  "finances": { "last_updated": "2026-02-01T10:00:00Z", "field_count": 10, "completeness": 0.60 },
-  "relationships": { "last_updated": "2026-02-12T10:00:00Z", "field_count": 15, "completeness": 0.80 },
-  "patterns": { "last_updated": "2026-02-16T10:00:00Z", "field_count": 7, "completeness": 0.70 }
-}
-```
-
-### Get Domain
-```http
-GET /knowledge/{domain}
-Authorization: Bearer <token>
-```
-
-**Path params:** `domain` = `identity` | `goals` | `projects` | `finances` | `relationships` | `patterns`
-
-**Response (200):**
-```json
-{
+  "user_id": "1",
   "domain": "goals",
-  "fields": [
-    { "field": "financial_target_1yr", "value": "Reach €5000/month revenue from freelance", "confidence": 0.92, "last_updated": "2026-02-15T14:00:00Z", "source": "conversation" },
-    { "field": "career_direction", "value": "Build own SaaS product while maintaining freelance income", "confidence": 0.88, "last_updated": "2026-02-10T10:00:00Z", "source": "onboarding" }
-  ],
-  "completeness": 0.90
+  "field_name": "financial_target_1yr",
+  "field_value": "Reach 8000 EUR/month revenue",
+  "confidence": 0.9,
+  "source": "manual"
 }
 ```
 
-### Update Field
+### Update Fact By ID
+
 ```http
-PATCH /knowledge/{domain}/{field}
-Authorization: Bearer <token>
+PUT /api/v1/kb/{kb_id}
 Content-Type: application/json
-
-{ "value": "Reach €8000/month revenue from freelance", "source": "manual" }
 ```
 
-**Response (200):**
 ```json
-{ "domain": "goals", "field": "financial_target_1yr", "value": "Reach €8000/month revenue from freelance", "confidence": 1.0, "source": "manual", "updated_at": "2026-02-17T14:00:00Z" }
+{ "user_id": "1", "field_value": "Updated value", "confidence": 1.0 }
 ```
 
-### Get Knowledge Update History
+### Delete Fact By ID
+
 ```http
-GET /knowledge/updates?limit=20&domain=goals
-Authorization: Bearer <token>
+DELETE /api/v1/kb/{kb_id}?user_id=1
 ```
 
-**Response (200):**
+### Compact Knowledge Summary
+
+```http
+GET /api/v1/kb/summary?user_id=1
+```
+
+### Apply Structured Updates
+
+```http
+POST /api/v1/kb/apply
+Content-Type: application/json
+```
+
 ```json
 {
   "updates": [
     {
-      "id": "upd_abc123",
-      "domain": "goals",
-      "field": "financial_target_1yr",
-      "old_value": "Reach €5000/month",
-      "new_value": "Reach €8000/month",
-      "source": "manual",
-      "conversation_id": null,
-      "updated_at": "2026-02-17T14:00:00Z"
+      "user_id": "1",
+      "domain": "identity",
+      "field_name": "role",
+      "field_value": "Freelance developer",
+      "confidence": 0.95,
+      "source": "conversation"
     }
   ]
 }
 ```
 
----
+### List Domain Items
 
-## 4. Onboarding
-
-### Start Onboarding Interview
 ```http
-POST /onboarding/start
-Authorization: Bearer <token>
+GET /api/v1/kb/items/{domain}/{user_id}
 ```
 
-**Response (200):**
-```json
-{
-  "session_id": "onb_456def",
-  "first_question": "Let's start with who you are right now — not your job title, but how you see yourself and where you are in life.",
-  "domain": "identity",
-  "domain_index": 1,
-  "total_domains": 6
-}
-```
+### Extract Candidate Updates
 
-### Continue Onboarding
 ```http
-POST /onboarding/respond
-Authorization: Bearer <token>
+POST /api/v1/kb/extract
 Content-Type: application/json
-
-{ "session_id": "onb_456def", "response": "I'm a freelance developer, 28, working on building my own product on the side..." }
 ```
 
-**Response (200):**
 ```json
 {
-  "session_id": "onb_456def",
-  "next_question": "When you say you want to build your own product — what does success look like for that in three years?",
-  "domain": "identity",
-  "domain_index": 1,
-  "total_domains": 6,
-  "domain_complete": false
+  "user_id": "1",
+  "transcript": "My name is Alice and I work as a nurse.",
+  "conversation_id": "optional-conversation-id"
 }
 ```
 
-### Complete Onboarding
+Returns suggested updates without applying them.
+
+## Onboarding
+
+### Start Session
+
 ```http
-POST /onboarding/complete
-Authorization: Bearer <token>
+POST /api/v1/onboarding/start
 Content-Type: application/json
-
-{ "session_id": "onb_456def" }
 ```
 
-**Response (200):**
 ```json
-{
-  "knowledge_base_populated": true,
-  "fields_extracted": 47,
-  "domains_complete": 6,
-  "summary": "Based on our conversation, here is what I now know about you...",
-  "review_required": true
-}
+{ "user_id": "1" }
 ```
 
----
+Optional custom questions:
 
-## 5. Memory
+```json
+{ "user_id": "1", "questions": ["What are you building right now?"] }
+```
+
+### Submit Answer
+
+```http
+POST /api/v1/onboarding/{session_id}/answer
+Content-Type: application/json
+```
+
+```json
+{ "user_id": "1", "answer": "I am building JARVIS." }
+```
+
+When the final answer is submitted, the backend runs fact extraction and returns `status: "completed"`.
+
+### Session Summary
+
+```http
+GET /api/v1/onboarding/{session_id}/summary?user_id=1
+```
+
+## Memory
 
 ### Search Memory
+
 ```http
-POST /memory/search
-Authorization: Bearer <token>
+GET /api/v1/memory/search?user_id=1&query=client%20proposal&top_k=5
+```
+
+### Stream Memory Updates
+
+```http
+GET /api/v1/stream/memory?user_id=1
+Accept: text/event-stream
+```
+
+### Upsert Memory Items
+
+```http
+POST /api/v1/memory/upsert
 Content-Type: application/json
-
-{ "query": "times I talked about the client project", "limit": 5 }
 ```
 
-**Response (200):**
 ```json
 {
-  "results": [
-    {
-      "id": "mem_101abc",
-      "date": "2026-02-14",
-      "summary": "Discussed client proposal delays. Felt stuck on pricing section. Decided to send a draft by Friday.",
-      "relevance_score": 0.94
-    }
-  ],
-  "total": 3,
-  "query_processed_in_ms": 212
-}
-```
-
-### Get Conversation History
-```http
-GET /memory/conversations?page=1&per_page=20
-Authorization: Bearer <token>
-```
-
-**Response (200):**
-```json
-{
-  "conversations": [
-    {
-      "id": "conv_789xyz",
-      "date": "2026-02-17",
-      "summary": "Asked about focus priorities. Discussed client proposal. JARVIS flagged that project X has not been mentioned in 10 days.",
-      "exchange_count": 4,
-      "duration_seconds": 183
-    }
-  ],
-  "pagination": { "page": 1, "per_page": 20, "total": 47 }
-}
-```
-
-### Get Daily Summary
-```http
-GET /memory/summaries/2026-02-17
-Authorization: Bearer <token>
-```
-
-**Response (200):**
-```json
-{
-  "date": "2026-02-17",
-  "summary": "Three conversations. Main topics: client proposal progress, financial goal reassessment, project X status.",
-  "knowledge_updates": 3,
-  "conversation_count": 3,
-  "highlights": [
-    "Financial target updated from €5000 to €8000/month",
-    "Client proposal deadline noted: this Friday",
-    "Project X flagged as stalled — 10 days since last mention"
+  "user_id": "1",
+  "items": [
+    { "title": "goal", "content": "Ship the voice loop this week", "source": "client" }
   ]
 }
 ```
 
----
+## Conversations And Messages
 
-## 6. Proactive Intelligence (Phase 2)
-
-### Get Morning Briefing
-```http
-GET /intelligence/briefing
-Authorization: Bearer <token>
-```
-
-**Response (200):**
-```json
-{
-  "date": "2026-02-17",
-  "briefing_text": "Good morning. Three things today: your client proposal is due Friday and you have not worked on it since Monday. Project X is stalled — you should decide today whether to continue or park it. Your financial goal revision from last week needs a concrete action plan.",
-  "audio_url": "https://cdn.jarvis.app/audio/brief_2026-02-17.mp3",
-  "active_projects": 3,
-  "flagged_goals": 1,
-  "stalled_projects": 1
-}
-```
-
-### Get Patterns
-```http
-GET /intelligence/patterns
-Authorization: Bearer <token>
-```
-
-**Response (200):**
-```json
-{
-  "patterns": [
-    { "id": "pat_001", "description": "You mention work-life balance concerns every Monday but rarely follow through on the changes you propose.", "confidence": 0.82, "first_detected": "2026-02-03", "occurrence_count": 3 },
-    { "id": "pat_002", "description": "You have not mentioned your fitness goal since onboarding (23 days ago).", "confidence": 0.95, "first_detected": "2026-02-17", "occurrence_count": 1 }
-  ]
-}
-```
-
----
-
-## 7. Data Management
-
-### Export All Data
-```http
-POST /data/export
-Authorization: Bearer <token>
-```
-
-**Response (202):**
-```json
-{ "export_id": "exp_xyz789", "status": "processing", "estimated_seconds": 30 }
-```
+### Create Conversation
 
 ```http
-GET /data/export/exp_xyz789
-Authorization: Bearer <token>
-```
-
-**Response (200):**
-```json
-{ "export_id": "exp_xyz789", "status": "complete", "download_url": "https://cdn.jarvis.app/exports/exp_xyz789.json", "expires_at": "2026-02-18T14:00:00Z" }
-```
-
-### Delete All Data
-```http
-DELETE /data/all
-Authorization: Bearer <token>
+POST /api/v1/conversations
 Content-Type: application/json
-
-{ "confirm": "DELETE_ALL_MY_DATA", "reason": "privacy" }
 ```
-
-**Response (200):**
-```json
-{ "deleted": true, "knowledge_base_cleared": true, "conversations_cleared": true, "vectors_cleared": true, "account_status": "data_cleared" }
-```
-
----
-
-## Error Responses
-
-All errors follow this format:
 
 ```json
-{
-  "error": {
-    "code": "KNOWLEDGE_BASE_NOT_FOUND",
-    "message": "No knowledge base found. Complete onboarding first.",
-    "details": { "onboarding_complete": false }
-  }
-}
+{ "user_id": "1" }
 ```
 
-**Common codes:**
+### List Conversations
 
-| HTTP | Code | Meaning |
-|------|------|---------|
-| 401 | `UNAUTHORIZED` | Invalid or expired token |
-| 403 | `ONBOARDING_REQUIRED` | Action requires completed onboarding |
-| 404 | `RESOURCE_NOT_FOUND` | Requested resource does not exist |
-| 422 | `VALIDATION_ERROR` | Invalid request data |
-| 429 | `RATE_LIMIT_EXCEEDED` | Too many requests |
-| 500 | `INTERNAL_SERVER_ERROR` | Unexpected server error |
+```http
+GET /api/v1/conversations?user_id=1
+```
 
----
+### Get Conversation
 
-## Rate Limits
+```http
+GET /api/v1/conversations/{conversation_id}
+```
 
-| Endpoint group | Limit |
-|---------------|-------|
-| REST endpoints | 100 req/min per user |
-| WebSocket voice | 1 concurrent connection per user |
-| Memory search | 20 req/min |
-| Knowledge updates | 50 req/min |
-| Auth | 5 attempts/min per IP |
+### Add Conversation Turn
 
----
+```http
+POST /api/v1/conversations/turn
+Content-Type: application/json
+```
 
-## Removed from API (vs original spec)
+Persists a user or assistant message, creating a conversation when `conversation_id` is omitted.
 
-The following endpoints from the original API.md have been **removed** as they are not part of the new vision:
+### Create Message
 
-- ❌ All `/biometrics` endpoints — no biometric monitoring in v1
-- ❌ All `/interventions` endpoints — no intervention engine in v1
-- ❌ All `/trust` endpoints — trust system removed
-- ❌ `/calendar` endpoints — Phase 3 only, not yet specified
-- ❌ `/webhooks` — Phase 3 only
-- ❌ WebSocket `/ws/biometrics` — removed
+```http
+POST /api/v1/messages
+Content-Type: application/json
+```
+
+```json
+{ "conversationId": "conversation-id", "role": "user", "content": "Hello" }
+```
+
+### List Conversation Messages
+
+```http
+GET /api/v1/conversations/{conversation_id}/messages
+```
+
+## Notifications
+
+### Register Push Token
+
+```http
+POST /api/v1/notifications/register
+Content-Type: application/json
+```
+
+```json
+{ "user_id": "1", "token": "ExponentPushToken[...]" }
+```
+
+### Schedule Notification
+
+```http
+POST /api/v1/notifications/schedule
+Content-Type: application/json
+```
+
+```json
+{ "user_id": "1", "title": "Reminder", "body": "Check in", "when_ts": 1770000000 }
+```
+
+### Queue Check-In
+
+```http
+POST /api/v1/notifications/checkin?user_id=1
+```
+
+## Not Implemented Yet
+
+These were present in older target specs but should not be treated as current API:
+
+- `POST /auth/login`
+- `GET /knowledge`
+- `GET /knowledge/{domain}`
+- `PATCH /knowledge/{domain}/{field}`
+- `POST /onboarding/respond`
+- `POST /data/export`
+- `DELETE /data/all`
+- `/biometrics`, `/interventions`, `/trust`, `/calendar`, `/webhooks`

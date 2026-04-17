@@ -10,9 +10,10 @@ Required / strongly recommended variables
 - `SECRET_KEY` — Application secret used for signing tokens; set to a strong value in production.
 
 Optional / integration variables
-- `PINECONE_API_KEY`, `PINECONE_ENV`, `PINECONE_INDEX` — If using Pinecone for vector similarity search.
+- `PINECONE_API_KEY`, `PINECONE_ENVIRONMENT` — If using Pinecone for vector similarity search.
 - `DATABASE_URL` — If your app stores user data in a relational DB.
 - `CELERY_BROKER_URL` — Broker for Celery workers; defaults to a Redis URL.
+- `KOKORO_MODEL_PATH`, `KOKORO_VOICES_PATH` — Local development TTS fallback asset paths.
 
 Developer quick-start
 1. Copy and edit the example env file:
@@ -31,16 +32,17 @@ docker run -d --name jarvis-redis -p 6379:6379 redis:7
 3. Activate your Python venv and install requirements (if not done):
 
 ```bash
+cd backend
 python -m venv .venv
 . .venv/bin/activate
-pip install -r backend/requirements.txt
+pip install -r requirements.txt
 ```
 
 4. Start the backend:
 
 ```bash
 cd backend
-. ../.venv/bin/activate
+. .venv/bin/activate
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 

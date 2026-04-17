@@ -69,19 +69,21 @@ After that interview, JARVIS knows you. Every conversation adds to that knowledg
 ```bash
 # Clone
 git clone https://github.com/yourusername/jarvis.git
-cd jarvis
+cd <repo-directory>
 
 # Backend
 cd backend
-python -m venv venv && source venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # Add your API keys
-docker-compose up -d
+cd ..
+docker compose up -d postgres redis
+cd backend
 alembic upgrade head
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # Frontend (new terminal)
-cd mobile
+cd <repo-directory>
 npm install
 npm start   # Press i for iOS simulator
 ```
@@ -94,12 +96,24 @@ Full setup instructions: **[QUICKSTART.md](./QUICKSTART.md)**
 
 | File | What It Contains |
 |------|-----------------|
-| **[PROJECT.md](./PROJECT.md)** | Complete technical specification — read this first |
-| **[TIMELINE.md](./TIMELINE.md)** | 12-month week-by-week development roadmap |
-| **[RULES.md](./RULES.md)** | Coding standards for TypeScript and Python |
-| **[STACK.md](./STACK.md)** | Tech stack, infrastructure, environment setup |
-| **[API.md](./API.md)** | REST and WebSocket API specification |
-| **[QUICKSTART.md](./QUICKSTART.md)** | Get running locally in under 20 minutes |
+| File | What It Contains |
+|------|-----------------|
+| **[SUMMARY.md](./SUMMARY.md)** | Orientation map for the `.agent` documentation set |
+| **[PROJECT.md](./PROJECT.md)** | Product and architecture vision |
+| **[TIMELINE.md](./TIMELINE.md)** | Current state, validation gaps, and roadmap |
+| **[QUICKSTART.md](./QUICKSTART.md)** | Local setup commands for the current repo layout |
+| **[ENV_VARS.md](./ENV_VARS.md)** | Backend environment variable reference |
+| **[API.md](./API.md)** | Implemented REST and WebSocket endpoints |
+| **[TESTS.md](./TESTS.md)** | Local test and smoke-test runbook |
+| **[STACK.md](./STACK.md)** | Technical stack and target infrastructure |
+| **[RULES.md](./RULES.md)** | Coding and prompt standards |
+| **[PROMPT.md](./PROMPT.md)** | Prompt architecture and golden examples |
+| **[PRIVACY.md](./PRIVACY.md)** | Current and target privacy/security posture |
+| **[DECISIONS.md](./DECISIONS.md)** | Decision log and superseded choices |
+| **[DEPLOYMENT.md](./DEPLOYMENT.md)** | Production deployment guide |
+| **[DEV_SETUP.md](./DEV_SETUP.md)** | Local Postgres/Redis helper notes |
+| **[DEV_CLIENT_SETUP.md](./DEV_CLIENT_SETUP.md)** | Expo dev-client and native module notes |
+| **[WakeWORD.md](./WakeWORD.md)** | Optional wake-word integration guide |
 
 ---
 
@@ -196,7 +210,7 @@ Full roadmap: **[TIMELINE.md](./TIMELINE.md)**
 
 **User controls:** Full data export as JSON. One-click complete deletion. Per-domain opt-out (you can exclude financial data from storage, for example).
 
-All data encrypted at rest (AES-256). All traffic over HTTPS/WSS (TLS 1.3). OpenAI is used for embeddings only in Phase 1.
+Production target: personal data encrypted at rest, all traffic over HTTPS/WSS, and OpenAI used only for embeddings in Phase 1. See **[PRIVACY.md](./PRIVACY.md)** for what is implemented today versus required before public launch.
 
 ---
 
@@ -224,4 +238,4 @@ v1 is a voice assistant that knows you deeply and gets smarter over time. **Buil
 
 ---
 
-*Solo build. 12-month roadmap. February 2026.*
+*Solo build. 12-month roadmap. Current source of truth: TIMELINE.md.*

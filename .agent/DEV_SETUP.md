@@ -19,7 +19,7 @@ docker compose exec -T postgres pg_isready -U jarvis -d jarvis_db
 
 4. Env file
 
-The backend reads `.env` in `backend/`. Example (already added): [backend/.env](backend/.env)
+The backend reads `.env` in `backend/`. Local file: [`../backend/.env`](../backend/.env)
 
 5. Stop services
 

@@ -18,7 +18,7 @@ Recommended approach
    - See: https://docs.expo.dev/development/introduction/
 
 3. iOS permissions & background modes
-   - Edit ios/Medicus/Info.plist and add:
+   - Edit the iOS app `Info.plist` generated under `ios/` and add:
      <key>UIBackgroundModes</key>
      <array>
        <string>audio</string>
@@ -55,7 +55,6 @@ Notes & troubleshooting
   here is a best-effort wrapper to keep app code stable before native
   installation.
 
-If you want, I can:
+Planned implementation work:
 - Add a small settings toggle UI wired to the hook.
-- Attempt to patch Info.plist / AndroidManifest for you (I can create the
-  changes, but you'll still need to rebuild with EAS).
+- Patch Info.plist / AndroidManifest when wake-word support moves into scope, then rebuild with EAS.

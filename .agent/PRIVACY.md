@@ -2,6 +2,8 @@
 
 > JARVIS stores the most personal information a person can share: goals, finances, relationships, behavioural patterns. This document defines exactly how that data is handled, protected, and deleted. It is also the foundation of the privacy policy required for the App Store.
 
+Status: this document mixes current behavior and production requirements. Anything marked **Current** should match the repo today. Anything marked **Production target** must be implemented and tested before external TestFlight or App Store use.
+
 ---
 
 ## Table of Contents
@@ -22,13 +24,13 @@
 
 **1. Audio never stored.** User audio is streamed to Deepgram, transcribed, and immediately destroyed. No audio file is persisted anywhere.
 
-**2. Conversations stored as text only.** Transcriptions are summarised (not stored verbatim in production) and encrypted at rest.
+**2. Conversations stored as text only.** Transcriptions are summarised rather than stored as audio. Production encryption requirements are listed below.
 
 **3. Financial data: high confidence threshold.** No financial data with confidence < 0.8 is persisted in the Knowledge Base.
 
-**4. The user controls everything.** Full export in one click. Complete and irreversible deletion in one click. Per-domain opt-out.
+**4. The user controls everything.** Full export, complete deletion, and per-domain opt-out are production requirements, not complete until the checklist in section 9 is green.
 
-**5. No training on your data.** OpenAI API used with `training_opt_out: true`. Your conversations do not train OpenAI's models.
+**5. No training on your data.** Phase 1 uses Groq for chat, Deepgram for STT/TTS, and OpenAI only for embeddings. Provider retention/data-use settings must be reviewed before production launch.
 
 **6. Minimal collection.** We only collect what is necessary for JARVIS to function. No behavioural tracking, no third-party usage metrics.
 
@@ -42,8 +44,8 @@
 |------|---------|----------|-----------|-----------|
 | User audio | Never (stream only) | 0s | N/A | N/A |
 | Raw transcription | RAM only | Session duration | N/A | Automatic |
-| Conversation summary | PostgreSQL + Redis | See retention | AES-256 | Yes |
-| Knowledge Base (6 domains) | PostgreSQL | Permanent until deletion | AES-256 | Yes |
+| Conversation summary | PostgreSQL + Redis | See retention | Production target: app-layer encryption | Target: yes |
+| Knowledge Base (6 domains) | PostgreSQL | Permanent until deletion | Production target: app-layer encryption | Target: yes |
 | Episodic vectors | Pinecone | Permanent until deletion | Pinecone-managed | Yes |
 | API access logs | Backend logs | 30 days | Transport (HTTPS) | No (technical) |
 | JWT tokens | Client (secure storage) | 7 days | Expo SecureStore | Yes (logout) |
@@ -63,6 +65,14 @@
 ## 3. Encryption & Technical Security
 
 ### At rest
+
+#### Current
+
+- PostgreSQL and Redis are local/deployment infrastructure stores. Application-layer encryption for personal data tables is not yet marked complete.
+- Expo SecureStore is available in the app dependency set and should be used for client secrets/tokens.
+- Pinecone manages encryption for vectors at the service layer; do not place raw conversation content in metadata.
+
+#### Production target
 
 **PostgreSQL:**
 ```
@@ -89,7 +99,7 @@
 
 **Expo SecureStore (iOS):**
 ```
-- JWT tokens and API keys stored via expo-secure-store
+- JWT tokens and any user-supplied provider keys stored via expo-secure-store
 - Uses iOS Keychain natively (AES-256 hardware)
 - Automatically cleared if the app is uninstalled
 ```
@@ -148,7 +158,7 @@ Groq calls include Knowledge Base context to personalise responses. Deepgram rec
 
 ### Full export (GDPR Article 20 — Portability)
 
-**Endpoint:** `POST /data/export`
+**Production target endpoint:** `POST /data/export`
 
 **Export contents:**
 ```json
@@ -175,7 +185,7 @@ Groq calls include Knowledge Base context to personalise responses. Deepgram rec
 
 ### Complete deletion (GDPR Article 17 — Right to be forgotten)
 
-**Endpoint:** `DELETE /data/all`
+**Production target endpoint:** `DELETE /data/all`
 **Confirmation required:** Exact string `"DELETE_ALL_MY_DATA"` in the request body.
 
 **What is deleted:**
