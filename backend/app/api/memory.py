@@ -92,15 +92,24 @@ async def memory_search(
 
         # If no backend available, return empty
         return SearchResponse(success=True, data=[])
+    except asyncio.TimeoutError:
+        logger.warning("memory_search timed out")
+        return SearchResponse(success=False, data=[], error="Search timed out")
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error("memory_search data error: %s", type(e).__name__)
+        return SearchResponse(success=False, data=[], error=str(e))
     except Exception as exc:
-        logger.exception("memory_search failed")
+        logger.exception("memory_search failed: %s", str(exc))
         return SearchResponse(success=False, data=[], error=str(exc))
 
 
 async def _client_disconnected(request: Request) -> bool:
     try:
         return await request.is_disconnected()
-    except Exception:
+    except (RuntimeError, ConnectionError):
+        return True
+    except Exception as e:
+        logger.debug("Error checking client disconnection: %s", type(e).__name__)
         return False
 
 
@@ -136,7 +145,8 @@ async def _redis_pubsub_generator(user_id: str, request: Request) -> AsyncGenera
                     if isinstance(data, (bytes, bytearray)):
                         try:
                             s = data.decode()
-                        except Exception:
+                        except (UnicodeDecodeError, AttributeError) as e:
+                            logger.debug("Error decoding message: %s", type(e).__name__)
                             s = str(data)
                     else:
                         s = json.dumps(data) if not isinstance(data, str) else data
@@ -144,20 +154,24 @@ async def _redis_pubsub_generator(user_id: str, request: Request) -> AsyncGenera
                 else:
                     yield ":\n\n"
                     await asyncio.sleep(0.1)
-        except Exception:
+        except (asyncio.TimeoutError, ConnectionError) as e:
             # fallback for other redis clients
-            logger.exception("redis pubsub error")
+            logger.warning("redis pubsub error: %s", type(e).__name__)
             for _ in range(3):
                 if await _client_disconnected(request):
                     return
                 yield "event: heartbeat\ndata: {}\n\n"
                 await asyncio.sleep(1)
+        except Exception as e:
+            logger.exception("Unexpected error in redis pubsub: %s", str(e))
     finally:
         try:
             await pubsub.unsubscribe(channel)
             await pubsub.close()
-        except Exception:
+        except (RuntimeError, ConnectionError):
             pass
+        except Exception as e:
+            logger.debug("Error closing pubsub: %s", type(e).__name__)
 
 
 @router.get("/stream/memory")
@@ -234,8 +248,10 @@ async def memory_upsert(payload: UpsertRequest):
         try:
             # use low-level redis client for publish
             await rc.client.publish(f"memory_updates:{payload.user_id}", json.dumps({"type": "upsert", "count": len(new_entries)}))
-        except Exception:
-            logger.exception("Failed to publish memory update")
+        except (asyncio.TimeoutError, ConnectionError) as e:
+            logger.warning("Failed to publish memory update: %s", type(e).__name__)
+        except Exception as e:
+            logger.exception("Unexpected error publishing memory update: %s", str(e))
 
         # schedule background extraction/embedding if available
         try:
@@ -244,10 +260,17 @@ async def memory_upsert(payload: UpsertRequest):
             # schedule per-item or a combined transcript summary; we'll pass concatenated content
             transcript = "\n\n".join([e.get("content", "") for e in new_entries])
             schedule_extract_facts(transcript, payload.user_id)
-        except Exception:
-            logger.debug("No background task scheduler available or scheduling failed")
+        except ImportError:
+            logger.debug("Background task scheduler not available")
+        except (asyncio.TimeoutError, ValueError) as e:
+            logger.warning("Failed to schedule fact extraction: %s", type(e).__name__)
+        except Exception as e:
+            logger.debug("Unexpected error scheduling fact extraction: %s", type(e).__name__)
 
         return UpsertResponse(success=True, added=len(new_entries))
+    except (asyncio.TimeoutError, ValueError) as e:
+        logger.warning("memory_upsert error: %s", type(e).__name__)
+        return UpsertResponse(success=False, added=0, error=str(e))
     except Exception as exc:
-        logger.exception("memory_upsert failed")
+        logger.exception("memory_upsert failed: %s", str(exc))
         return UpsertResponse(success=False, added=0, error=str(exc))

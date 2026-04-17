@@ -65,8 +65,11 @@ async def _safe_send_json(ws: WebSocket, payload: dict) -> bool:
     try:
         await ws.send_json(payload)
         return True
-    except Exception:
+    except (RuntimeError, ConnectionError):
         logger.debug("WebSocket closed or send failed for type=%s", payload.get("type"))
+        return False
+    except Exception as e:
+        logger.warning("Unexpected error sending WebSocket message: %s", type(e).__name__)
         return False
 
 
@@ -92,8 +95,14 @@ async def stream_chat_response(messages, websocket: WebSocket) -> str:
             full_text += delta
             await _safe_send_json(websocket, {"type": "llm_chunk", "data": delta})
 
-    except Exception:
-        logger.exception("LLM streaming failed")
+    except asyncio.TimeoutError:
+        logger.warning("LLM streaming timed out")
+        await _safe_send_json(websocket, {"type": "error", "message": "LLM streaming timed out"})
+    except (ValueError, RuntimeError) as e:
+        logger.error("LLM streaming error: %s", type(e).__name__)
+        await _safe_send_json(websocket, {"type": "error", "message": "LLM streaming failed"})
+    except Exception as e:
+        logger.exception("Unexpected error during LLM streaming: %s", str(e))
         await _safe_send_json(websocket, {"type": "error", "message": "LLM streaming failed"})
     await _safe_send_json(websocket, {"type": "llm_done", "content": full_text})
     return full_text
@@ -138,8 +147,14 @@ async def generate_chat_response(messages, user_input: str, context: Optional[di
     """Return a single assistant response through the configured LLM provider."""
     try:
         return await llm_provider.complete(messages)
-    except Exception:
-        logger.exception("Non-stream chat completion failed")
+    except asyncio.TimeoutError:
+        logger.warning("LLM completion timed out, using fallback")
+        return _build_local_response(user_input=user_input, context=context)
+    except (ValueError, RuntimeError) as e:
+        logger.error("LLM completion failed: %s", type(e).__name__)
+        return _build_local_response(user_input=user_input, context=context)
+    except Exception as e:
+        logger.exception("Unexpected error in LLM completion: %s", str(e))
         return _build_local_response(user_input=user_input, context=context)
 
 
@@ -164,7 +179,11 @@ async def synthesize_tts(
 async def list_tts_voices():
     try:
         voices = await asyncio.to_thread(kokoro_tts_service.get_voices)
-    except Exception:
+    except (asyncio.TimeoutError, RuntimeError) as e:
+        logger.warning("Failed to fetch TTS voices: %s", type(e).__name__)
+        voices = []
+    except Exception as e:
+        logger.exception("Unexpected error fetching TTS voices: %s", str(e))
         voices = []
     deepgram_default = settings.deepgram_tts_model
     return {"voices": [deepgram_default, *voices], "default": deepgram_default}
@@ -231,8 +250,10 @@ async def run_voice_pipeline(
                 user_id=user_id,
                 conversation_id=conversation_id,
             )
-        except Exception:
-            logger.exception("Failed to schedule fact extraction for conversation %s", conversation_id)
+        except (asyncio.TimeoutError, ValueError) as e:
+            logger.warning("Failed to schedule fact extraction: %s", type(e).__name__)
+        except Exception as e:
+            logger.exception("Unexpected error scheduling fact extraction: %s", str(e))
 
     tts_audio = await synthesize_tts(
         full_text,
@@ -247,8 +268,10 @@ async def run_voice_pipeline(
             b64chunk = base64.b64encode(chunk).decode()
             await _safe_send_json(websocket, {"type": "tts_audio_chunk", "data": b64chunk})
         await _safe_send_json(websocket, {"type": "tts_audio_done"})
-    except Exception:
-        logger.exception("Failed streaming TTS chunks")
+    except (RuntimeError, ConnectionError):
+        logger.debug("WebSocket closed while streaming TTS chunks")
+    except Exception as e:
+        logger.exception("Unexpected error streaming TTS chunks: %s", str(e))
         b64 = base64.b64encode(tts_audio).decode()
         await _safe_send_json(websocket, {"type": "tts_audio_base64", "data": b64})
 
@@ -283,8 +306,10 @@ async def process_text_query(payload: TextQueryRequest):
             conversation_id=conversation_id,
         )
         memory_updated = True
-    except Exception:
-        logger.exception("Failed to schedule fact extraction for text conversation %s", conversation_id)
+    except (asyncio.TimeoutError, ValueError) as e:
+        logger.warning("Failed to schedule fact extraction: %s", type(e).__name__)
+    except Exception as e:
+        logger.exception("Unexpected error scheduling fact extraction: %s", str(e))
 
     return {
         "response": response_text,
@@ -301,7 +326,11 @@ def _extract_and_validate_token(token: Optional[str], expected_user_id: str) -> 
         payload = decode_token(token)
         token_user_id = payload.get("sub")
         return token_user_id == expected_user_id
-    except Exception:
+    except ValueError:
+        logger.debug("Invalid JWT token format")
+        return False
+    except Exception as e:
+        logger.warning("Error validating token: %s", type(e).__name__)
         return False
 
 
@@ -359,7 +388,7 @@ async def websocket_voice(
             if "text" in msg and msg["text"]:
                 try:
                     payload = json.loads(msg["text"]) if msg.get("text") else None
-                except Exception:
+                except json.JSONDecodeError:
                     # Best-effort fallback: if the text contains a simple control like 'final',
                     # accept it as a final marker. This helps clients that send plain strings.
                     raw = msg.get("text")
@@ -368,7 +397,8 @@ async def websocket_voice(
                             payload = {"type": "final"}
                         else:
                             payload = None
-                    except Exception:
+                    except (TypeError, AttributeError) as e:
+                        logger.debug("Error parsing fallback control frame: %s", type(e).__name__)
                         payload = None
 
                 # If the client sends a JSON control frame
@@ -425,9 +455,15 @@ async def websocket_voice(
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected: %s", user_id)
-    except Exception:
-        logger.exception("Error in voice websocket for user %s", user_id)
+    except (asyncio.CancelledError, asyncio.TimeoutError) as e:
+        logger.info("Voice pipeline cancelled/timeout for user %s: %s", user_id, type(e).__name__)
+        try:
+            await websocket.send_json({"type": "error", "message": "Pipeline timeout"})
+        except (RuntimeError, ConnectionError):
+            pass
+    except Exception as e:
+        logger.exception("Error in voice websocket for user %s: %s", user_id, str(e))
         try:
             await websocket.send_json({"type": "error", "message": "Server error in voice pipeline"})
-        except Exception:
+        except (RuntimeError, ConnectionError):
             pass
