@@ -59,11 +59,11 @@ async def _gather_all_user_ids() -> list[str]:
     return user_ids
 
 
-def run_send_pending_for_user(user_id: str) -> Any:
+def run_send_pending_for_user(user_id: str) -> None:
     return asyncio.run(send_pending_for_user(user_id))
 
 
-def run_send_morning_briefing() -> Any:
+def run_send_morning_briefing() -> None:
     async def _run():
         users = await _gather_all_user_ids()
         for u in users:
@@ -77,7 +77,7 @@ def run_send_morning_briefing() -> Any:
     return asyncio.run(_run())
 
 
-def run_periodic_checkin() -> Any:
+def run_periodic_checkin() -> None:
     async def _run():
         users = await _gather_all_user_ids()
         for u in users:

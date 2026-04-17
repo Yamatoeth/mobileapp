@@ -37,11 +37,12 @@ export default function useMemory(apiBaseUrl?: string) {
       }
       // no reliable ids returned — keep optimistic cache as-is
       return json;
-    } catch (err: any) {
-      setLoading(false);
-      setError(err?.message || String(err));
-      console.warn('memory.upsert failed', err);
-      return { success: false, error: err?.message };
+    } catch (err: unknown) {
+      setLoading(false)
+      const message = err instanceof Error ? err.message : String(err)
+      setError(message)
+      console.warn('memory.upsert failed', err)
+      return { success: false, error: message }
     }
   }, [base]);
 

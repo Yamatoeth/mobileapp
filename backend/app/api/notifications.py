@@ -1,10 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Any
-from app.db.redis_client import redis_client, get_redis
+from app.db.redis_client import redis_client
 from app.core.config import get_settings
 from datetime import datetime
-import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -21,8 +22,12 @@ class ScheduleRequest(BaseModel):
     when_ts: int | None = None  # epoch seconds, optional immediate
 
 
-@router.post('/notifications/register')
-async def register_token(req: RegisterTokenRequest) -> Any:
+class NotificationStatusResponse(BaseModel):
+    status: str
+
+
+@router.post('/notifications/register', response_model=NotificationStatusResponse)
+async def register_token(req: RegisterTokenRequest) -> NotificationStatusResponse:
     await redis_client.connect()
     # Basic validation of Expo push token format (best-effort)
     token = (req.token or '').strip()
@@ -34,22 +39,22 @@ async def register_token(req: RegisterTokenRequest) -> Any:
     await redis_client.client.sadd(key, token)
     # keep tokens for 90 days
     await redis_client.client.expire(key, 60 * 60 * 24 * 90)
-    return {'status': 'ok'}
+    return NotificationStatusResponse(status='ok')
 
 
-@router.post('/notifications/schedule')
-async def schedule_notification(req: ScheduleRequest) -> Any:
+@router.post('/notifications/schedule', response_model=NotificationStatusResponse)
+async def schedule_notification(req: ScheduleRequest) -> NotificationStatusResponse:
     await redis_client.connect()
     # store scheduled notification in a Redis list for worker processing
     key = f"scheduled_notifications:{req.user_id}"
     payload = {"title": req.title, "body": req.body, "when_ts": req.when_ts}
     await redis_client.client.rpush(key, payload.__str__())
     # In production, Celery/worker should pick these up and call push service
-    return {'status': 'scheduled'}
+    return NotificationStatusResponse(status='scheduled')
 
 
 @router.post('/notifications/checkin')
-async def jarvis_checkin(user_id: str | int) -> Any:
+async def jarvis_checkin(user_id: str | int) -> dict:
     """Trigger a simple check-in notification to be sent to the user. Useful for testing."""
     await redis_client.connect()
     key = f"push_tokens:{user_id}"

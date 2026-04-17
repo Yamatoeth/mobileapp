@@ -1,6 +1,36 @@
 import { toUint8Array } from './binary'
 import { Skia } from '@shopify/react-native-skia'
 
+/**
+ * Skia JSI module interface for type-safe bindings
+ */
+interface SkiaJSIFunction {
+  __wrapped_by_skiaSafe?: boolean
+  call(thisArg: unknown, ...args: unknown[]): unknown
+}
+
+interface SkiaPictureModule {
+  MakePicture?: SkiaJSIFunction
+  Make?: SkiaJSIFunction
+}
+
+interface SkiaDataModule {
+  MakeFromBytes?: SkiaJSIFunction
+  Make?: SkiaJSIFunction
+}
+
+interface SkiaImageModule {
+  MakeImageFromEncoded?: SkiaJSIFunction
+  MakeFromEncoded?: SkiaJSIFunction
+  Make?: SkiaJSIFunction
+}
+
+interface SkiaModule {
+  Picture?: SkiaPictureModule
+  Data?: SkiaDataModule
+  Image?: SkiaImageModule
+}
+
 function arrayBufferForUint8(u8?: Uint8Array | null): ArrayBuffer | null {
   if (!u8) return null
   // If view covers full buffer, return underlying buffer directly
@@ -13,18 +43,19 @@ function arrayBufferForUint8(u8?: Uint8Array | null): ArrayBuffer | null {
 
 function wrapMakePicture() {
   try {
-    const Picture: any = (Skia as any)?.Picture
+    const skiaTyped = Skia as unknown as SkiaModule
+    const Picture = skiaTyped?.Picture
     if (!Picture) return
     const orig = Picture.MakePicture || Picture.Make
     if (typeof orig !== 'function') return
     const name = Picture.MakePicture ? 'MakePicture' : 'Make'
     // Wrap only once
-    if ((orig as any).__wrapped_by_skiaSafe) return
+    if (orig.__wrapped_by_skiaSafe) return
 
-    const wrapped = function (this: any, data: any, ...args: any[]) {
+    const wrapped = function (this: unknown, data: unknown, ...args: unknown[]) {
       // Ensure first arg is an ArrayBuffer (Skia JSI expects ArrayBuffer)
       const u8 = toUint8Array(data)
-      const ab = arrayBufferForUint8(u8) ?? (u8 as any)
+      const ab = arrayBufferForUint8(u8) ?? u8
       // Debug: log shape of incoming buffer/view
       console.log('[skiaSafe] MakePicture input', {
         isView: !!(u8 && u8.buffer),
@@ -34,8 +65,8 @@ function wrapMakePicture() {
       })
       return orig.call(this, ab, ...args)
     }
-    ;(wrapped as any).__wrapped_by_skiaSafe = true
-    Picture[name] = wrapped
+    ;(wrapped as unknown as SkiaJSIFunction).__wrapped_by_skiaSafe = true
+    Picture[name] = wrapped as SkiaJSIFunction
   } catch (e) {
     // Do nothing if Skia internals aren't present or API differs
     console.warn('[skiaSafe] failed to wrap MakePicture', e)
@@ -45,23 +76,24 @@ function wrapMakePicture() {
 // Also wrap Data.MakeFromBytes or similar if present
 function wrapDataMakeFromBytes() {
   try {
-    const Data: any = (Skia as any)?.Data
+    const skiaTyped = Skia as unknown as SkiaModule
+    const Data = skiaTyped?.Data
     if (!Data) return
     const orig = Data.MakeFromBytes || Data.Make
     if (typeof orig !== 'function') return
-    if ((orig as any).__wrapped_by_skiaSafe) return
-    const wrapped = function (this: any, data: any, ...args: any[]) {
+    if (orig.__wrapped_by_skiaSafe) return
+    const wrapped = function (this: unknown, data: unknown, ...args: unknown[]) {
       const u8 = toUint8Array(data)
-      const ab = arrayBufferForUint8(u8) ?? (u8 as any)
+      const ab = arrayBufferForUint8(u8) ?? u8
       console.log('[skiaSafe] Data.MakeFromBytes input', {
         byteOffset: u8?.byteOffset,
         byteLength: u8?.byteLength,
       })
       return orig.call(this, ab, ...args)
     }
-    ;(wrapped as any).__wrapped_by_skiaSafe = true
-    if (Data.MakeFromBytes) Data.MakeFromBytes = wrapped
-    else if (Data.Make) Data.Make = wrapped
+    ;(wrapped as unknown as SkiaJSIFunction).__wrapped_by_skiaSafe = true
+    if (Data.MakeFromBytes) Data.MakeFromBytes = wrapped as SkiaJSIFunction
+    else if (Data.Make) Data.Make = wrapped as SkiaJSIFunction
   } catch (e) {
     console.warn('[skiaSafe] failed to wrap Data.MakeFromBytes', e)
   }
@@ -70,24 +102,25 @@ function wrapDataMakeFromBytes() {
 // Wrap Image.MakeImageFromEncoded / MakeFromEncoded if present
 function wrapImageMakeFromEncoded() {
   try {
-    const Image: any = (Skia as any)?.Image
+    const skiaTyped = Skia as unknown as SkiaModule
+    const Image = skiaTyped?.Image
     if (!Image) return
     const orig1 = Image.MakeImageFromEncoded || Image.MakeFromEncoded || Image.Make
     if (typeof orig1 !== 'function') return
-    if ((orig1 as any).__wrapped_by_skiaSafe) return
-    const wrapped = function (this: any, data: any, ...args: any[]) {
+    if (orig1.__wrapped_by_skiaSafe) return
+    const wrapped = function (this: unknown, data: unknown, ...args: unknown[]) {
       const u8 = toUint8Array(data)
-      const ab = arrayBufferForUint8(u8) ?? (u8 as any)
+      const ab = arrayBufferForUint8(u8) ?? u8
       console.log('[skiaSafe] Image.MakeFromEncoded input', {
         byteOffset: u8?.byteOffset,
         byteLength: u8?.byteLength,
       })
       return orig1.call(this, ab, ...args)
     }
-    ;(wrapped as any).__wrapped_by_skiaSafe = true
-    if (Image.MakeImageFromEncoded) Image.MakeImageFromEncoded = wrapped
-    else if (Image.MakeFromEncoded) Image.MakeFromEncoded = wrapped
-    else if (Image.Make) Image.Make = wrapped
+    ;(wrapped as unknown as SkiaJSIFunction).__wrapped_by_skiaSafe = true
+    if (Image.MakeImageFromEncoded) Image.MakeImageFromEncoded = wrapped as SkiaJSIFunction
+    else if (Image.MakeFromEncoded) Image.MakeFromEncoded = wrapped as SkiaJSIFunction
+    else if (Image.Make) Image.Make = wrapped as SkiaJSIFunction
   } catch (e) {
     console.warn('[skiaSafe] failed to wrap Image.MakeImageFromEncoded', e)
   }

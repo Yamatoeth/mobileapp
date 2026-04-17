@@ -13,20 +13,39 @@
 // 3. Add `UIBackgroundModes` (audio) to iOS Info.plist and microphone
 //    permission strings. See ./WAKeWORD.md for details.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-export type WakeCallback = () => void;
+export type WakeCallback = () => void
+
+/**
+ * Porcupine module interface for dynamic import
+ */
+interface PorcupineManager {
+  start: (callback: (keywordIndex: number) => void) => Promise<void>
+  stop: () => Promise<void>
+  delete: () => Promise<void>
+}
+
+interface PorcupineModule {
+  PorcupineManager: {
+    fromKeywordPaths: (
+      accessKey: string,
+      keywordPaths: string[],
+      sensitivities: number[]
+    ) => Promise<PorcupineManager>
+  }
+}
 
 const runtimeImport = new Function(
   'moduleName',
   'return import(moduleName)'
-) as (moduleName: string) => Promise<any>;
+) as (moduleName: string) => Promise<{ default: PorcupineModule }>
 
 export function useWakeWord() {
-  const [available, setAvailable] = useState(false);
-  const [listening, setListening] = useState(false);
-  const engineRef = useRef<any>(null);
-  const callbackRef = useRef<WakeCallback | null>(null);
+  const [available, setAvailable] = useState(false)
+  const [listening, setListening] = useState(false)
+  const engineRef = useRef<PorcupineModule | null>(null)
+  const callbackRef = useRef<WakeCallback | null>(null)
 
   useEffect(() => {
     let mounted = true;
@@ -75,15 +94,15 @@ export function useWakeWord() {
         // const manager = await porcupine.PorcupineManager.fromKeywordPaths(accessKey, [keywordPath], [sensitivity]);
         // manager.start((keywordIndex) => { callbackRef.current?.(); });
         // Save manager to engineRef.current.manager
-        const accessKey = process.env.PICOVOICE_ACCESS_KEY || '';
-        const manager: any = await porcupine.PorcupineManager.fromKeywordPaths(accessKey, [], []);
+        const accessKey = process.env.PICOVOICE_ACCESS_KEY || ''
+        const manager = await porcupine.PorcupineManager.fromKeywordPaths(accessKey, [], [])
         // store manager
-        engineRef.current.manager = manager;
+        ;(engineRef.current as any).manager = manager
         manager.start((keywordIndex: number) => {
-          callbackRef.current?.();
-        });
-        setListening(true);
-        return;
+          callbackRef.current?.()
+        })
+        setListening(true)
+        return
       }
 
       // If module exposes a simple `start` function

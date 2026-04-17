@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { Dimensions, Animated, Easing, Platform } from 'react-native'
+import { Dimensions, Animated, Easing, Platform, ViewStyle } from 'react-native'
 import { View } from 'react-native'
 
 const { width: screenWidth } = Dimensions.get('window')
@@ -10,7 +10,7 @@ const N = Platform.OS === 'android' ? 60 : 120
 
 type Props = {
   listening: boolean
-  style?: any
+  style?: ViewStyle
 }
 
 type Particle = {

@@ -12,7 +12,7 @@ KB candidate updates which are stored under `kb_entries` and a short
 `kb_summary` is cached.
 """
 from fastapi import APIRouter, HTTPException
-from typing import Dict, Any
+from typing import Any
 from uuid import uuid4
 import logging
 
@@ -34,7 +34,7 @@ DEFAULT_QUESTIONS = [
 
 
 @router.post("/onboarding/start")
-async def start_onboarding(payload: Dict[str, Any]):
+async def start_onboarding(payload: dict[str, Any]):
     """Start an onboarding session.
 
     Expects JSON: {"user_id": "...", optional "questions": [..]}
@@ -64,7 +64,7 @@ async def start_onboarding(payload: Dict[str, Any]):
 
 
 @router.post("/onboarding/{session_id}/answer")
-async def continue_onboarding(session_id: str, payload: Dict[str, Any]):
+async def continue_onboarding(session_id: str, payload: dict[str, Any]):
     """Submit an answer and advance the onboarding session.
 
     Expects JSON: {"user_id": "...", "answer": "..."}
