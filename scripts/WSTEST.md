@@ -1,39 +1,60 @@
-# WebSocket Voice Test
+# WebSocket Voice Test Guide
 
-Two small test scripts are provided to exercise the voice WebSocket endpoint and report the `context_built` latency sent by the server.
+Use these lightweight scripts to verify the `/api/v1/ws/voice/{userId}` pipeline end to end and capture the `context_built` latency metric emitted by the server.
 
-Prerequisites
-- Backend running locally (default: `http://localhost:8000`).
-- For Node: `npm install ws` (or `yarn add ws`).
-- For Python: `pip install websockets`.
+## Prerequisites
+- FastAPI backend running locally (`uvicorn app.main:app --reload --port 8000`).
+- Valid `GROQ_API_KEY` (voice mode) and Kokoro files configured so the backend can complete the pipeline.
+- Optional auth token if your deployment secures the WebSocket: export `VOICE_JWT=<token>` and append `?token=$VOICE_JWT` to the URL.
+- Node.js 20+ (for the JS test) or Python 3.11+ (for the Python test).
+- Install dependencies:
+  ```bash
+  npm install ws # Node script
+  pip install websockets # Python script
+  ```
 
-Node test
+## Default Endpoint
 ```
-node scripts/ws_test_node.js
+BACKEND_WS=ws://localhost:8000/api/v1/ws/voice/1
 ```
-Or set a custom backend URL:
-```
-BACKEND_WS="ws://localhost:8000/api/v1/ws/voice/1" node scripts/ws_test_node.js
-```
-
-Python test
-```
-python3 scripts/ws_test_py.py
-```
-Or set custom backend URL:
-```
-BACKEND_WS="ws://localhost:8000/api/v1/ws/voice/1" python3 scripts/ws_test_py.py
+Override it per environment:
+```bash
+BACKEND_WS="ws://10.0.2.2:8000/api/v1/ws/voice/<userId>?token=$VOICE_JWT"
 ```
 
-What they do
-- Connect to `/api/v1/ws/voice/{user_id}` WebSocket.
-- Send a JSON control frame `{ "type": "final" }` to trigger the server pipeline.
-- The server runs STT -> `build_context()` -> LLM (if configured) and emits a `context_built` JSON message, e.g.
-
-```
-{"type":"context_built","ms":123}
+## Run the Tests
+### Node
+```bash
+BACKEND_WS=<ws-url> node scripts/ws_test_node.js
 ```
 
-Notes
-- If your backend is behind a proxy or running on a different port, set `BACKEND_WS` accordingly.
-- To simulate audio, send JSON frames `{ "type": "audio_chunk", "data": "<base64>" }` prior to the `final` frame.
+### Python
+```bash
+BACKEND_WS=<ws-url> python3 scripts/ws_test_py.py
+```
+
+Both scripts:
+1. Open a WebSocket connection to `/api/v1/ws/voice/{userId}`.
+2. (Optional) Send fake audio chunks via `{ "type": "audio_chunk", "data": "<base64>" }`.
+3. Send `{ "type": "final" }` to trigger STT → context builder → LLM → TTS.
+4. Log the server messages, highlighting `{"type":"context_built","ms":123}` and `{"type":"tts_ready",...}` events.
+
+## Expected Output
+- `context_built` event with `ms` field under ~1000ms for cached context.
+- `tts_generated` or `audio_ready` event containing a base64 audio payload if Kokoro succeeds.
+- Graceful close from the server when playback data is fully streamed.
+
+## Troubleshooting
+| Symptom | Fix |
+| --- | --- |
+| Connection refused | Ensure backend listens on the host/port and that firewalls allow WS traffic |
+| No `context_built` message | Check `GROQ_API_KEY` validity and backend logs for STT failures |
+| `tts_generated` missing | Verify Kokoro model paths and file permissions |
+| 401/403 on connect | Include the auth token query parameter or header expected by your deployment |
+
+## Automating the Check
+Add the Node script to CI or a pre-release checklist:
+```bash
+BACKEND_WS=$WS_URL node scripts/ws_test_node.js | tee artifacts/ws-log.txt
+```
+Fail the build if `context_built` latency exceeds your target threshold or if no `tts_generated` message appears.
