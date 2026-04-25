@@ -79,7 +79,7 @@ function WaveBars({ visible }: { visible: boolean }) {
 }
 
 type Props = {
-  onNavigate?: (route: 'home' | 'profile') => void
+  onNavigate?: (route: 'home' | 'profile' | 'history' | 'knowledge' | 'settings') => void
 }
 
 function createLocalUserId() {
@@ -272,6 +272,13 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
     return 'Ready'
   }, [isBootstrapping, isListening, isProcessing, isReady, isSpeaking])
 
+  const recordingLabel = useMemo(() => {
+    if (isBootstrapping) return 'Preparing local session'
+    if (isProcessing) return 'JARVIS is thinking'
+    if (isListening) return 'Stop recording and send'
+    return 'Start voice recording'
+  }, [isBootstrapping, isListening, isProcessing])
+
   const backendLabel = useMemo(() => {
     if (backendStatus === 'checking') return 'Backend: checking'
     if (backendStatus === 'connected') return 'Backend: online'
@@ -305,19 +312,50 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
             trackColor={{ false: '#173947', true: '#00d4ff' }}
             thumbColor={wakeEnabled ? '#ffffff' : '#f4f3f4'}
             accessibilityLabel="Enable wake word"
+            accessibilityHint="Listens for the wake word when enabled"
           />
           <Pressable
             onPress={() => onNavigate?.('profile')}
             style={styles.iconButton}
+            accessibilityRole="button"
             accessibilityLabel="Open profile"
           >
             <Ionicons name="person-circle-outline" size={28} color="#00d4ff" />
           </Pressable>
         </View>
       </View>
+      <View style={styles.quickNav} accessibilityRole="toolbar">
+        <Pressable
+          onPress={() => onNavigate?.('history')}
+          style={styles.quickNavButton}
+          accessibilityRole="button"
+          accessibilityLabel="Open conversation history"
+        >
+          <Ionicons name="time-outline" size={22} color="#00d4ff" />
+          <Text style={styles.quickNavText}>History</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => onNavigate?.('knowledge')}
+          style={styles.quickNavButton}
+          accessibilityRole="button"
+          accessibilityLabel="Open knowledge base"
+        >
+          <Ionicons name="book-outline" size={22} color="#00d4ff" />
+          <Text style={styles.quickNavText}>Knowledge</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => onNavigate?.('settings')}
+          style={styles.quickNavButton}
+          accessibilityRole="button"
+          accessibilityLabel="Open settings"
+        >
+          <Ionicons name="settings-outline" size={22} color="#00d4ff" />
+          <Text style={styles.quickNavText}>Settings</Text>
+        </Pressable>
+      </View>
 
       <View style={styles.center}>
-        <View style={styles.statusPill}>
+        <View style={styles.statusPill} accessibilityRole="text" accessibilityLiveRegion="polite">
           {isBootstrapping || isProcessing ? (
             <ActivityIndicator size="small" color="#00d4ff" />
           ) : (
@@ -348,6 +386,10 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
               borderRadius: SPHERE_SIZE / 2,
             }}
             android_ripple={{ color: 'transparent' }}
+            accessibilityRole="button"
+            accessibilityLabel={recordingLabel}
+            accessibilityHint="Double tap to control voice recording"
+            accessibilityState={{ disabled: isBootstrapping || isProcessing, busy: isProcessing }}
           />
         </View>
 
@@ -375,6 +417,9 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
                   key={voice}
                   onPress={() => updateSettings({ preferredTtsVoice: voice })}
                   style={[styles.voiceChip, selected && styles.voiceChipSelected]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use ${voice} voice`}
+                  accessibilityState={{ selected }}
                 >
                   <Text style={[styles.voiceChipText, selected && styles.voiceChipTextSelected]}>
                     {voice}
@@ -384,7 +429,11 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
             })}
           </ScrollView>
         ) : null}
-        <ScrollView style={styles.outputScroll} contentContainerStyle={styles.outputScrollContent}>
+        <ScrollView
+          style={styles.outputScroll}
+          contentContainerStyle={styles.outputScrollContent}
+          accessibilityLabel="Conversation messages"
+        >
           {transcript ? (
             <View style={styles.messageCard}>
               <Text style={styles.messageLabel}>You</Text>
@@ -427,6 +476,8 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
             placeholderTextColor="rgba(255,255,255,0.35)"
             style={styles.input}
             editable={!isBootstrapping && !isProcessing}
+            accessibilityLabel="Text message"
+            accessibilityHint="Type a question for JARVIS"
             onSubmitEditing={() => {
               void handleSendText()
             }}
@@ -441,6 +492,9 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
               styles.sendButton,
               (!draft.trim() || isBootstrapping || isProcessing) && styles.sendButtonDisabled,
             ]}
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
+            accessibilityState={{ disabled: !draft.trim() || isBootstrapping || isProcessing }}
           >
             <Ionicons name="arrow-up" size={20} color="#00131a" />
           </Pressable>
@@ -477,8 +531,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  quickNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  quickNavButton: {
+    minHeight: 44,
+    flex: 1,
+    maxWidth: 116,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 212, 255, 0.18)',
+    backgroundColor: 'rgba(0, 212, 255, 0.08)',
+  },
+  quickNavText: {
+    color: '#c9f7ff',
+    fontFamily: 'Rajdhani_500Medium',
+    fontSize: 14,
+  },
   iconButton: {
-    padding: 8,
+    minHeight: 44,
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   center: {
     flex: 1,

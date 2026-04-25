@@ -1,20 +1,21 @@
 /**
  * Audio playback service for backend-generated voice responses.
  */
-const { Audio }: any = require('expo-av')
+const ExpoAudio: any = require('expo-audio')
 
-type AVPlaybackStatus = any
-type Sound = any
+type AudioPlaybackStatus = any
+type AudioPlayer = any
 import * as FileSystem from 'expo-file-system/legacy'
 
 class AudioPlaybackService {
-  private sound: Sound | null = null
+  private player: AudioPlayer | null = null
+  private playbackSubscription: { remove: () => void } | null = null
   private isPlaying = false
-  private onPlaybackStatusUpdate: ((status: AVPlaybackStatus) => void) | null = null
+  private onPlaybackStatusUpdate: ((status: AudioPlaybackStatus) => void) | null = null
 
   async initialize(): Promise<void> {
     console.log('[audioPlayback] initialize: setting audio mode')
-    await Audio.setAudioModeAsync({
+    await ExpoAudio.setAudioModeAsync({
       playsInSilentModeIOS: true,
       staysActiveInBackground: false,
       shouldDuckAndroid: true,
@@ -41,11 +42,11 @@ class AudioPlaybackService {
         })
       }
 
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: audioUri },
-        { shouldPlay: true },
-        (status: AVPlaybackStatus) => {
-          if (status.isLoaded && status.didJustFinish) {
+      const player = ExpoAudio.createAudioPlayer({ uri: audioUri }, { updateInterval: 250 })
+      this.playbackSubscription = player.addListener?.(
+        'playbackStatusUpdate',
+        (status: AudioPlaybackStatus) => {
+          if (status.didJustFinish) {
             this.isPlaying = false
             console.log('[audioPlayback] didJustFinish', audioUri, { ts: Date.now() })
             onComplete?.()
@@ -54,7 +55,8 @@ class AudioPlaybackService {
         }
       )
 
-      this.sound = sound
+      player.play()
+      this.player = player
       this.isPlaying = true
     } catch (error) {
       this.isPlaying = false
@@ -64,35 +66,39 @@ class AudioPlaybackService {
   }
 
   async pause(): Promise<void> {
-    if (this.sound && this.isPlaying) {
-      await this.sound.pauseAsync()
+    if (this.player && this.isPlaying) {
+      this.player.pause()
       this.isPlaying = false
     }
   }
 
   async resume(): Promise<void> {
-    if (this.sound && !this.isPlaying) {
-      await this.sound.playAsync()
+    if (this.player && !this.isPlaying) {
+      this.player.play()
       this.isPlaying = true
     }
   }
 
   async stop(): Promise<void> {
-    if (this.sound) {
+    if (this.player) {
       console.log('[audioPlayback] stop called', { ts: Date.now() })
       try {
-        await this.sound.stopAsync()
+        this.player.pause()
       } catch {}
       try {
-        await this.sound.unloadAsync()
+        this.playbackSubscription?.remove()
       } catch {}
-      this.sound = null
+      try {
+        this.player.remove()
+      } catch {}
+      this.playbackSubscription = null
+      this.player = null
       this.isPlaying = false
       console.log('[audioPlayback] stop completed', { ts: Date.now() })
     }
   }
 
-  setOnPlaybackStatusUpdate(callback: (status: AVPlaybackStatus) => void): void {
+  setOnPlaybackStatusUpdate(callback: (status: AudioPlaybackStatus) => void): void {
     this.onPlaybackStatusUpdate = callback
   }
 
@@ -101,17 +107,13 @@ class AudioPlaybackService {
   }
 
   async getPosition(): Promise<number | null> {
-    if (!this.sound) return null
-    const status = await this.sound.getStatusAsync()
-    if (status.isLoaded) {
-      return status.positionMillis
-    }
-    return null
+    if (!this.player) return null
+    return Math.round((this.player.currentTime || 0) * 1000)
   }
 
   async setSpeed(speed: number): Promise<void> {
-    if (this.sound) {
-      await this.sound.setRateAsync(speed, true)
+    if (this.player) {
+      this.player.setPlaybackRate?.(speed, 'high')
     }
   }
 }

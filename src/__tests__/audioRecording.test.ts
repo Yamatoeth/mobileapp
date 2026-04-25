@@ -10,42 +10,51 @@ jest.mock('expo-constants', () => ({
   },
 }))
 
-// Mock expo-av
-jest.mock('expo-av', () => {
-  class MockRecording {
-    private uri: string | null = null
+jest.mock('expo-audio', () => ({
+  RecordingPresets: {
+    HIGH_QUALITY: {
+      extension: '.m4a',
+      sampleRate: 44100,
+      numberOfChannels: 1,
+      bitRate: 128000,
+    },
+  },
+  IOSOutputFormat: { MPEG4AAC: 'aac ' },
+  AudioQuality: { HIGH: 96 },
+  requestRecordingPermissionsAsync: async () => ({ status: 'granted', granted: true }),
+  getRecordingPermissionsAsync: async () => ({ status: 'granted' }),
+  setAudioModeAsync: async () => ({}),
+}))
+
+jest.mock('expo-audio/build/AudioModule', () => {
+  class MockAudioRecorder {
+    uri: string | null = null
+
     async prepareToRecordAsync() {
       return Promise.resolve()
     }
-    async startAsync() {
+
+    record() {
       if (mockStartShouldFail) {
         throw new Error('recording not started')
       }
       this.uri = 'file://mock/recording.wav'
-      return Promise.resolve()
     }
-    async stopAndUnloadAsync() {
+
+    async stop() {
       mockStopCalls += 1
       return Promise.resolve()
     }
-    getURI() {
-      return this.uri
-    }
-    async getStatusAsync() {
-      return { isRecording: false, metering: -20 }
-    }
-    setOnRecordingStatusUpdate() {
-      return undefined
+
+    getStatus() {
+      return { isRecording: Boolean(this.uri), metering: -20, url: this.uri }
     }
   }
 
   return {
-    Audio: {
-      RECORDING_OPTIONS_PRESET_HIGH_QUALITY: {},
-      requestPermissionsAsync: async () => ({ status: 'granted', granted: true }),
-      getPermissionsAsync: async () => ({ status: 'granted' }),
-      setAudioModeAsync: async () => ({}),
-      Recording: MockRecording,
+    __esModule: true,
+    default: {
+      AudioRecorder: MockAudioRecorder,
     },
   }
 })
@@ -58,6 +67,22 @@ jest.mock('expo-file-system/legacy', () => ({
 }))
 
 describe('audioRecordingService', () => {
+  const consoleLog = console.log
+  const consoleWarn = console.warn
+  const consoleError = console.error
+
+  beforeAll(() => {
+    console.log = jest.fn()
+    console.warn = jest.fn()
+    console.error = jest.fn()
+  })
+
+  afterAll(() => {
+    console.log = consoleLog
+    console.warn = consoleWarn
+    console.error = consoleError
+  })
+
   beforeEach(() => {
     mockStartShouldFail = false
     mockStopCalls = 0

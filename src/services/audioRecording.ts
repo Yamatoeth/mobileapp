@@ -1,9 +1,9 @@
 /**
  * Audio Recording Service - Handles microphone recording for voice input
- * Uses expo-av for recording and file management
+ * Uses expo-audio for recording and file management
  */
-// Import `Audio` from `expo-av` at runtime to avoid type/export mismatches across SDKs
-const { Audio }: any = require('expo-av')
+const ExpoAudio: any = require('expo-audio')
+const AudioModule: any = require('expo-audio/build/AudioModule').default
 // Expo types may vary across SDK versions; use flexible aliases here
 type ExpoRecordingOptions = any
 type ExpoRecording = any
@@ -35,18 +35,17 @@ export type RecordingState = 'idle' | 'preparing' | 'recording' | 'stopping';
 // Capture in the mobile-native container so Groq STT receives a valid file.
 const RECORDING_OPTIONS: ExpoRecordingOptions = {
   isMeteringEnabled: true,
-  android: Audio?.RECORDING_OPTIONS_PRESET_HIGH_QUALITY?.android || {
+  ...ExpoAudio.RecordingPresets.HIGH_QUALITY,
+  numberOfChannels: 1,
+  android: {
     extension: '.m4a',
-    outputFormat: Audio?.AndroidOutputFormat?.MPEG_4 ?? 2,
-    audioEncoder: Audio?.AndroidAudioEncoder?.AAC ?? 3,
-    sampleRate: 44100,
-    numberOfChannels: 1,
-    bitRate: 128000,
+    outputFormat: 'mpeg4',
+    audioEncoder: 'aac',
   },
-  ios: Audio?.RECORDING_OPTIONS_PRESET_HIGH_QUALITY?.ios || {
+  ios: {
     extension: '.m4a',
-    outputFormat: Audio?.IOSOutputFormat?.MPEG4AAC ?? 'aac ',
-    audioQuality: Audio?.IOSAudioQuality?.HIGH ?? 96,
+    outputFormat: ExpoAudio.IOSOutputFormat?.MPEG4AAC ?? 'aac ',
+    audioQuality: ExpoAudio.AudioQuality?.HIGH ?? 96,
     sampleRate: 44100,
     numberOfChannels: 1,
     bitRate: 128000,
@@ -81,20 +80,14 @@ class AudioRecordingService {
     if (!recording) return;
 
     try {
-      recording.setOnRecordingStatusUpdate?.(null);
+      await recording.stop();
     } catch (error) {
-      // Best effort: some Expo AV states do not allow clearing the callback.
-    }
-
-    try {
-      await recording.stopAndUnloadAsync();
-    } catch (error) {
-      // Best effort: startAsync may have failed before recording actually started.
+      // Best effort: record() may have failed before recording actually started.
     }
   }
 
   private async resetAudioMode(): Promise<void> {
-    await Audio.setAudioModeAsync({
+    await ExpoAudio.setAudioModeAsync({
       allowsRecordingIOS: false,
       playsInSilentModeIOS: true,
     }).catch(() => undefined);
@@ -104,35 +97,15 @@ class AudioRecordingService {
     onLevelUpdate?: (level: AudioLevel) => void,
     traceId: string = 'no-trace'
   ): Promise<ExpoRecording> {
-    if (typeof Audio.Recording?.createAsync === 'function') {
-      console.log('[audioRecording] Recording.createAsync start', { traceId });
-      const created = await Audio.Recording.createAsync(
-        RECORDING_OPTIONS,
-        onLevelUpdate
-          ? (status: { isRecording?: boolean; metering?: number }) => {
-              if (status.isRecording && status.metering !== undefined) {
-                onLevelUpdate({
-                  level: Math.max(0, Math.min(1, (status.metering + 60) / 60)),
-                  timestamp: Date.now(),
-                });
-              }
-            }
-          : undefined,
-        100
-      );
-      console.log('[audioRecording] Recording.createAsync done', { traceId });
-      return created.recording;
-    }
-
-    const recording = new Audio.Recording();
+    const recording = new AudioModule.AudioRecorder(RECORDING_OPTIONS);
     try {
       console.log('[audioRecording] prepareToRecordAsync start', { traceId });
       await recording.prepareToRecordAsync(RECORDING_OPTIONS);
       console.log('[audioRecording] prepareToRecordAsync done', { traceId });
 
-      console.log('[audioRecording] startAsync start', { traceId });
-      await recording.startAsync();
-      console.log('[audioRecording] startAsync done', { traceId });
+      console.log('[audioRecording] record start', { traceId });
+      recording.record();
+      console.log('[audioRecording] record done', { traceId });
       return recording;
     } catch (error) {
       await this.cleanupRecordingInstance(recording);
@@ -146,7 +119,7 @@ class AudioRecordingService {
   async requestPermissions(): Promise<boolean> {
     try {
       console.log('[audioRecording] requestPermissions: requesting');
-      const { status } = await Audio.requestPermissionsAsync();
+      const { status } = await ExpoAudio.requestRecordingPermissionsAsync();
       console.log('[audioRecording] requestPermissions: status=', status);
       return status === 'granted';
     } catch (error) {
@@ -160,7 +133,7 @@ class AudioRecordingService {
    */
   async hasPermissions(): Promise<boolean> {
     try {
-      const { status } = await Audio.getPermissionsAsync();
+      const { status } = await ExpoAudio.getRecordingPermissionsAsync();
       console.log('[audioRecording] hasPermissions:', status);
       return status === 'granted';
     } catch (error) {
@@ -173,11 +146,9 @@ class AudioRecordingService {
    * Configure audio mode for recording
    */
   private async configureAudioMode(): Promise<void> {
-    await Audio.setAudioModeAsync({
+    await ExpoAudio.setAudioModeAsync({
       allowsRecordingIOS: true,
       playsInSilentModeIOS: true,
-      interruptionModeIOS: Audio.InterruptionModeIOS?.DO_NOT_MIX ?? 1,
-      interruptionModeAndroid: Audio.InterruptionModeAndroid?.DO_NOT_MIX ?? 1,
       shouldDuckAndroid: true,
       playThroughEarpieceAndroid: false,
       staysActiveInBackground: false,
@@ -296,7 +267,7 @@ class AudioRecordingService {
     this.levelInterval = setInterval(async () => {
       if (this.recording && this.state === 'recording' && this.levelUpdateCallback) {
         try {
-          const status = await this.recording.getStatusAsync();
+          const status = this.recording.getStatus();
           if (status.isRecording && status.metering !== undefined) {
             // Convert dB to 0-1 range (metering is typically -160 to 0 dB)
             const normalizedLevel = Math.max(0, Math.min(1, (status.metering + 60) / 60));
@@ -337,10 +308,10 @@ class AudioRecordingService {
       this.stopLevelMonitoring();
 
       // Stop and unload recording
-      await this.recording.stopAndUnloadAsync();
+      await this.recording.stop();
 
       // Get recording info
-      const uri = this.recording.getURI();
+      const uri = this.recording.uri || this.recording.getStatus?.().url;
       const durationMs = Date.now() - this.startTime;
 
       if (!uri) {
@@ -352,7 +323,7 @@ class AudioRecordingService {
       const fileSize = fileInfo.exists ? (fileInfo.size || 0) : 0;
 
       // Reset audio mode
-      await Audio.setAudioModeAsync({
+      await ExpoAudio.setAudioModeAsync({
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
       });
@@ -385,15 +356,15 @@ class AudioRecordingService {
 
     try {
       this.stopLevelMonitoring();
-      await this.recording.stopAndUnloadAsync();
+      await this.recording.stop();
 
       // Delete the recording file
-      const uri = this.recording.getURI();
+      const uri = this.recording.uri || this.recording.getStatus?.().url;
       if (uri) {
         await FileSystem.deleteAsync(uri, { idempotent: true });
       }
 
-      await Audio.setAudioModeAsync({
+      await ExpoAudio.setAudioModeAsync({
         allowsRecordingIOS: false,
       });
     } catch (error) {

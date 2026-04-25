@@ -25,6 +25,12 @@ jobs:
       - run: npm run lint
       - run: npm run pretty
       - run: npm run type-check
+      - run: npm run test:coverage
+      - name: Upload frontend coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage-node-${{ matrix.node-version }}
+          path: coverage/
 
   backend:
     runs-on: ubuntu-latest

@@ -13,6 +13,17 @@ if (typeof global.TextEncoder === 'undefined') {
 if (typeof global.__DEV__ === 'undefined') {
 	global.__DEV__ = true
 }
+process.env.EXPO_OS = process.env.EXPO_OS || 'ios'
+
+jest.mock('expo-constants', () => ({
+	__esModule: true,
+	default: {
+		isDevice: true,
+		expoConfig: {},
+		manifest: {},
+		manifest2: {},
+	},
+}))
 try {
 	require('@testing-library/jest-native/extend-expect')
 } catch (e) {

@@ -1,6 +1,6 @@
 module.exports = [
   {
-    ignores: ['node_modules/**', 'backend/**', 'dist/**'],
+    ignores: ['node_modules/**', 'backend/**', 'dist/**', 'coverage/**'],
   },
   {
     files: ['**/*.ts', '**/*.tsx'],

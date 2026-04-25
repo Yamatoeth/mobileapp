@@ -4,7 +4,6 @@ import './global.css'
 // Ensure Skia JSI wrappers are applied early to accept various binary shapes
 import './src/utils/skiaSafe'
 
-
 import { StatusBar } from 'expo-status-bar'
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
@@ -14,15 +13,28 @@ import JarvisVoiceScreen from './src/components/JarvisVoiceScreen'
 import { ProfileScreen } from './src/screens/ProfileScreen'
 import { ThemeProvider, useTheme } from './src/hooks/useTheme'
 import { OnboardingScreen } from './src/screens/OnboardingScreen'
+import { HistoryScreen } from './src/screens/HistoryScreen'
+import { KnowledgeScreen } from './src/screens/KnowledgeScreen'
+import { SettingsScreen } from './src/screens/SettingsScreen'
 import { useOnboarding } from './src/hooks/useOnboarding'
 import { useEffect, useState } from 'react'
+import { ErrorBoundary } from './src/components/ErrorBoundary'
 import { addNotificationActionListener, registerForPushNotificationsAsync } from './src/services/notificationService'
 import { useSettingsStore } from './src/store/settingsStore'
 
-const Stack = createNativeStackNavigator()
+type RootStackParamList = {
+  Home: undefined
+  Profile: undefined
+  History: undefined
+  Knowledge: undefined
+  Settings: undefined
+  Onboarding: undefined
+}
+
+const Stack = createNativeStackNavigator<RootStackParamList>()
 
 function AppContent() {
-  const { isDark, theme } = useTheme()
+  const { isDark } = useTheme()
   const { hasSeenOnboarding, isLoading, completeOnboarding } = useOnboarding()
   const userId = useSettingsStore((state) => state.userId)
   
@@ -86,10 +98,26 @@ function AppContent() {
       <NavigationContainer theme={navigationTheme}>
         <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#002832' } }}>
           <Stack.Screen name="Home">
-            {(props) => <JarvisVoiceScreen onNavigate={() => props.navigation.navigate('Profile')} />}
+            {(props) => (
+              <JarvisVoiceScreen
+                onNavigate={(route) => {
+                  const routeName = route.charAt(0).toUpperCase() + route.slice(1)
+                  props.navigation.navigate(routeName as keyof RootStackParamList)
+                }}
+              />
+            )}
           </Stack.Screen>
           <Stack.Screen name="Profile">
             {(props) => <ProfileScreen onNavigate={() => props.navigation.navigate('Home')} />}
+          </Stack.Screen>
+          <Stack.Screen name="History">
+            {(props) => <HistoryScreen onNavigate={() => props.navigation.navigate('Home')} />}
+          </Stack.Screen>
+          <Stack.Screen name="Knowledge">
+            {(props) => <KnowledgeScreen onNavigate={() => props.navigation.navigate('Home')} />}
+          </Stack.Screen>
+          <Stack.Screen name="Settings">
+            {(props) => <SettingsScreen onNavigate={() => props.navigation.navigate('Home')} />}
           </Stack.Screen>
         </Stack.Navigator>
       </NavigationContainer>
@@ -102,7 +130,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AppContent />
+        <ErrorBoundary>
+          <AppContent />
+        </ErrorBoundary>
       </ThemeProvider>
     </SafeAreaProvider>
   )
