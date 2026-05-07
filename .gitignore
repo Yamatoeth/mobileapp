@@ -51,6 +51,8 @@ GoogleService-Info.plist
 backend/.venv/
 backend/.env
 backend/data/conversation_memory/*.jsonl
+backend/models/kokoro/*.onnx
+backend/models/kokoro/*.bin
 __pycache__/
 *.pyc
 *.pyo
@@ -61,6 +63,7 @@ __pycache__/
 /.scripts
 /node_modules
 .github/
+.agent/mnt/
 me.json
 _test.db
 .omx/
