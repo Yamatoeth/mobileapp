@@ -1,126 +1,196 @@
 # JARVIS Voice Assistant
 
-This project is wired around one Phase 1 backend-owned voice stack:
+JARVIS is an Expo mobile app backed by a FastAPI assistant service. It demonstrates a full voice loop: record on device, stream audio to the backend, transcribe speech, build server-side memory/context, generate an answer, synthesize speech, and play the response in the app.
 
-- `Deepgram Flux/Nova-3` for speech-to-text
-- `Groq` for low-latency, low-cost chat generation
-- `Deepgram Aura` for hosted text-to-speech
-- `Kokoro ONNX` as a local development fallback only
-- Expo mobile app as the microphone + playback client
+The project is portfolio-ready as a self-hosted AI assistant prototype. It can run in local fallback mode without provider keys for text testing, and it supports the full voice experience when provider credentials are configured.
 
-Use this repo when you need a self-hosted voice assistant that can run without OpenAI or cloud TTS dependencies.
+## What It Does
 
-- Text ask -> text answer with no provider keys, using local fallback mode
-- Voice ask -> AI answer when `DEEPGRAM_API_KEY` and `GROQ_API_KEY` are configured
-- Spoken AI reply through Deepgram Aura, with Kokoro available for local fallback
+- Text ask -> assistant answer through the backend-owned `/api/v1/ai/process` pipeline.
+- Voice ask -> speech transcription, context building, LLM response streaming, and spoken playback over WebSocket.
+- Persistent conversation and knowledge storage using PostgreSQL, with Redis for working memory/cache.
+- Local development fallback responses when model provider keys are missing.
+- Deepgram Aura TTS by default, with Kokoro ONNX available as a local fallback.
 
 ```mermaid
 graph LR
-    UI[Expo App] -->|REST/WS| API(FastAPI)
-    API --> STT[Groq / Deepgram]
-    API --> CTX[Context Builder]
-    CTX --> DB[(Postgres)]
-    CTX --> Redis[(Redis)]
-    API --> LLM[Groq Llama 3.3]
-    API --> TTS[Kokoro ONNX]
-    TTS --> Audio
+    App[Expo App] -->|REST + WebSocket| API[FastAPI Backend]
+    API --> STT[Deepgram STT / Groq Whisper fallback]
+    API --> Context[Context Builder]
+    Context --> Postgres[(PostgreSQL)]
+    Context --> Redis[(Redis)]
+    API --> LLM[Groq Chat]
+    API --> TTS[Deepgram Aura / Kokoro fallback]
+    TTS --> App
 ```
 
 ## Feature Modes
+
 | Mode | Requirements | Behavior |
 | --- | --- | --- |
-| Text-only fallback | No external keys | Sends chat prompts via REST and renders text responses |
-| Full voice loop | `GROQ_API_KEY`, Kokoro assets, microphone permissions | Record, transcribe, generate LLM answer, synthesize speech, playback |
-| Offline TTS | Kokoro files available locally | Backend continues to speak replies even if external TTS is unavailable |
+| Text fallback | Backend running, no provider keys | Sends text prompts through REST and returns local-mode answers |
+| Full text assistant | `GROQ_API_KEY` | Uses Groq for generated assistant responses |
+| Full voice loop | `DEEPGRAM_API_KEY`, `GROQ_API_KEY`, microphone permission | Records speech, transcribes, answers, synthesizes speech, and plays audio |
+| Local TTS fallback | Kokoro model files available | Synthesizes speech locally if Deepgram TTS is unavailable or disabled |
 
-## Supported Environments
-- iOS Simulator (Apple Silicon) and Android Emulator (API 33+)
-- Physical devices via Expo Dev Client (requires `expo run:<platform>`)
-- Backend on macOS/Linux with Python 3.11+; Docker Compose for consolidated infra
+## Local Setup
 
+### 1. Configure Environment
+
+Mobile app:
+
+```bash
+cp .env.example .env
+```
+
+For Android emulator, keep:
+
+```bash
+EXPO_PUBLIC_API_URL=http://10.0.2.2:8000
+```
+
+For iOS simulator or local web, use:
+
+```bash
+EXPO_PUBLIC_API_URL=http://127.0.0.1:8000
+```
+
+Backend:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Important backend values:
+
+```bash
 GROQ_API_KEY=your_groq_key
 GROQ_CHAT_MODEL=openai/gpt-oss-120b
 GROQ_FALLBACK_MODEL=llama-3.1-8b-instant
+GROQ_STT_MODEL=whisper-large-v3-turbo
+
 DEEPGRAM_API_KEY=your_deepgram_key
 DEEPGRAM_STT_MODEL=nova-3
 DEEPGRAM_TTS_MODEL=aura-2-thalia-en
 
-# Local development fallback only
+# Optional local TTS fallback
 KOKORO_MODEL_PATH=/absolute/path/to/backend/models/kokoro/kokoro-v1.0.int8.onnx
 KOKORO_VOICES_PATH=/absolute/path/to/backend/models/kokoro/voices-v1.0.bin
 KOKORO_DEFAULT_VOICE=af_sarah
 KOKORO_DEFAULT_LANGUAGE=en-us
 KOKORO_DEFAULT_SPEED=1.0
 
+# Embeddings/knowledge features
+OPENAI_API_KEY=
 PINECONE_API_KEY=
-OPENAI_API_KEY= # embeddings only unless explicitly reconfigured
 ```
 
-Notes:
+Provider secrets belong in `backend/.env`; the mobile app should only know the backend base URL.
 
-- Postgres is the durable Knowledge Base. Redis is cache/working memory.
-- `OPENAI_API_KEY` is not required for the active LLM path; it is used for embeddings.
-- Kokoro runs locally and does not require external TTS auth, but it is not the production default.
-
-## Run
-
-Backend:
-
-## Running Locally
-### Backend
-```bash
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-For a physical phone, the backend must listen on the LAN, not only on
-`127.0.0.1`. From the repo root, after activating the backend virtualenv, you
-can run the same LAN-safe command with:
+### 2. Run the Backend
 
 ```bash
 npm run backend:setup
 npm run backend
 ```
 
-Then verify from the phone browser:
+The backend listens on `0.0.0.0:8000`, which lets physical phones on the same LAN reach it. Verify from the simulator, browser, or phone:
 
 ```text
-http://<your-mac-lan-ip>:8000/health
+http://<backend-host>:8000/health
 ```
 
-If that URL does not return `{"status":"healthy",...}`, the mobile app cannot
-open the voice WebSocket either.
+Expected response:
 
-### Mobile App
+```json
+{"status":"healthy","version":"1.0.0","debug":true}
+```
+
+### 3. Run the Mobile App
+
 ```bash
 npm install
-npm start # choose platform from Expo CLI
+npm start
 ```
-- For Expo Go over a tunnel: `npm run start:go -- --clear`.
-- For an Expo Dev Client build over a tunnel: `npm run start:dev-client -- --clear`.
-- `npx expo run:android` / `npx expo run:ios` builds Dev Client when you need native modules.
-- Ensure the device can reach the backend URL in `.env` (use `http://10.0.2.2` for Android emulator).
 
-### Docker Compose
-The root `docker-compose.yml` launches backend + Postgres + Redis. Set the same env vars or mount `backend/.env`.
+Useful variants:
 
-1. Open the app.
-2. Type into the composer to verify backend ask/answer works.
-3. Hold the orb to record.
-4. Release to send audio to the backend.
-5. Backend transcribes with Deepgram, builds server-side context, generates the response with Groq, synthesizes with Deepgram Aura, and returns audio for playback.
-6. After the conversation completes, a Celery task extracts durable facts into PostgreSQL and logs `knowledge_updates`.
+```bash
+npm run start:go -- --clear
+npm run start:dev-client -- --clear
+npm run android
+npm run ios
+```
+
+Use a Dev Client build when native modules are required.
+
+### 4. Optional Docker Services
+
+The root `docker-compose.yml` runs backend support services such as PostgreSQL and Redis:
+
+```bash
+docker-compose up -d
+```
+
+Use the same backend environment variables as local development.
+
+## Demo Flow
+
+For a short portfolio video, show the core value quickly:
+
+1. Start on the JARVIS voice screen with the animated orb visible.
+2. Ask a typed question first to prove the backend assistant loop works.
+3. Hold the voice control, ask a short personal-context question, then release.
+4. Show the live states: recording, transcribing, thinking/context, and speaking.
+5. End on the assistant reply, ideally one that references remembered context.
+
+A simple 45-60 second structure works well:
+
+- 0-5s: title card or first screen, "JARVIS: mobile voice assistant".
+- 5-20s: typed prompt and response.
+- 20-45s: voice prompt, streaming answer, spoken playback.
+- 45-60s: quick architecture overlay or README shot showing Expo + FastAPI + Deepgram + Groq + memory.
+
+## Validation
+
+Frontend checks:
+
+```bash
+npm run type-check
+npm test
+```
+
+Backend checks:
+
+```bash
+cd backend
+pytest
+```
+
+WebSocket voice protocol smoke test:
+
+```bash
+BACKEND_WS=ws://localhost:8000/api/v1/ws/voice/1 node scripts/ws_test_node.js
+```
+
+See `scripts/WSTEST.md` for details.
 
 ## Troubleshooting
-- **Voice WebSocket closes immediately on a physical phone** — start the backend with `npm run backend` or `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`, then open `http://<your-mac-lan-ip>:8000/health` from the phone. For local unauthenticated voice testing, `backend/.env` also needs `ALLOW_INSECURE_DEV_AUTH=true`.
-- **Text works, voice silent** — verify `GROQ_API_KEY` and Kokoro paths; backend logs should show `context_built` and `tts_generated` events.
-- **Android cannot reach backend** — keep `EXPO_PUBLIC_API_URL=http://10.0.2.2:8000` and ensure emulator and FastAPI share the same host machine.
-- **No speech output** — confirm `backend/models/kokoro` files are readable by the backend process.
-- **WebSocket auth** — implement the token handshake described in `plans/project-improvements.md` before exposing the endpoint publicly.
 
-- If text works but voice does not transcribe, check `DEEPGRAM_API_KEY`.
-- If text works and voice transcribes but no spoken reply plays, check Deepgram TTS settings first, then Kokoro fallback paths.
-- Android emulator should usually use `http://10.0.2.2:8000` for `EXPO_PUBLIC_API_URL`.
-- iOS simulator can usually use `http://127.0.0.1:8000`.
+| Symptom | Fix |
+| --- | --- |
+| Phone cannot connect to backend | Run `npm run backend`, confirm `/health` from the phone browser, and set `EXPO_PUBLIC_API_URL` to the Mac LAN IP |
+| Android emulator cannot reach backend | Use `EXPO_PUBLIC_API_URL=http://10.0.2.2:8000` |
+| iOS simulator cannot reach backend | Use `EXPO_PUBLIC_API_URL=http://127.0.0.1:8000` |
+| WebSocket closes immediately | In local unauthenticated testing, set `ALLOW_INSECURE_DEV_AUTH=true` in `backend/.env` |
+| Text works but voice does not transcribe | Check `DEEPGRAM_API_KEY`, `GROQ_API_KEY`, microphone permission, and backend logs |
+| Voice transcribes but no audio plays | Check Deepgram TTS first, then Kokoro fallback paths if using local TTS |
+| No memory/context appears in answers | Confirm PostgreSQL and Redis are running and inspect backend logs for context builder or fact extraction errors |
+
+## Production Notes
+
+- Do not expose `/api/v1/ws/voice/{user_id}` without JWT/session authentication.
+- Keep provider keys only on the backend.
+- Replace the default `SECRET_KEY` before production.
+- Use PostgreSQL backups and Redis persistence for durable assistant memory.
+- See `backend/DEPLOYMENT_NOTES.md` for deployment and operations guidance.

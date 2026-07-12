@@ -20,7 +20,7 @@ This document turns the high-level Celery notes into an actionable runbook for t
      ```
    - **Kubernetes:** separate Deployments for `api`, `worker`, `beat`; share ConfigMaps/Secrets for env vars.
 3. Enable health/liveness probes:
-   - API: `GET /healthz`
+   - API: `GET /health`
    - Worker: `celery inspect ping`
 4. Use restart policies (`on-failure` or `always`) so workers recover automatically.
 
@@ -34,7 +34,7 @@ This document turns the high-level Celery notes into an actionable runbook for t
 ## Configuration Checklist
 - Secrets supplied through environment variables or a secrets manager; never bake keys into images.
 - Validate `secret_key` ≠ default when `app_env=production`.
-- Enforce WebSocket auth (JWT or session token) before exposing `/ws/voice`.
+- Enforce WebSocket auth (JWT or session token) before exposing `/api/v1/ws/voice/{user_id}`.
 - Store Kokoro model files on a persistent volume mounted at the paths configured in env vars.
 
 ## Observability & Alerting
@@ -44,7 +44,7 @@ This document turns the high-level Celery notes into an actionable runbook for t
 | Queue depth (`voice`, `push`) | Drains within 1 min | Prometheus exporter or Celery Flower |
 | Push success rate | > 98% | Custom push_service counter |
 | API latency (p95) | < 800ms for text, < 3s for voice round-trip | APM (Datadog, OpenTelemetry) |
-| WebSocket context build | Logged `context_built` message with `ms` field | Centralized logs (JSON preferred) |
+| WebSocket context build | `context_built` message with `ms` field | Centralized logs (JSON preferred) |
 
 ## Monitoring Checklist
 - Aggregate logs using structured JSON logging (e.g., `python-json-logger`).

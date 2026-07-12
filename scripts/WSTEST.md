@@ -4,7 +4,7 @@ Use these lightweight scripts to verify the `/api/v1/ws/voice/{userId}` pipeline
 
 ## Prerequisites
 - FastAPI backend running locally (`uvicorn app.main:app --reload --port 8000`).
-- Valid `GROQ_API_KEY` (voice mode) and Kokoro files configured so the backend can complete the pipeline.
+- Valid `DEEPGRAM_API_KEY` and `GROQ_API_KEY` for the hosted voice path. Kokoro files are only required when testing local TTS fallback.
 - Optional auth token if your deployment secures the WebSocket: export `VOICE_JWT=<token>` and append `?token=$VOICE_JWT` to the URL.
 - Node.js 20+ (for the JS test) or Python 3.11+ (for the Python test).
 - Install dependencies:
@@ -37,11 +37,11 @@ Both scripts:
 1. Open a WebSocket connection to `/api/v1/ws/voice/{userId}`.
 2. (Optional) Send fake audio chunks via `{ "type": "audio_chunk", "data": "<base64>" }`.
 3. Send `{ "type": "final" }` to trigger STT → context builder → LLM → TTS.
-4. Log the server messages, highlighting `{"type":"context_built","ms":123}` and `{"type":"tts_ready",...}` events.
+4. Log the server messages, highlighting `{"type":"context_built","ms":123}`, `{"type":"tts_audio_chunk",...}`, and `{"type":"tts_audio_done"}` events.
 
 ## Expected Output
 - `context_built` event with `ms` field under ~1000ms for cached context.
-- `tts_generated` or `audio_ready` event containing a base64 audio payload if Kokoro succeeds.
+- One or more `tts_audio_chunk` events followed by `tts_audio_done` when synthesis succeeds.
 - Graceful close from the server when playback data is fully streamed.
 
 ## Troubleshooting
@@ -49,7 +49,7 @@ Both scripts:
 | --- | --- |
 | Connection refused | Ensure backend listens on the host/port and that firewalls allow WS traffic |
 | No `context_built` message | Check `GROQ_API_KEY` validity and backend logs for STT failures |
-| `tts_generated` missing | Verify Kokoro model paths and file permissions |
+| `tts_audio_done` missing | Check Deepgram TTS settings first, then Kokoro model paths if using local fallback |
 | 401/403 on connect | Include the auth token query parameter or header expected by your deployment |
 
 ## Automating the Check
@@ -57,4 +57,4 @@ Add the Node script to CI or a pre-release checklist:
 ```bash
 BACKEND_WS=$WS_URL node scripts/ws_test_node.js | tee artifacts/ws-log.txt
 ```
-Fail the build if `context_built` latency exceeds your target threshold or if no `tts_generated` message appears.
+Fail the build if `context_built` latency exceeds your target threshold or if no `tts_audio_done` message appears.

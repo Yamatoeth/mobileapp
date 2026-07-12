@@ -7,6 +7,7 @@ AI endpoints so prompting stays consistent across the backend.
 """
 from typing import Any, Dict, List, Optional
 import json
+import re
 
 JARVIS_CHARACTER_PROMPT = (
     "You are J.A.R.V.I.S., a concise, context-aware executive assistant. "
@@ -93,6 +94,7 @@ def build_system_prompt(context: Optional[Dict[str, Any]] = None) -> str:
         f"{JARVIS_CHARACTER_PROMPT}\n\n"
         "Response style:\n"
         "- Prefer short, actionable answers.\n"
+        "- Write in plain spoken text. Do not use Markdown formatting such as **bold**, headings, tables, or code fences.\n"
         "- If context is insufficient, ask at most one clarifying question.\n"
         "- If prior conversation matters, continue naturally instead of restarting.\n"
         "- Be explicit when you are uncertain.\n\n"
@@ -121,4 +123,20 @@ def build_messages(user_input: str, context: Optional[Dict[str, Any]] = None, ex
     return messages
 
 
-__all__ = ["JARVIS_CHARACTER_PROMPT", "build_system_prompt", "build_messages"]
+def strip_markdown_for_voice(text: str) -> str:
+    """Remove common Markdown markers so TTS does not speak formatting symbols."""
+    cleaned = text
+    cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", cleaned)
+    cleaned = re.sub(r"```[\s\S]*?```", lambda match: match.group(0).strip("`"), cleaned)
+    cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
+    cleaned = re.sub(r"(\*\*|__)(.*?)\1", r"\2", cleaned, flags=re.DOTALL)
+    cleaned = re.sub(r"(\*|_)(.*?)\1", r"\2", cleaned, flags=re.DOTALL)
+    cleaned = re.sub(r"^\s{0,3}#{1,6}\s+", "", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"^\s{0,3}>\s?", "", cleaned, flags=re.MULTILINE)
+    cleaned = cleaned.replace("**", "").replace("__", "").replace("`", "")
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+__all__ = ["JARVIS_CHARACTER_PROMPT", "build_system_prompt", "build_messages", "strip_markdown_for_voice"]

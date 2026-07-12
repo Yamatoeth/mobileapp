@@ -25,7 +25,7 @@ import json
 from app.auth import decode_token
 from app.core.config import get_settings
 from app.core.context_builder import build_context
-from app.core.prompt_engine import build_messages
+from app.core.prompt_engine import build_messages, strip_markdown_for_voice
 from app.services.kokoro_service import kokoro_tts_service
 from app.services.conversation_memory import append_turn
 from app.providers import AudioMetadata, llm_provider, stt_provider, tts_provider
@@ -104,8 +104,9 @@ async def stream_chat_response(messages, websocket: WebSocket) -> str:
     except Exception as e:
         logger.exception("Unexpected error during LLM streaming: %s", str(e))
         await _safe_send_json(websocket, {"type": "error", "message": "LLM streaming failed"})
-    await _safe_send_json(websocket, {"type": "llm_done", "content": full_text})
-    return full_text
+    clean_text = strip_markdown_for_voice(full_text)
+    await _safe_send_json(websocket, {"type": "llm_done", "content": clean_text})
+    return clean_text
 
 
 def _build_local_response(user_input: str, context: Optional[dict[str, Any]] = None) -> str:
@@ -146,7 +147,7 @@ def _build_local_response(user_input: str, context: Optional[dict[str, Any]] = N
 async def generate_chat_response(messages, user_input: str, context: Optional[dict[str, Any]] = None) -> str:
     """Return a single assistant response through the configured LLM provider."""
     try:
-        return await llm_provider.complete(messages)
+        return strip_markdown_for_voice(await llm_provider.complete(messages))
     except asyncio.TimeoutError:
         logger.warning("LLM completion timed out, using fallback")
         return _build_local_response(user_input=user_input, context=context)
