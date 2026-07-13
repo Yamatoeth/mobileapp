@@ -119,11 +119,18 @@ async function writeAudioToCache(chunks: Buffer[]): Promise<string> {
   return output
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export class VoicePipelineService {
   private state: PipelineState = 'idle'
   private callbacks: PipelineCallbacks = {}
   private conversationHistory = new ConversationHistory()
   private isInitialized = false
+  private operationId = 0
+  private activeWs: WSClient | null = null
+  private lastPlaybackStoppedAt = 0
 
   async initialize(): Promise<boolean> {
     if (this.isInitialized) return true
@@ -164,6 +171,15 @@ export class VoicePipelineService {
     this.callbacks.onStateChange?.(state)
   }
 
+  private beginOperation(): number {
+    this.operationId += 1
+    return this.operationId
+  }
+
+  private isCurrentOperation(operationId: number): boolean {
+    return operationId === this.operationId
+  }
+
   private toUserFacingError(error: unknown): Error {
     if (error instanceof ApiError) {
       if (error.status === 0 || error.status === 408) {
@@ -189,9 +205,8 @@ export class VoicePipelineService {
   }
 
   async startListening(): Promise<void> {
-    if (this.state === 'speaking') {
-      await audioPlaybackService.stop()
-      this.setState('idle')
+    if (this.state === 'speaking' || this.state === 'thinking' || this.state === 'transcribing') {
+      await this.cancel()
     }
 
     if (this.state !== 'idle') {
@@ -206,6 +221,12 @@ export class VoicePipelineService {
       return
     }
 
+    const msSincePlayback = Date.now() - this.lastPlaybackStoppedAt
+    if (msSincePlayback < 700) {
+      await delay(700 - msSincePlayback)
+    }
+
+    this.beginOperation()
     this.setState('listening')
     const ok = await audioRecordingService.startRecording((level) => {
       this.callbacks.onAudioLevel?.(level.level)
@@ -246,6 +267,7 @@ export class VoicePipelineService {
   }
 
   async processText(text: string, options: PipelineOptions = {}): Promise<PipelineResponse | null> {
+    const operationId = this.beginOperation()
     if (!options.userId) {
       const error = new Error('userId is required for backend-owned text processing')
       this.setState('error')
@@ -259,6 +281,7 @@ export class VoicePipelineService {
       this.setState('thinking')
 
       const result = await apiClient.processQuery(options.userId, text)
+      if (!this.isCurrentOperation(operationId)) return null
       const assistantResponse = result.response || ''
       let ttsTimeMs = 0
 
@@ -270,14 +293,19 @@ export class VoicePipelineService {
         this.setState('speaking')
         const playbackStartedAt = Date.now()
         const audioBuffer = await apiClient.synthesizeSpeech(assistantResponse, options.voice)
+        if (!this.isCurrentOperation(operationId)) return null
         const audioPath = await writeAudioToCache([Buffer.from(audioBuffer)])
         await new Promise<void>((resolve, reject) => {
           audioPlaybackService.play(
             audioPath,
-            () => resolve(),
+            () => {
+              this.lastPlaybackStoppedAt = Date.now()
+              resolve()
+            },
             (error) => reject(error)
           )
         })
+        if (!this.isCurrentOperation(operationId)) return null
         ttsTimeMs = Date.now() - playbackStartedAt
       }
 
@@ -301,7 +329,12 @@ export class VoicePipelineService {
   }
 
   async cancel(): Promise<void> {
+    this.beginOperation()
+    this.activeWs?.disconnect()
+    this.activeWs = null
     await audioPlaybackService.stop()
+    this.lastPlaybackStoppedAt = Date.now()
+    await audioRecordingService.cancelRecording()
     this.setState('idle')
   }
 
@@ -313,12 +346,14 @@ export class VoicePipelineService {
     audioUri: string,
     options: PipelineOptions
   ): Promise<PipelineResponse> {
+    const operationId = this.beginOperation()
     const userId = options.userId
     if (!userId) {
       throw new Error('userId is required for backend-owned voice processing')
     }
 
     const ws = new WSClient()
+    this.activeWs = ws
     const base64Audio = await FileSystem.readAsStringAsync(audioUri, {
       encoding: FileSystem.EncodingType.Base64,
     })
@@ -336,19 +371,37 @@ export class VoicePipelineService {
     return new Promise<PipelineResponse>(async (resolve, reject) => {
       const finalize = async (shouldPlayAudio: boolean) => {
         try {
+          if (!this.isCurrentOperation(operationId)) {
+            ws.disconnect()
+            unsubscribe()
+            return
+          }
           let ttsTimeMs = 0
 
           if (shouldPlayAudio && audioChunks.length > 0) {
             this.setState('speaking')
             const playbackStartedAt = Date.now()
             const audioPath = await writeAudioToCache(audioChunks)
+            if (!this.isCurrentOperation(operationId)) {
+              ws.disconnect()
+              unsubscribe()
+              return
+            }
             await new Promise<void>((playResolve, playReject) => {
               audioPlaybackService.play(
                 audioPath,
-                () => playResolve(),
+                () => {
+                  this.lastPlaybackStoppedAt = Date.now()
+                  playResolve()
+                },
                 (error) => playReject(error)
               )
             })
+            if (!this.isCurrentOperation(operationId)) {
+              ws.disconnect()
+              unsubscribe()
+              return
+            }
             ttsTimeMs = Date.now() - playbackStartedAt
           }
 
@@ -369,25 +422,42 @@ export class VoicePipelineService {
           this.setState('idle')
           this.callbacks.onComplete?.(response)
           ws.disconnect()
+          if (this.activeWs === ws) {
+            this.activeWs = null
+          }
           unsubscribe()
           resolve(response)
         } catch (error) {
           ws.disconnect()
+          if (this.activeWs === ws) {
+            this.activeWs = null
+          }
           unsubscribe()
           reject(error)
         }
       }
 
       const fail = (error: Error) => {
+        if (!this.isCurrentOperation(operationId)) {
+          ws.disconnect()
+          unsubscribe()
+          return
+        }
         this.setState('error')
         this.callbacks.onError?.(this.toUserFacingError(error))
         ws.disconnect()
+        if (this.activeWs === ws) {
+          this.activeWs = null
+        }
         unsubscribe()
         reject(error)
       }
 
       const unsubscribe = ws.onMessage((message) => {
         try {
+          if (!this.isCurrentOperation(operationId)) {
+            return
+          }
           switch (message?.type) {
             case 'ready':
             case 'ack_audio':
@@ -469,6 +539,11 @@ export class VoicePipelineService {
 
       try {
         await ws.connect(userId)
+        if (!this.isCurrentOperation(operationId)) {
+          ws.disconnect()
+          unsubscribe()
+          return
+        }
         ws.sendJson({
           type: 'audio_chunk',
           data: base64Audio,

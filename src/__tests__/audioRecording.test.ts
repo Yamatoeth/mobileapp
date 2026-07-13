@@ -2,6 +2,8 @@ import { AudioRecordingService, audioRecordingService } from '../services/audioR
 
 let mockStartShouldFail = false
 let mockStopCalls = 0
+let mockAllowsRecording = false
+let mockAudioModeCalls: any[] = []
 
 jest.mock('expo-constants', () => ({
   __esModule: true,
@@ -23,7 +25,13 @@ jest.mock('expo-audio', () => ({
   AudioQuality: { HIGH: 96 },
   requestRecordingPermissionsAsync: async () => ({ status: 'granted', granted: true }),
   getRecordingPermissionsAsync: async () => ({ status: 'granted' }),
-  setAudioModeAsync: async () => ({}),
+  setAudioModeAsync: async (mode: any) => {
+    mockAudioModeCalls.push(mode)
+    if (typeof mode.allowsRecording === 'boolean') {
+      mockAllowsRecording = mode.allowsRecording
+    }
+    return {}
+  },
 }))
 
 jest.mock('expo-audio/build/AudioModule', () => {
@@ -35,6 +43,9 @@ jest.mock('expo-audio/build/AudioModule', () => {
     }
 
     record() {
+      if (!mockAllowsRecording) {
+        throw new Error('Recording not allowed on iOS')
+      }
       if (mockStartShouldFail) {
         throw new Error('recording not started')
       }
@@ -86,12 +97,15 @@ describe('audioRecordingService', () => {
   beforeEach(() => {
     mockStartShouldFail = false
     mockStopCalls = 0
+    mockAllowsRecording = false
+    mockAudioModeCalls = []
   })
 
   test('startRecording is idempotent on double calls and stopRecording returns result', async () => {
     // First start
     const started1 = await audioRecordingService.startRecording()
     expect(started1).toBe(true)
+    expect(mockAudioModeCalls).toContainEqual(expect.objectContaining({ allowsRecording: true }))
 
     // Second start called quickly should not throw and should be treated as success
     const started2 = await audioRecordingService.startRecording()

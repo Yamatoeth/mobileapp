@@ -16,9 +16,9 @@ class AudioPlaybackService {
   async initialize(): Promise<void> {
     console.log('[audioPlayback] initialize: setting audio mode')
     await ExpoAudio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      shouldDuckAndroid: true,
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      interruptionMode: 'mixWithOthers',
     })
   }
 
@@ -84,6 +84,9 @@ class AudioPlaybackService {
       console.log('[audioPlayback] stop called', { ts: Date.now() })
       try {
         this.player.pause()
+      } catch {}
+      try {
+        this.player.seekTo?.(0)
       } catch {}
       try {
         this.playbackSubscription?.remove()

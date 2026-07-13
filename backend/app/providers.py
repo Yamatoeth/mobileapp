@@ -170,6 +170,7 @@ class GroqLLMProvider:
             "model": settings.groq_chat_model,
             "messages": messages,
             "temperature": 0.7,
+            "max_tokens": 220,
             "stream": True,
         }
         headers = {
@@ -213,6 +214,7 @@ class GroqLLMProvider:
             "model": settings.groq_chat_model,
             "messages": messages,
             "temperature": 0.7,
+            "max_tokens": 220,
             "stream": False,
         }
         headers = {

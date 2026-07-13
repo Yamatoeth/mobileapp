@@ -1,5 +1,5 @@
 import React from 'react'
-import { View, Text, TouchableOpacity, Switch } from 'react-native'
+import { View, Text, TouchableOpacity, Switch, ScrollView } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme } from '../hooks/useTheme'
@@ -103,93 +103,95 @@ export function SettingsScreen({ onNavigate }: Props) {
           <View className="w-10" />
         </View>
 
-        {/* Account Section */}
-        <SettingsSection title="Account">
-          <SettingsItem
-            icon="person-circle-outline"
-            title="User ID"
-            subtitle={userId ?? 'Local user not created yet'}
-          />
-        </SettingsSection>
+        <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 24, paddingBottom: 40 }}>
+          {/* Account Section */}
+          <SettingsSection title="Account">
+            <SettingsItem
+              icon="person-circle-outline"
+              title="User ID"
+              subtitle={userId ?? 'Local user not created yet'}
+            />
+          </SettingsSection>
 
-        {/* Preferences Section */}
-        <SettingsSection title="Preferences">
-          <SettingsItem
-            icon="moon-outline"
-            title="Dark Mode"
-            subtitle="Use dark theme"
-            rightElement={
-              <Switch
-                value={themeMode === 'dark' || isDark}
-                onValueChange={toggleDarkMode}
-                trackColor={{ false: '#d1d5db', true: '#3b82f6' }}
-                accessibilityLabel="Dark mode"
-              />
-            }
-          />
-          <SettingsItem
-            icon="notifications-outline"
-            title="Notifications"
-            subtitle="Push notifications"
-            rightElement={
-              <Switch
-                value={notificationsEnabled}
-                onValueChange={(value) => updateSettings({ notificationsEnabled: value })}
-                trackColor={{ false: '#d1d5db', true: '#3b82f6' }}
-                accessibilityLabel="Push notifications"
-              />
-            }
-          />
-          <SettingsItem
-            icon="phone-portrait-outline"
-            title="Haptic Feedback"
-            subtitle="Vibrate on voice controls"
-            rightElement={
-              <Switch
-                value={hapticFeedbackEnabled}
-                onValueChange={(value) => updateSettings({ hapticFeedbackEnabled: value })}
-                trackColor={{ false: '#d1d5db', true: '#3b82f6' }}
-                accessibilityLabel="Haptic feedback"
-              />
-            }
-          />
-        </SettingsSection>
+          {/* Preferences Section */}
+          <SettingsSection title="Preferences">
+            <SettingsItem
+              icon="moon-outline"
+              title="Dark Mode"
+              subtitle="Use dark theme"
+              rightElement={
+                <Switch
+                  value={themeMode === 'dark' || isDark}
+                  onValueChange={toggleDarkMode}
+                  trackColor={{ false: '#d1d5db', true: '#3b82f6' }}
+                  accessibilityLabel="Dark mode"
+                />
+              }
+            />
+            <SettingsItem
+              icon="notifications-outline"
+              title="Notifications"
+              subtitle="Push notifications"
+              rightElement={
+                <Switch
+                  value={notificationsEnabled}
+                  onValueChange={(value) => updateSettings({ notificationsEnabled: value })}
+                  trackColor={{ false: '#d1d5db', true: '#3b82f6' }}
+                  accessibilityLabel="Push notifications"
+                />
+              }
+            />
+            <SettingsItem
+              icon="phone-portrait-outline"
+              title="Haptic Feedback"
+              subtitle="Vibrate on voice controls"
+              rightElement={
+                <Switch
+                  value={hapticFeedbackEnabled}
+                  onValueChange={(value) => updateSettings({ hapticFeedbackEnabled: value })}
+                  trackColor={{ false: '#d1d5db', true: '#3b82f6' }}
+                  accessibilityLabel="Haptic feedback"
+                />
+              }
+            />
+          </SettingsSection>
 
-        {/* Memory Section */}
-        <SettingsSection title="Memory">
-          <SettingsItem
-            icon="trash-outline"
-            title="Clear Working Memory"
-            subtitle="Clear recent conversation cache"
-          />
-          <SettingsItem
-            icon="cloud-download-outline"
-            title="Sync Knowledge Base"
-            subtitle="Update from server"
-          />
-        </SettingsSection>
+          {/* Memory Section */}
+          <SettingsSection title="Memory">
+            <SettingsItem
+              icon="trash-outline"
+              title="Clear Working Memory"
+              subtitle="Clear recent conversation cache"
+            />
+            <SettingsItem
+              icon="cloud-download-outline"
+              title="Sync Knowledge Base"
+              subtitle="Update from server"
+            />
+          </SettingsSection>
 
-        {/* Support Section */}
-        <SettingsSection title="Support">
-          <SettingsItem
-            icon="information-circle-outline"
-            title="About JARVIS"
-            subtitle="Version 1.0.0"
-          />
-          <SettingsItem
-            icon="bug-outline"
-            title="Report Bug"
-          />
-        </SettingsSection>
+          {/* Support Section */}
+          <SettingsSection title="Support">
+            <SettingsItem
+              icon="information-circle-outline"
+              title="About JARVIS"
+              subtitle="Version 1.0.0"
+            />
+            <SettingsItem
+              icon="bug-outline"
+              title="Report Bug"
+            />
+          </SettingsSection>
 
-        {/* Danger Zone */}
-        <SettingsSection title="Danger Zone">
-          <SettingsItem
-            icon="trash-outline"
-            title="Delete All Data"
-            subtitle="Clear all conversations and knowledge"
-          />
-        </SettingsSection>
+          {/* Danger Zone */}
+          <SettingsSection title="Danger Zone">
+            <SettingsItem
+              icon="trash-outline"
+              title="Delete All Data"
+              subtitle="Clear all conversations and knowledge"
+            />
+          </SettingsSection>
+        </ScrollView>
       </View>
     </SafeAreaView>
   )

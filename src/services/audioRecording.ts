@@ -88,8 +88,8 @@ class AudioRecordingService {
 
   private async resetAudioMode(): Promise<void> {
     await ExpoAudio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
+      allowsRecording: false,
+      playsInSilentMode: true,
     }).catch(() => undefined);
   }
 
@@ -147,11 +147,11 @@ class AudioRecordingService {
    */
   private async configureAudioMode(): Promise<void> {
     await ExpoAudio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
-      staysActiveInBackground: false,
+      allowsRecording: true,
+      playsInSilentMode: true,
+      interruptionMode: 'mixWithOthers',
+      shouldRouteThroughEarpiece: false,
+      shouldPlayInBackground: false,
     })
   }
 
@@ -324,8 +324,8 @@ class AudioRecordingService {
 
       // Reset audio mode
       await ExpoAudio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
+        allowsRecording: false,
+        playsInSilentMode: true,
       });
 
       this.recording = null;
@@ -365,7 +365,8 @@ class AudioRecordingService {
       }
 
       await ExpoAudio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+        allowsRecording: false,
+        playsInSilentMode: true,
       });
     } catch (error) {
       console.error('Failed to cancel recording:', error);

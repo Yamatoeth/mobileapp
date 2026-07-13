@@ -21,6 +21,7 @@ import base64
 import asyncio
 import logging
 import json
+import re
 
 from app.auth import decode_token
 from app.core.config import get_settings
@@ -34,6 +35,22 @@ from app.tasks.fact_extraction import schedule_extract_facts
 settings = get_settings()
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+IGNORED_TRANSCRIPTS = {
+    "thank you",
+    "thanks",
+    "thank you.",
+    "thanks.",
+    "you",
+}
+
+
+def _is_probable_stt_artifact(transcript: str | None) -> bool:
+    if not transcript:
+        return True
+    normalized = re.sub(r"[^a-zA-Z' ]+", "", transcript).strip().lower()
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized in IGNORED_TRANSCRIPTS
 
 
 class TextQueryRequest(BaseModel):
@@ -224,6 +241,15 @@ async def run_voice_pipeline(
     transcript = await stt_provider.transcribe(audio_bytes, _provider_metadata(metadata))
 
     await _safe_send_json(websocket, {"type": "stt_done", "transcript": transcript})
+    if _is_probable_stt_artifact(transcript):
+        await _safe_send_json(
+            websocket,
+            {
+                "type": "error",
+                "message": "I only caught a short filler phrase. Please ask again.",
+            },
+        )
+        return
     conversation_id: str | None = None
     if transcript:
         conversation_id = await append_turn(

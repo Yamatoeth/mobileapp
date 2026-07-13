@@ -29,9 +29,14 @@ export const ApiResponseSchema = <T extends z.ZodSchema>(dataSchema: T) =>
 export const UserResponseSchema = z.object({
   id: z.string(),
   email: z.string(),
-  fullName: z.string(),
-  createdAt: z.string(),
-})
+  fullName: z.string().optional(),
+  createdAt: z.string().optional(),
+}).transform((user) => ({
+  id: user.id,
+  email: user.email,
+  fullName: user.fullName ?? user.id,
+  createdAt: user.createdAt ?? new Date(0).toISOString(),
+}))
 export type UserResponse = z.infer<typeof UserResponseSchema>
 
 /**

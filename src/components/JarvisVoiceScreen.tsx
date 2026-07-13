@@ -86,6 +86,17 @@ function createLocalUserId() {
   return `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+function formatTtsVoiceLabel(voice: string) {
+  if (voice === 'aura-2-thalia-en') {
+    return 'Default voice'
+  }
+  return voice
+    .replace(/^aura-\d+-/i, '')
+    .replace(/-en$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
 export default function JarvisVoiceScreen({ onNavigate }: Props) {
   const [orbitronLoaded] = useOrbitron({ Orbitron_700Bold })
   const [rajdhaniLoaded] = useRajdhani({ Rajdhani_300Light, Rajdhani_500Medium })
@@ -97,11 +108,16 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
   const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'offline'>('checking')
   const [ttsVoices, setTtsVoices] = useState<string[]>([])
   const toggleRecordingInFlight = useRef(false)
+  const backendLastSeenAt = useRef(0)
   const wake = useWakeWord()
   const userId = useSettingsStore((s) => s.userId)
   const setUser = useSettingsStore((s) => s.setUser)
   const preferredTtsVoice = useSettingsStore((s) => s.settings.preferredTtsVoice)
   const updateSettings = useSettingsStore((s) => s.updateSettings)
+  const markBackendConnected = useCallback(() => {
+    backendLastSeenAt.current = Date.now()
+    setBackendStatus('connected')
+  }, [])
 
   const {
     state,
@@ -121,6 +137,7 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
   } = useVoiceAssistant({
     streamLLM: true,
     playAudio: true,
+    onComplete: markBackendConnected,
   })
 
   const WAKE_KEY = 'wakeEnabled_v1'
@@ -158,9 +175,11 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
     const checkBackend = async () => {
       try {
         await apiClient.checkHealth()
-        if (active) setBackendStatus('connected')
+        if (active) markBackendConnected()
       } catch {
-        if (active) setBackendStatus('offline')
+        if (active && Date.now() - backendLastSeenAt.current > 30000) {
+          setBackendStatus('offline')
+        }
       }
     }
 
@@ -168,6 +187,7 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
       try {
         const payload = await apiClient.getTtsVoices()
         if (!active) return
+        markBackendConnected()
         setTtsVoices(payload.voices || [])
         if (!preferredTtsVoice && payload.default) {
           updateSettings({ preferredTtsVoice: payload.default })
@@ -187,10 +207,10 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
       active = false
       clearInterval(intervalId)
     }
-  }, [preferredTtsVoice, updateSettings])
+  }, [markBackendConnected, preferredTtsVoice, updateSettings])
 
   const onToggleRecording = useCallback(async () => {
-    if (toggleRecordingInFlight.current || isBootstrapping || isProcessing) {
+    if (toggleRecordingInFlight.current || isBootstrapping) {
       return
     }
 
@@ -198,7 +218,7 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
     try {
       if (isListening) {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-        await stopListening()
+        void stopListening()
         return
       }
 
@@ -208,7 +228,7 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
     } finally {
       toggleRecordingInFlight.current = false
     }
-  }, [cancel, isBootstrapping, isListening, isProcessing, startListening, stopListening])
+  }, [cancel, isBootstrapping, isListening, startListening, stopListening])
 
   useEffect(() => {
     wake.onWake(() => {
@@ -274,10 +294,10 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
 
   const recordingLabel = useMemo(() => {
     if (isBootstrapping) return 'Preparing local session'
-    if (isProcessing) return 'JARVIS is thinking'
+    if (isProcessing || isSpeaking) return 'Interrupt and ask another question'
     if (isListening) return 'Stop recording and send'
     return 'Start voice recording'
-  }, [isBootstrapping, isListening, isProcessing])
+  }, [isBootstrapping, isListening, isProcessing, isSpeaking])
 
   const backendLabel = useMemo(() => {
     if (backendStatus === 'checking') return 'Backend: checking'
@@ -378,7 +398,7 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
             onPress={() => {
               void onToggleRecording()
             }}
-            disabled={isBootstrapping || isProcessing}
+            disabled={isBootstrapping}
             style={{
               position: 'absolute',
               width: SPHERE_SIZE,
@@ -389,7 +409,7 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
             accessibilityRole="button"
             accessibilityLabel={recordingLabel}
             accessibilityHint="Double tap to control voice recording"
-            accessibilityState={{ disabled: isBootstrapping || isProcessing, busy: isProcessing }}
+            accessibilityState={{ disabled: isBootstrapping, busy: isProcessing }}
           />
         </View>
 
@@ -397,7 +417,13 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
         <WaveBars visible={isListening || isProcessing || isSpeaking} />
         <View style={{ height: 18 }} />
         <Text style={[styles.hint, (isListening || isSpeaking) && styles.hintActive]}>
-          {isListening ? 'Tap to send' : isBootstrapping ? 'Preparing local session' : 'Tap to speak'}
+          {isListening
+            ? 'Tap to send'
+            : isProcessing || isSpeaking
+              ? 'Tap to interrupt'
+              : isBootstrapping
+                ? 'Preparing local session'
+                : 'Tap to speak'}
         </Text>
       </View>
 
@@ -412,17 +438,18 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
           >
             {ttsVoices.slice(0, 12).map((voice) => {
               const selected = voice === preferredTtsVoice
+              const voiceLabel = formatTtsVoiceLabel(voice)
               return (
                 <Pressable
                   key={voice}
                   onPress={() => updateSettings({ preferredTtsVoice: voice })}
                   style={[styles.voiceChip, selected && styles.voiceChipSelected]}
                   accessibilityRole="button"
-                  accessibilityLabel={`Use ${voice} voice`}
+                  accessibilityLabel={`Use ${voiceLabel} voice`}
                   accessibilityState={{ selected }}
                 >
                   <Text style={[styles.voiceChipText, selected && styles.voiceChipTextSelected]}>
-                    {voice}
+                    {voiceLabel}
                   </Text>
                 </Pressable>
               )

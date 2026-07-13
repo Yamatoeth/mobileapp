@@ -4,6 +4,10 @@ JARVIS is an Expo mobile app backed by a FastAPI assistant service. It demonstra
 
 The project is portfolio-ready as a self-hosted AI assistant prototype. It can run in local fallback mode without provider keys for text testing, and it supports the full voice experience when provider credentials are configured.
 
+## Demo
+
+Watch the demo: [JARVIS Voice Assistant Demo](https://youtube.com/shorts/8DVzpbzEVlk)
+
 ## What It Does
 
 - Text ask -> assistant answer through the backend-owned `/api/v1/ai/process` pipeline.
@@ -133,23 +137,6 @@ docker-compose up -d
 ```
 
 Use the same backend environment variables as local development.
-
-## Demo Flow
-
-For a short portfolio video, show the core value quickly:
-
-1. Start on the JARVIS voice screen with the animated orb visible.
-2. Ask a typed question first to prove the backend assistant loop works.
-3. Hold the voice control, ask a short personal-context question, then release.
-4. Show the live states: recording, transcribing, thinking/context, and speaking.
-5. End on the assistant reply, ideally one that references remembered context.
-
-A simple 45-60 second structure works well:
-
-- 0-5s: title card or first screen, "JARVIS: mobile voice assistant".
-- 5-20s: typed prompt and response.
-- 20-45s: voice prompt, streaming answer, spoken playback.
-- 45-60s: quick architecture overlay or README shot showing Expo + FastAPI + Deepgram + Groq + memory.
 
 ## Validation
 

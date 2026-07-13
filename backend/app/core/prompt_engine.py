@@ -94,6 +94,7 @@ def build_system_prompt(context: Optional[Dict[str, Any]] = None) -> str:
         f"{JARVIS_CHARACTER_PROMPT}\n\n"
         "Response style:\n"
         "- Prefer short, actionable answers.\n"
+        "- By default, answer in 2 to 4 short sentences and stay under about 80 words unless the user asks for more detail.\n"
         "- Write in plain spoken text. Do not use Markdown formatting such as **bold**, headings, tables, or code fences.\n"
         "- If context is insufficient, ask at most one clarifying question.\n"
         "- If prior conversation matters, continue naturally instead of restarting.\n"
