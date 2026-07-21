@@ -3,7 +3,7 @@ import { AudioRecordingService, audioRecordingService } from '../services/audioR
 let mockStartShouldFail = false
 let mockStopCalls = 0
 let mockAllowsRecording = false
-let mockAudioModeCalls: any[] = []
+let mockAudioModeCalls: Array<{ allowsRecording?: boolean; [key: string]: unknown }> = []
 
 jest.mock('expo-constants', () => ({
   __esModule: true,
@@ -25,7 +25,7 @@ jest.mock('expo-audio', () => ({
   AudioQuality: { HIGH: 96 },
   requestRecordingPermissionsAsync: async () => ({ status: 'granted', granted: true }),
   getRecordingPermissionsAsync: async () => ({ status: 'granted' }),
-  setAudioModeAsync: async (mode: any) => {
+  setAudioModeAsync: async (mode: { allowsRecording?: boolean; [key: string]: unknown }) => {
     mockAudioModeCalls.push(mode)
     if (typeof mode.allowsRecording === 'boolean') {
       mockAllowsRecording = mode.allowsRecording
@@ -72,8 +72,8 @@ jest.mock('expo-audio/build/AudioModule', () => {
 
 // Mock expo-file-system used in service
 jest.mock('expo-file-system/legacy', () => ({
-  getInfoAsync: async (uri: string) => ({ exists: true, size: 12345 }),
-  readAsStringAsync: async (uri: string, opts?: any) => '',
+  getInfoAsync: async (_uri: string) => ({ exists: true, size: 12345 }),
+  readAsStringAsync: async (_uri: string, _opts?: unknown) => '',
   deleteAsync: async () => {},
 }))
 

@@ -47,7 +47,7 @@ export class WSClient {
     this.url = getBackendWsUrl(baseUrl)
     try {
       console.log('[WSClient] init baseUrl=', this.url)
-    } catch (e) {}
+    } catch {}
   }
 
   private get healthUrl(): string {
@@ -65,11 +65,11 @@ export class WSClient {
       }
       try {
         console.log('[WSClient] backend health ok ->', this.healthUrl)
-      } catch (e) {}
+      } catch {}
     } catch (error) {
       try {
         console.error('[WSClient] backend health failed ->', this.healthUrl, error)
-      } catch (e) {}
+      } catch {}
       throw new Error(
         `Voice backend is not reachable from this device at ${this.healthUrl}. ` +
           'Open that URL on the phone browser; if it fails, allow Python/uvicorn through the Mac firewall or use the same Wi-Fi network.'
@@ -86,7 +86,7 @@ export class WSClient {
       const wsUrl = `${this.url}/api/v1/ws/voice/${encodeURIComponent(userId)}`
       try {
         console.log('[WSClient] connecting to', wsUrl)
-      } catch (e) {}
+      } catch {}
       this.ws = new WebSocket(wsUrl)
       let settled = false
 
@@ -95,7 +95,7 @@ export class WSClient {
         settled = true
         try {
           this.ws?.close()
-        } catch (e) {}
+        } catch {}
         reject(new Error('Voice backend connection timed out'))
       }, 5000)
 
@@ -107,7 +107,7 @@ export class WSClient {
         settled = true
         try {
           console.log('[WSClient] onopen -> connected to', wsUrl)
-        } catch (e) {}
+        } catch {}
         resolve()
       }
 
@@ -118,7 +118,7 @@ export class WSClient {
         }
         try {
           console.error('[WSClient] onerror', e)
-        } catch (err) {}
+        } catch {}
         if (!settled) {
           settled = true
           reject(
@@ -147,7 +147,7 @@ export class WSClient {
             reason,
             wasClean: event.wasClean,
           })
-        } catch (e) {}
+        } catch {}
         // notify handlers about close
         this.handlers.forEach((h) =>
           h({ type: 'closed', code: event.code, reason, wasClean: event.wasClean })
@@ -175,7 +175,7 @@ export class WSClient {
         return parsed as WsMessage
       }
       return { type: 'raw', data: rawData }
-    } catch (e) {
+    } catch {
       // If not JSON, forward raw
       return { type: 'raw', data: rawData }
     }
@@ -191,11 +191,11 @@ export class WSClient {
       try {
         const msgType = (obj as Record<string, unknown>).type || 'json'
         console.log('[WSClient] sendJson ->', msgType, 'len=', txt.length)
-      } catch (e) {}
+      } catch {}
     } catch (err) {
       try {
         console.error('[WSClient] sendJson error', err)
-      } catch (e) {}
+      } catch {}
       throw err
     }
   }
@@ -206,11 +206,11 @@ export class WSClient {
       this.sendJson({ type: 'audio_chunk', data: b64 })
       try {
         console.log('[WSClient] sendAudioBase64 sent, bytes=', b64.length)
-      } catch (e) {}
+      } catch {}
     } catch (err) {
       try {
         console.warn('[WSClient] Failed sending audio chunk', err)
-      } catch (e) {}
+      } catch {}
     }
   }
 
@@ -218,12 +218,12 @@ export class WSClient {
     try {
       try {
         console.log('[WSClient] sendFinal -> sending final marker')
-      } catch (e) {}
+      } catch {}
       this.sendJson({ type: 'final' })
     } catch (err) {
       try {
         console.error('[WSClient] sendFinal error', err)
-      } catch (e) {}
+      } catch {}
     }
   }
 

@@ -1,8 +1,6 @@
 import 'react-native-gesture-handler'
 import 'react-native-reanimated'
 import './global.css'
-// Ensure Skia JSI wrappers are applied early to accept various binary shapes
-import './src/utils/skiaSafe'
 
 import { StatusBar } from 'expo-status-bar'
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native'
@@ -17,7 +15,7 @@ import { HistoryScreen } from './src/screens/HistoryScreen'
 import { KnowledgeScreen } from './src/screens/KnowledgeScreen'
 import { SettingsScreen } from './src/screens/SettingsScreen'
 import { useOnboarding } from './src/hooks/useOnboarding'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { ErrorBoundary } from './src/components/ErrorBoundary'
 import { addNotificationActionListener, registerForPushNotificationsAsync } from './src/services/notificationService'
 import { useSettingsStore } from './src/store/settingsStore'

@@ -120,7 +120,6 @@ export default function JarvisVoiceScreen({ onNavigate }: Props) {
   }, [])
 
   const {
-    state,
     isListening,
     isProcessing,
     isSpeaking,

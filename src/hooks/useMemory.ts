@@ -59,7 +59,7 @@ export default function useMemory(apiBaseUrl?: string) {
     }
   }, [base]);
 
-  const subscribe = useCallback((userId: string, onEvent?: (data: any) => void) => {
+  const subscribe = useCallback((userId: string, onEvent?: (data: unknown) => void) => {
     if (typeof EventSource === 'undefined') {
       console.warn('EventSource not available in this environment — SSE unsupported');
       return () => {};
@@ -73,12 +73,12 @@ export default function useMemory(apiBaseUrl?: string) {
           // update local cache immutably on upsert events
           if (data && data.type === 'upsert' && data.count) {
             // simple indicator — caller can fetch if needed
-            onEvent && onEvent(data);
+            onEvent?.(data);
           } else {
-            onEvent && onEvent(data);
+            onEvent?.(data);
           }
-        } catch (e) {
-          onEvent && onEvent(ev.data);
+        } catch {
+          onEvent?.(ev.data);
         }
       };
       es.onerror = (e) => {
@@ -86,7 +86,7 @@ export default function useMemory(apiBaseUrl?: string) {
       };
       esRef.current = es;
       return () => {
-        try { es.close(); } catch (_) {}
+        try { es.close(); } catch {}
         esRef.current = null;
       };
     } catch (err) {
@@ -98,7 +98,7 @@ export default function useMemory(apiBaseUrl?: string) {
   useEffect(() => {
     return () => {
       if (esRef.current) {
-        try { esRef.current.close(); } catch (_) {}
+        try { esRef.current.close(); } catch {}
         esRef.current = null;
       }
     };
