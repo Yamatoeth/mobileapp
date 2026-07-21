@@ -44,7 +44,7 @@ interface ConversationState {
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
-export const useConversationStore = create<ConversationState>((set, get) => ({
+export const useConversationStore = create<ConversationState>((set) => ({
   messages: [],
   isRecording: false,
   isTranscribing: false,

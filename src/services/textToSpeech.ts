@@ -1,10 +1,11 @@
 /**
  * Audio playback service for backend-generated voice responses.
  */
-const ExpoAudio: any = require('expo-audio')
+import type { AudioPlayer, AudioStatus } from 'expo-audio'
 
-type AudioPlaybackStatus = any
-type AudioPlayer = any
+const ExpoAudio = require('expo-audio') as typeof import('expo-audio')
+
+type AudioPlaybackStatus = AudioStatus
 import * as FileSystem from 'expo-file-system/legacy'
 
 class AudioPlaybackService {

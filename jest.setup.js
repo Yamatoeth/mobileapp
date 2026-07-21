@@ -30,16 +30,6 @@ try {
 	// ignore if not installed
 }
 
-jest.mock('expo-constants', () => ({
-	__esModule: true,
-	default: {
-		isDevice: true,
-		expoConfig: {},
-		manifest: {},
-		manifest2: {},
-	},
-}))
-
 // Silence native warnings (guarded)
 try {
 	jest.mock('react-native/Libraries/Animated/NativeAnimatedHelper')

@@ -43,7 +43,7 @@ export function toUint8Array(input: unknown): Uint8Array {
   // Fallback: try to create from Array.from
   try {
     return new Uint8Array(Array.from(input as Iterable<number>))
-  } catch (_) {
+  } catch {
     return new Uint8Array(0)
   }
 }

@@ -67,3 +67,4 @@ __pycache__/
 me.json
 _test.db
 .omx/
+.codex

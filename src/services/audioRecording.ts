@@ -2,11 +2,13 @@
  * Audio Recording Service - Handles microphone recording for voice input
  * Uses expo-audio for recording and file management
  */
-const ExpoAudio: any = require('expo-audio')
-const AudioModule: any = require('expo-audio/build/AudioModule').default
+import type { AudioRecorder, NativeAudioModule, RecordingOptions } from 'expo-audio'
+
+const ExpoAudio = require('expo-audio') as typeof import('expo-audio')
+const AudioModule = require('expo-audio/build/AudioModule').default as NativeAudioModule
 // Expo types may vary across SDK versions; use flexible aliases here
-type ExpoRecordingOptions = any
-type ExpoRecording = any
+type ExpoRecordingOptions = RecordingOptions
+type ExpoRecording = AudioRecorder
 import * as FileSystem from 'expo-file-system/legacy';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
@@ -47,8 +49,6 @@ const RECORDING_OPTIONS: ExpoRecordingOptions = {
     outputFormat: ExpoAudio.IOSOutputFormat?.MPEG4AAC ?? 'aac ',
     audioQuality: ExpoAudio.AudioQuality?.HIGH ?? 96,
     sampleRate: 44100,
-    numberOfChannels: 1,
-    bitRate: 128000,
     linearPCMBitDepth: 16,
     linearPCMIsBigEndian: false,
     linearPCMIsFloat: false,
@@ -81,7 +81,7 @@ class AudioRecordingService {
 
     try {
       await recording.stop();
-    } catch (error) {
+    } catch {
       // Best effort: record() may have failed before recording actually started.
     }
   }
@@ -276,7 +276,7 @@ class AudioRecordingService {
               timestamp: Date.now(),
             });
           }
-        } catch (error) {
+        } catch {
           // Ignore errors during level monitoring
         }
       }

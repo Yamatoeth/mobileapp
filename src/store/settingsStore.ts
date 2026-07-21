@@ -56,7 +56,7 @@ const initialState = {
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       ...initialState,
 
       setUser: (userId, email, fullName) => {

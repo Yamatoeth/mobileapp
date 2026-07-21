@@ -6,7 +6,7 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8000';
 const RUN_BACKEND_E2E = process.env.RUN_BACKEND_E2E === '1';
 const describeBackendE2E = RUN_BACKEND_E2E ? describe : describe.skip;
 
-function logStep(type: string, ...args: any[]) {
+function logStep(type: string, ...args: unknown[]) {
   console.log(`[JARVIS][${type}]`, ...args);
 }
 
